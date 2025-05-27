@@ -1,0 +1,386 @@
+[
+  {
+    "duration": 63.259,
+    "events": [
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "timetrace github - Google Search - Chromium"
+        },
+        "duration": 3.021,
+        "id": 27205,
+        "timestamp": "2025-05-22T11:36:33.506000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github.com/python-caldav/caldav/issues/495 - Chromium"
+        },
+        "duration": 5.025,
+        "id": 27350,
+        "timestamp": "2025-05-22T12:05:16.945000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github.com/python-caldav/caldav/issues/495#issuecomment-2901006352 - Chromium"
+        },
+        "duration": 10.033,
+        "id": 27429,
+        "timestamp": "2025-05-22T12:18:43.141000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "pip install from github - Chromium"
+        },
+        "duration": 17.044,
+        "id": 27433,
+        "timestamp": "2025-05-22T12:19:13.225000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "pip install from github - Chromium"
+        },
+        "duration": 3.013,
+        "id": 27470,
+        "timestamp": "2025-05-22T12:23:44.897000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github.com/python-caldav/caldav/issues/495#issuecomment-2901049934 - Chromium"
+        },
+        "duration": 5.024,
+        "id": 27658,
+        "timestamp": "2025-05-22T12:51:23.015000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "pip install from github - Chromium"
+        },
+        "duration": 1.002,
+        "id": 27668,
+        "timestamp": "2025-05-22T12:52:31.190000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github.com/python-caldav/caldav/issues/495#issuecomment-2901138854 - Chromium"
+        },
+        "duration": 7.027,
+        "id": 27710,
+        "timestamp": "2025-05-22T13:11:44.613000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "pip install from github - Chromium"
+        },
+        "duration": 1.013,
+        "id": 27729,
+        "timestamp": "2025-05-22T13:21:59.408000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "pip install from github - Chromium"
+        },
+        "duration": 6.022,
+        "id": 27733,
+        "timestamp": "2025-05-22T13:23:58.672000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "pip install from github - Chromium"
+        },
+        "duration": 3.015,
+        "id": 27736,
+        "timestamp": "2025-05-22T13:24:30.750000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "pip install from github - Chromium"
+        },
+        "duration": 1.01,
+        "id": 28111,
+        "timestamp": "2025-05-22T17:57:37.390000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github.com/python-caldav/caldav/issues/495 - Chromium"
+        },
+        "duration": 1.01,
+        "id": 28218,
+        "timestamp": "2025-05-22T22:28:03.751000+00:00"
+      }
+    ]
+  },
+  {
+    "duration": 0.0,
+    "events": []
+  },
+  {
+    "duration": 72.229,
+    "events": [
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github.com/python-caldav/caldav/issues/495#issuecomment-2906608382 - Chromium"
+        },
+        "duration": 10.036,
+        "id": 29169,
+        "timestamp": "2025-05-24T11:26:41.342000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "Page not found \u00b7 GitHub - Chromium"
+        },
+        "duration": 5.025,
+        "id": 29886,
+        "timestamp": "2025-05-24T17:18:04.938000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github.com/python-caldav/caldav/releases/tag/v1.5.0 - Chromium"
+        },
+        "duration": 1.01,
+        "id": 29895,
+        "timestamp": "2025-05-24T17:20:17.370000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github.com/python-caldav/caldav/issues/474 - Chromium"
+        },
+        "duration": 1.01,
+        "id": 30026,
+        "timestamp": "2025-05-24T17:35:57.308000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "fix for https://github.com/python-caldav/caldav/issues/237 + some ref\u2026 by tobixen \u00b7 Pull Request #490 \u00b7 python-caldav/caldav - Chromium"
+        },
+        "duration": 5.015,
+        "id": 30205,
+        "timestamp": "2025-05-24T18:12:12.123000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github.com/BeWelcome/general/issues/16 - Chromium"
+        },
+        "duration": 14.049,
+        "id": 30441,
+        "timestamp": "2025-05-24T18:55:08.110000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "Page not found \u00b7 GitHub - Chromium"
+        },
+        "duration": 1.004,
+        "id": 30723,
+        "timestamp": "2025-05-24T20:14:59.596000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "Page not found \u00b7 GitHub - Chromium"
+        },
+        "duration": 9.015,
+        "id": 30731,
+        "timestamp": "2025-05-24T20:15:03.628000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "fixes https://github.com/python-caldav/caldav/issues/163 and fixes ht\u2026 by tobixen \u00b7 Pull Request #497 \u00b7 python-caldav/caldav - Chromium"
+        },
+        "duration": 26.065,
+        "id": 30736,
+        "timestamp": "2025-05-24T20:17:11.052000+00:00"
+      }
+    ]
+  },
+  {
+    "duration": 126.371,
+    "events": [
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "Page not found \u00b7 GitHub - Chromium"
+        },
+        "duration": 1.004,
+        "id": 30868,
+        "timestamp": "2025-05-25T03:04:12.356000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "icalendar github tasks duration start - Google Search - Chromium"
+        },
+        "duration": 13.042,
+        "id": 30920,
+        "timestamp": "2025-05-25T03:22:32.490000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "GitHub - Chromium"
+        },
+        "duration": 13.048,
+        "id": 30922,
+        "timestamp": "2025-05-25T03:22:45.532000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github exit strategy - Chromium"
+        },
+        "duration": 50.13,
+        "id": 31214,
+        "timestamp": "2025-05-25T05:36:44.299000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "What alternatives are there to github, and how to plan a migration away from... - Chromium"
+        },
+        "duration": 30.086,
+        "id": 31216,
+        "timestamp": "2025-05-25T05:37:34.429000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "GitHub - Chromium"
+        },
+        "duration": 19.061,
+        "id": 32264,
+        "timestamp": "2025-05-25T20:05:27.656000+00:00"
+      }
+    ]
+  },
+  {
+    "duration": 26.464,
+    "events": [
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "Page not found \u00b7 GitHub - Chromium"
+        },
+        "duration": 26.072,
+        "id": 32523,
+        "timestamp": "2025-05-26T06:06:31.512000+00:00"
+      },
+      {
+        "data": {
+          "$category": [
+            "Work"
+          ],
+          "app": "Chromium",
+          "title": "github.com/pauldub/activity-watch-mode - Chromium"
+        },
+        "duration": 0.392,
+        "id": 33840,
+        "timestamp": "2025-05-26T11:52:38.870000+00:00"
+      }
+    ]
+  }
+]

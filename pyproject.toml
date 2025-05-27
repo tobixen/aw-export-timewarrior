@@ -1,0 +1,21 @@
+[project]
+name = "aw-export-timewarrior"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Tobias Brox",email = "tobias@redpill-linpro.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+]
+
+[tool.poetry]
+packages = [{include = "aw_export_timewarrior", from = "src"}]
+
+[tool.poetry.scripts]
+aw-export-timewarrior = "aw_export_timewarrior.main:main"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
