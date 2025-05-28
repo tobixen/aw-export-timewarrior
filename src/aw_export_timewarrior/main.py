@@ -48,6 +48,8 @@ class Exporter:
 
     def get_editor_tags(self, window_event):
         ## TODO: can we consolidate common code? I basically copied get_browser_tags and s/browser/editor/ and a little bit editing
+        if event['data'].get('app', '').lower() not in ('emacs', 'vi', 'vim', ...): ## TODO - complete the list
+            return []
         editor = window_event['data']['app'].lower()
         editor_id = self.bucket_short[f"aw-watcher-{editor}"]['id']
         editor_events = self.aw.get_events(editor_id, start=window_event['timestamp'], end=window_event['timestamp']+window_event['duration'])
@@ -84,6 +86,9 @@ class Exporter:
         
 
     def get_browser_tags(self, window_event):
+        if not window_event['data'].get('app', '').lower() in ('chromium', 'firefox', 'chrome', ...): ## TODO - complete the list
+            return []
+
         browser = window_event['data']['app'].lower().replace('chromium', 'chrome')
         browser_id = self.bucket_short[f"aw-watcher-web-{browser}"]['id']
         browser_events = self.aw.get_events(browser_id, start=window_event['timestamp'], end=window_event['timestamp']+window_event['duration'])
@@ -143,6 +148,13 @@ class Exporter:
                 return tags
         return []
 
+
+    def get_afk_tags(event):
+        if event['data'].get('status') == 'not-afk':
+            return ['not-afk']
+        else:
+            return ['afk']
+    
     def find_next_activity(self):
         afk_id = self.bucket_by_client['aw-watcher-afk'][0]
         window_id = self.bucket_by_client['aw-watcher-window'][0]
@@ -212,18 +224,14 @@ class Exporter:
             ## so that i.e. frequent switching between editor and browser would not be ignored.
             if event['duration'].total_seconds() < MINIMUM_INTERVAL and not overdue:
                 continue
-            elif event['data'].get('status') == 'afk':
-                if overdue:
-                    timew_ensure('afk')
-            elif event['data'].get('status') == 'not-afk':
-                ## TODO: we should probably have a bit better handling of this one
-                timew_ensure('not-afk')
-            elif self.get_app_tags(event): ## inelegant - running the algorithm twice
-                timew_ensure(self.get_app_tags(event))
-            elif event['data'].get('app', '').lower() in ('chromium', 'firefox', 'chrome'):
-                timew_ensure(self.get_browser_tags(event))
-            elif event['data'].get('app', '').lower() in ('emacs', 'vi', 'vim'): ## todo - complete the list
-                timew_ensure(self.get_editor_tags(event))
+
+            for method in (self.get_app_tags, self.get_browser_tags, self.get_afk_tags, self.get_editor_tags):
+                tags = method(event)
+                if tags:
+                    break
+
+            if tags:
+                timew_ensure(tags)
             elif event['data'].get('app', '').lower() in ('foot', 'xterm', ...): ## TODO: complete the list
                 self.log(f"Unknown terminal event {event['data']['title']}", event['timestamp'], attrs=["bold"])
                 if overdue:
