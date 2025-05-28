@@ -7,14 +7,17 @@ from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 from termcolor import cprint
 import re
+import os
 
 from .config import config
 
 ## warning threshold for outdated data (TODO: move to the config file, give a better name?)
 WARN_THRESHOLD=300
 SLEEP_INTERVAL=120
-MINIMUM_INTERVAL=25
+MINIMUM_INTERVAL=10
 MAXIMUM_NONCAT_INTERVAL=300
+
+GRACE_TIME=float(os.environ.get('GRACE_TIME') or 10)
 
 def ts2str(ts, format="%FT%H:%M"):
     return(ts.astimezone().strftime(format))
@@ -48,8 +51,8 @@ class Exporter:
 
     def get_editor_tags(self, window_event):
         ## TODO: can we consolidate common code? I basically copied get_browser_tags and s/browser/editor/ and a little bit editing
-        if event['data'].get('app', '').lower() not in ('emacs', 'vi', 'vim', ...): ## TODO - complete the list
-            return []
+        if window_event['data'].get('app', '').lower() not in ('emacs', 'vi', 'vim', ...): ## TODO - complete the list
+            return False
         editor = window_event['data']['app'].lower()
         editor_id = self.bucket_short[f"aw-watcher-{editor}"]['id']
         editor_events = self.aw.get_events(editor_id, start=window_event['timestamp'], end=window_event['timestamp']+window_event['duration'])
@@ -87,7 +90,7 @@ class Exporter:
 
     def get_browser_tags(self, window_event):
         if not window_event['data'].get('app', '').lower() in ('chromium', 'firefox', 'chrome', ...): ## TODO - complete the list
-            return []
+            return False
 
         browser = window_event['data']['app'].lower().replace('chromium', 'chrome')
         browser_id = self.bucket_short[f"aw-watcher-web-{browser}"]['id']
@@ -146,14 +149,14 @@ class Exporter:
                         tags.add(tag)
                 tags.add('not-afk')
                 return tags
-        return []
+        return False
 
 
-    def get_afk_tags(event):
-        if event['data'].get('status') == 'not-afk':
-            return ['not-afk']
+    def get_afk_tags(self, event):
+        if 'status' in event['data']:
+            return event['data']['status']
         else:
-            return ['afk']
+            return False
     
     def find_next_activity(self):
         afk_id = self.bucket_by_client['aw-watcher-afk'][0]
@@ -227,11 +230,14 @@ class Exporter:
 
             for method in (self.get_app_tags, self.get_browser_tags, self.get_afk_tags, self.get_editor_tags):
                 tags = method(event)
-                if tags:
+                if tags is not False:
                     break
 
             if tags:
                 timew_ensure(tags)
+            elif tags == []:
+                ## did not find, and already logged or ignored
+                pass
             elif event['data'].get('app', '').lower() in ('foot', 'xterm', ...): ## TODO: complete the list
                 self.log(f"Unknown terminal event {event['data']['title']}", event['timestamp'], attrs=["bold"])
                 if overdue:
@@ -267,8 +273,8 @@ def timew_run(commands):
     print("Running:")
     print(f"   {" ".join(commands)}")
     subprocess.run(commands)
-    cprint("Use timew undo if you don't agree!  You have ten seconds to press ctrl^c", attrs=["bold"])
-    sleep(10)
+    cprint(f"Use timew undo if you don't agree!  You have {GRACE_TIME} seconds to press ctrl^c", attrs=["bold"])
+    sleep(GRACE_TIME)
 
 def timew_retag(timew_info):
     source_tags = set(timew_info['tags'])
