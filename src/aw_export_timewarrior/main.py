@@ -163,6 +163,7 @@ class Exporter:
         window_id = self.bucket_by_client['aw-watcher-window'][0]
 
         afk_events = self.aw.get_events(afk_id, start=self.last_tick)
+        ### START WORKAROUND
         ## TODO
         ## workaround for https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/41
         ## assume all gaps are afk
@@ -178,7 +179,7 @@ class Exporter:
                 if duration < timedelta(seconds=MINIMUM_INTERVAL):
                     continue
                 afk_events.append({'data': {'status': 'afk'}, 'timestamp': start, 'duration': duration})
-                
+        ### END WORKAROUND
         afk_window_events = self.aw.get_events(window_id, start=self.last_tick) + afk_events
         afk_window_events.sort(key=lambda x: x['timestamp'])
         for event in afk_window_events:
@@ -187,10 +188,6 @@ class Exporter:
             
             ## Refactoring idea:
             ## MINIMUM_INTERVAL to be set very short.  Truly ignore only windows that you've been touching.
-            ##
-            ## stage one is to find the tags.
-            ## perhaps like this:
-            ##   for method in ...: tags=method() ; if tags: continue
             ##
             ## stage two is to deal with the tags
             ## tag rewritings to be done (without hitting "timew start")
@@ -276,19 +273,26 @@ def timew_run(commands):
     cprint(f"Use timew undo if you don't agree!  You have {GRACE_TIME} seconds to press ctrl^c", attrs=["bold"])
     sleep(GRACE_TIME)
 
-def timew_retag(timew_info):
+def retag_by_rules(source_tags):
     source_tags = set(timew_info['tags'])
     new_tags = source_tags.copy()
     for tag_section in config['tags']:
         retags = config['tags'][tag_section]
         if source_tags.intersection(set(retags['source_tags'])):
             new_tags = new_tags.union(set(retags.get('add', [])))
+    if new_tags != source_tags:
+        ## We could end up doing infinite recursion here
+        ## TODO: add some recursion-safety here?
+        return retag_by_rules(source_tags)
+    return new_tags
 
+def timew_retag(timew_info):
+    new_tags = retag_by_rules(source_tags)
     if new_tags != source_tags:
         timew_run(["retag"] + list(new_tags))
         timew_info = get_timew_info()
         assert set(timew_info['tags']) == new_tags
-        return timew_retag(timew_info)
+        return timew_info
     return timew_info
 
 def main():
