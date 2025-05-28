@@ -53,7 +53,7 @@ Currently it does support rewriting old Timewarrior history.  The export algorit
 * All window events and afk-events will be checked.  For window-events coming from a browser, the corresponding browser-event (if any) will be looked up, and the URL checked towards the rules given.  Sort of the same with editor events.  Other events will be matched towards app-rules.
 * If any of the tags that are found by the rules are not included in the current tracking, it's considered that a new activity have started, and `timew` will be invoked with the new tags and the timestamp from the event.  Duration is (as for now) ignored (and for good reasons, one may frequently switch i.e. between a browser, terminal windows and an editor while working).
 
-### User interactions
+## User interactions
 
 Currently the program is tossing the user into python debugger breakpoints every so often, but this will go away before making a release.  The general idea is that all user interaction is done through the config file and through `timew`-commands:
 
@@ -66,4 +66,34 @@ Currently the program is tossing the user into python debugger breakpoints every
     * `override` - the tracking will persist until manually stopped, no matter what the watchers find.
 	* `manual` - unknown activity will be ignored.  (Currently an "unknown" tag is slapped on if no tags are found within two minutes - though I'm considering to change this).
 	* I'm considering to add more special tags.  Probably the special tags should be marked out somehow, like a special prepending.
+
+## Configuration and tweaking
+
+### Installing watchers
+
+TODO: links to the editor and browser watchers, as well as aw-watcher-window-wayland.
+
+### Fixing the terminal window title in bash
+
+I'm using bash.  To make sure the window title of my terminal windows shows details on what I'm doing in the terminals, I added this to my `.bashrc`:
+
+```bash
+# Function to set window title to the running command
+set_window_title() {
+  # Get the currently running command from BASH_COMMAND
+  local cmd="${BASH_COMMAND}"
+  # Avoid setting the title for the prompt itself
+  # (optionally filter out some commands)
+  printf '\033]0;%s\007' "$cmd"
+}
+
+# Set the DEBUG trap to call the function before each command
+trap 'set_window_title' DEBUG
+
+source /usr/share/git/completion/git-prompt.sh
+
+PS1="${PS1}"'\033]0;\u@\h:\w$(__git_ps1)\$ ${BASH_COMMAND}\007\]'
+```
+
+Dependent on your setup, this may crash with existing provisions to set window title.  YMMV.
 

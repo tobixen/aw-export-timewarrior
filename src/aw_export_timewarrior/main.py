@@ -5,6 +5,7 @@ import logging
 from time import time, sleep
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
+from termcolor import cprint
 import re
 
 from .config import config
@@ -12,8 +13,16 @@ from .config import config
 ## warning threshold for outdated data (TODO: move to the config file, give a better name?)
 WARN_THRESHOLD=300
 SLEEP_INTERVAL=120
-MINIMUM_INTERVAL=20
-MAXIMUM_NONCAT_INTERVAL=120
+MINIMUM_INTERVAL=25
+MAXIMUM_NONCAT_INTERVAL=300
+
+def ts2str(ts, format="%FT%H:%M"):
+    return(ts.astimezone().strftime(format))
+
+def ts2strtime(ts):
+    if not ts:
+        return "XX:XX"
+    return ts2str(ts, "%H:%M")
 
 class Exporter:
     def __init__(self):
@@ -34,6 +43,9 @@ class Exporter:
             for b in self.bucket_by_client[bucketclient]:
                 check_bucket_updated(self.buckets[b])
 
+    def log(self, msg, ts=None, attrs=[]):
+        cprint(f"{ts2strtime(ts)} (tracking from {ts2strtime(self.timew_info['start_dt'])}: {self.timew_info['tags']}): {msg}", attrs=attrs)
+
     def get_editor_tags(self, window_event):
         ## TODO: can we consolidate common code? I basically copied get_browser_tags and s/browser/editor/ and a little bit editing
         editor = window_event['data']['app'].lower()
@@ -44,11 +56,10 @@ class Exporter:
         editor_events.sort(key=lambda x: x['duration'])
         if not editor_events:
             ## emacs cruft
-            if (re.match('^( )?\*.*\*', window_event['data']['title'])):
+            if (re.match(r'^( )?\*.*\*', window_event['data']['title'])):
                 return []
 
-            print(f"No editor event found.  Window title: {window_event['data']['title']}")
-            breakpoint()
+            self.log("No editor event found.  Window title: {window_event['data']['title']}", window_event['timestamp'])
             return []
         editor_event = editor_events[-1]
 
@@ -68,8 +79,7 @@ class Exporter:
                             tags.append(tag.replace('$1', match.group(1)))
                     return tags  + [ 'not-afk' ]
                 
-        print(f"Unhandled editor event.  File: {editor_event['data']['file']}")
-        breakpoint()
+        self.log(f"Unhandled editor event.  File: {editor_event['data']['file']}", window_event['timestamp'], attrs=["bold"])
         return []
         
 
@@ -79,8 +89,7 @@ class Exporter:
         browser_events = self.aw.get_events(browser_id, start=window_event['timestamp'], end=window_event['timestamp']+window_event['duration'])
 
         if not browser_events:
-            print(f"No browser event found.  Window title: {window_event['data']['title']}")
-            breakpoint()
+            self.log(f"No browser event found.  Window title: {window_event['data']['title']}", window_event['timestamp'])
             return []
             
         ## TODO this is maybe too simplistic
@@ -97,26 +106,39 @@ class Exporter:
                         if '$1' in tag:
                             ## todo: support for $2, etc
                             tags.remove(tag)
-                            tags.append(tag.replace('$1', match.group(1)))
+                            try:
+                                tags.append(tag.replace('$1', match.group(1)))
+                            except IndexError:
+                                pass
                     return tags  + [ 'not-afk' ]
         if browser_event['data']['url'] in ('chrome://newtab/', 'about:newtab'):
             return []
-        print(f"Unhandled browser event.  URL: {browser_event['data']['url']}")
-        breakpoint()
+        self.log(f"Unhandled browser event.  URL: {browser_event['data']['url']}", window_event['timestamp'], attrs=["bold"])
         return []
 
     def get_app_tags(self, event):
         for apprulename in config['rules']['app']:
             rule = config['rules']['app'][apprulename]
+            group = None
             if event['data'].get('app') in rule['app_names']:
                 title_regexp = rule.get('title_regexp')
-                if title_regexp and not re.search(title_regexp, event['data'].get('title')):
-                    continue
+                if title_regexp:
+                    match = re.search(title_regexp, event['data'].get('title'))
+                    if match:
+                        try:
+                            group = match.group(1)
+                        except:
+                            group = None
+                    else:
+                        continue
                 tags = set()
                 for tag in rule['timew_tags']:
                     if tag == '$app':
                         tag = event['data']['app']
-                    tags.add(tag)
+                    if tag == '$1':
+                        tag = group
+                    if tag:
+                        tags.add(tag)
                 tags.add('not-afk')
                 return tags
         return []
@@ -145,8 +167,25 @@ class Exporter:
         afk_window_events = self.aw.get_events(window_id, start=self.last_tick) + afk_events
         afk_window_events.sort(key=lambda x: x['timestamp'])
         for event in afk_window_events:
-            
+
             ## TODO - refactor better, this is a bit ugly, and references to timew should be abstracted out
+            
+            ## Refactoring idea:
+            ## MINIMUM_INTERVAL to be set very short.  Truly ignore only windows that you've been touching.
+            ##
+            ## stage one is to find the tags.
+            ## perhaps like this:
+            ##   for method in ...: tags=method() ; if tags: continue
+            ##
+            ## stage two is to deal with the tags
+            ## tag rewritings to be done (without hitting "timew start")
+            ## if the duration of the event is lower than the MAXIMUM_NONCAT_INTERVAL, put tags into an accumulating table
+            ## if the duration of the event exceeds the MAXIMUM_NONCAT_INTERVAL, set tags at once with timew_ensure and reset the accumulating table
+            ## if the accumulated time exceeds MAXMIMUM_NONCAT_INTERVAL, compare the accumulating table with the tags that are running.
+            ## We need a third threshold, a ratio, perhaps 0.5?  So any tags seen more than half of the time over the last MAXIMIMUM_NONCAT_INTERVAL window will be considered.
+            ## Running tags should have some stickyness.  Perhaps add all the running tags with 0.4*MAXIMUM_NONCAT_INTERVAL, so that if you visit any window related to the
+            ## existing activity, the tags will be kept.
+            ## We should consider that some tags may exclude each other, otherwise it's easy to track more than 24 hours per day. "Frem med faktureringsgaffelen!" we'd say in Norwegian.
             def timew_ensure(tags):
                 if tags != 'not-afk':
                     self.last_known_tick = event['timestamp'] + event['duration']
@@ -164,7 +203,10 @@ class Exporter:
 
 
             ## "overdue" means the current recorded activity may have stopped "long" ago.
-            overdue = event['timestamp'] + event['duration'] - self.last_known_tick > timedelta(seconds=MAXIMUM_NONCAT_INTERVAL)
+            if 'manual' in self.timew_info['tags']:
+                overdue = False
+            else:
+                overdue = event['timestamp'] + event['duration'] - self.last_known_tick > timedelta(seconds=MAXIMUM_NONCAT_INTERVAL)
 
             ## TODO: consider the minimum interval of events yielding the same tags,
             ## so that i.e. frequent switching between editor and browser would not be ignored.
@@ -183,16 +225,13 @@ class Exporter:
             elif event['data'].get('app', '').lower() in ('emacs', 'vi', 'vim'): ## todo - complete the list
                 timew_ensure(self.get_editor_tags(event))
             elif event['data'].get('app', '').lower() in ('foot', 'xterm', ...): ## TODO: complete the list
+                self.log(f"Unknown terminal event {event['data']['title']}", event['timestamp'], attrs=["bold"])
                 if overdue:
-                    import pdb; pdb.set_trace()
-                    timew_ensure({'unknown', 'not-afk'})
-                ## TODO - can we extract anything from this?  We'd need a terminal watcher?
-                pass
+                    timew_ensure({'unknown', 'not-afk'}) ## is this smart?
             else:
-                print("Unrecognized event")
-                breakpoint()
+                self.log(f"No rules found for event {event['data']}", event['timestamp'], attrs=["bold"])
             self.last_tick = event['timestamp']-timedelta(seconds=1)
-            print(self.last_tick.astimezone().strftime("%H:%M"))
+            print(f"{self.last_tick.astimezone().strftime("%H:%M")} - {event['data']}")
 
     def tick(self):
         self.timew_info = timew_retag(get_timew_info())
@@ -217,11 +256,11 @@ def get_timew_info():
 
 def timew_run(commands):
     commands = ['timew'] + commands
-    print("Going to run:")
+    print("Running:")
     print(f"   {" ".join(commands)}")
     subprocess.run(commands)
-    print("Use timew undo if you don't agree!")
-    breakpoint()
+    cprint("Use timew undo if you don't agree!  You have ten seconds to press ctrl^c", attrs=["bold"])
+    sleep(10)
 
 def timew_retag(timew_info):
     source_tags = set(timew_info['tags'])
@@ -232,7 +271,6 @@ def timew_retag(timew_info):
             new_tags = new_tags.union(set(retags.get('add', [])))
 
     if new_tags != source_tags:
-        print("retagging existing event")
         timew_run(["retag"] + list(new_tags))
         timew_info = get_timew_info()
         assert set(timew_info['tags']) == new_tags
