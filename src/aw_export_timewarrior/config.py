@@ -19,11 +19,20 @@ timew_tags = [ "entertainment", "$1" ]
 
 [rules.app.comms]
 app_names = ["Signal", "DeltaChat"]
-timew_tags = [ "personal communication", "$app" ]
+timew_tags = [ "4me", "personal communication", "$app" ]
 
 [rules.editor.acme]
 project_regexp = "acme"
-timew_tags = [ "work", "acme" ]
+timew_tags = [ "4work", "acme" ]
+
+## Even if we're multitasking and working for both customer acme and customer
+## emca at once, we probably should bill only one of them
+[exclusive.customer]
+tags = [ "acme", "emca" ]
+
+## Even if we're multitasking and doing both dishwash, talk on the telephone, work (it's compiling!) and drinking tea at the same time, we probably should attribute the time to only one of the activities
+[exclusive.main_category]
+tags = [ "4break", "4chores", "4work", "4me" ]
 """.strip()
 
 config = load_config_toml("aw-export-timewarrior", default_config)

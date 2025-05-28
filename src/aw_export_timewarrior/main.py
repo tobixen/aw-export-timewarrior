@@ -11,13 +11,18 @@ import os
 
 from .config import config
 
-## warning threshold for outdated data (TODO: move to the config file, give a better name?)
-WARN_THRESHOLD=300
-SLEEP_INTERVAL=120
-MINIMUM_INTERVAL=10
-MAXIMUM_NONCAT_INTERVAL=300
+## Those should be moved to config.py before releasing.  Possibly renamed.
+AW_WARN_THRESHOLD=300 ## the recent data from activity watch should not be elder than this
+SLEEP_INTERVAL=3 ## Sleeps between each run when the program is run in real-time
+IGNORE_INTERVAL=5 ## ignore any window visits lasting for less than five seconds (TODO: may need tuning if terminal windows change title for every command run)
+MIN_RECORDING_INTERVAL=60 ## Never record an activities more frequently than once per minute.
+MIN_TAG_RECORDING_INTERVAL=30 ## When recording something, include every tag that has been observed for more than 30s
+STICKYNESS_FACTOR=0.25 ## Don't reset everything on each "tick".
+MAX_MIXED_INTERVAL=180 ## Any window event lasting for more than three minutes should be considered independently from what you did before and after
 
 GRACE_TIME=float(os.environ.get('GRACE_TIME') or 10)
+
+SPECIAL_TAGS={'manual', 'override', 'not-afk'}
 
 def ts2str(ts, format="%FT%H:%M"):
     return(ts.astimezone().strftime(format))
@@ -161,10 +166,21 @@ class Exporter:
             return { event['data']['status'] }
         else:
             return False
+
+    def find_tags_from_event(self, event):
+        if event['duration'].total_seconds() < IGNORE_INTERVAL:
+            return
+
+        for method in (self.get_app_tags, self.get_browser_tags, self.get_afk_tags, self.get_editor_tags):
+            tags = method(event)
+            if tags is not False:
+                break
+        return tags
     
     def find_next_activity(self):
         afk_id = self.bucket_by_client['aw-watcher-afk'][0]
         window_id = self.bucket_by_client['aw-watcher-window'][0]
+        tags_accumulated_time = defaultdict(timedelta)
 
         afk_events = self.aw.get_events(afk_id, start=self.last_tick)
         ### START WORKAROUND
@@ -172,7 +188,7 @@ class Exporter:
         ## workaround for https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/41
         ## assume all gaps are afk
         if len(afk_events) == 0:
-            afk_events = [{'data': {'status': 'afk'}, 'timestamp': self.last_tick, 'duration': timedelta(seconds=time.time()-self.last_tick)}]
+            afk_events = [{'data': {'status': 'afk'}, 'timestamp': self.last_tick, 'duration': timedelta(seconds=time()-self.last_tick.timestamp())}]
         elif len(afk_events)>1: #and not any(x for x in afk_events if x['data']['status'] != 'not-afk'):
             afk_events.reverse()
             afk_events.sort(key=lambda x: x['timestamp'])
@@ -180,7 +196,7 @@ class Exporter:
                 end = afk_events[i]['timestamp']
                 start = afk_events[i-1]['timestamp'] + afk_events[i-1]['duration']
                 duration = end-start
-                if duration < timedelta(seconds=MINIMUM_INTERVAL):
+                if duration.total_seconds() < MIN_RECORDING_INTERVAL:
                     continue
                 afk_events.append({'data': {'status': 'afk'}, 'timestamp': start, 'duration': duration})
         ### END WORKAROUND
@@ -188,21 +204,7 @@ class Exporter:
         afk_window_events.sort(key=lambda x: x['timestamp'])
         for event in afk_window_events:
 
-            ## TODO - refactor better, this is a bit ugly, and references to timew should be abstracted out
-            
-            ## Refactoring idea:
-            ## MINIMUM_INTERVAL to be set very short.  Truly ignore only windows that you've been touching.
-            ##
-            ## stage two is to deal with the tags
-            ## tag rewritings to be done (without hitting "timew start")
-            ## if the duration of the event is lower than the MAXIMUM_NONCAT_INTERVAL, put tags into an accumulating table
-            ## if the duration of the event exceeds the MAXIMUM_NONCAT_INTERVAL, set tags at once with timew_ensure and reset the accumulating table
-            ## if the accumulated time exceeds MAXMIMUM_NONCAT_INTERVAL, compare the accumulating table with the tags that are running.
-            ## We need a third threshold, a ratio, perhaps 0.5?  So any tags seen more than half of the time over the last MAXIMIMUM_NONCAT_INTERVAL window will be considered.
-            ## Running tags should have some stickyness.  Perhaps add all the running tags with 0.4*MAXIMUM_NONCAT_INTERVAL, so that if you visit any window related to the
-            ## existing activity, the tags will be kept.
-            ## We should consider that some tags may exclude each other, otherwise it's easy to track more than 24 hours per day. "Frem med faktureringsgaffelen!" we'd say in Norwegian.
-            def timew_ensure(tags):
+            def timew_ensure(tags, since=event['timestamp']):
                 if tags != 'not-afk':
                     self.last_known_tick = event['timestamp'] + event['duration']
                 self.timew_info = timew_retag(get_timew_info())
@@ -215,38 +217,57 @@ class Exporter:
                 if set(tags).issubset(self.timew_info['tags']):
                     return
                 tags = retag_by_rules(tags)
-                timew_run(['start'] + list(tags) + [event['timestamp'].astimezone().strftime('%FT%H:%M:%S')])
+                assert not exclusive_overlapping(tags)
+                timew_run(['start'] + list(tags) + [since.astimezone().strftime('%FT%H:%M:%S')])
                 self.timew_info = timew_retag(get_timew_info())
 
-            ## "overdue" means the current recorded activity may have stopped "long" ago.
-            if 'manual' in self.timew_info['tags']:
-                overdue = False
-            else:
-                overdue = event['timestamp'] + event['duration'] - self.last_known_tick > timedelta(seconds=MAXIMUM_NONCAT_INTERVAL)
+            tags = self.find_tags_from_event(event)
 
-            ## TODO: consider the minimum interval of events yielding the same tags,
-            ## so that i.e. frequent switching between editor and browser would not be ignored.
-            if event['duration'].total_seconds() < MINIMUM_INTERVAL and not overdue:
-                continue
+            print(f"{self.last_tick.astimezone().strftime("%H:%M")} - {event['duration'].total_seconds()}s duration, {event['data']} - tags found: {tags}")
+            
+            if tags == { 'not-afk' }:
+                self.last_known_tick = event['timestamp']
+                tags = []
 
-            for method in (self.get_app_tags, self.get_browser_tags, self.get_afk_tags, self.get_editor_tags):
-                tags = method(event)
-                if tags is not False:
-                    break
-
-            if tags:
+            ## Ref README, if MAX_MIXED_INTERVAL is met, ignore accumulated minor activity
+            ## (the mixed time will be attributed to the previous work task)
+            if tags and event['duration'].total_seconds() > MAX_MIXED_INTERVAL:
+                tags_accumulated_time = defaultdict(timedelta)
                 timew_ensure(tags)
-            elif tags == []:
-                ## did not find, and already logged or ignored
+
+            interval_since_last_known_tick = event['timestamp'] + event['duration'] - self.last_known_tick
+
+            ## Track things in internal accumulator if the focus between windows changes often
+            if tags:
+                tags = retag_by_rules(tags)
+                for tag in tags:
+                    tags_accumulated_time[tag] += event['duration']
+                
+            if interval_since_last_known_tick.total_seconds() > MIN_RECORDING_INTERVAL and any(x for x in tags_accumulated_time if x not in SPECIAL_TAGS and tags_accumulated_time[x].total_seconds()>MIN_RECORDING_INTERVAL):
+                tags = set()
+                assert not exclusive_overlapping(tags)
+                min_tag_recording_interval=MIN_TAG_RECORDING_INTERVAL
+                while exclusive_overlapping(set([tag for tag in tags_accumulated_time if  tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval])):
+                    min_tag_recording_interval += 1
+                for tag in tags_accumulated_time:
+                    if tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval:
+                        tags.add(tag)
+                        if ('oss-contrib' in tags and 'entertainment' in tags):
+                            breakpoint()
+                            exclusive_overlapping(tags)
+                    tags_accumulated_time[tag] *= STICKYNESS_FACTOR
+                ## TODO: if `timew start` was run manually, then repopulate tags_accumulated_time to ensure sticiness of manually recorded tags
+                timew_ensure(tags, self.last_known_tick)
+
+            self.last_tick = event['timestamp']-timedelta(seconds=1)
+
+            if tags is not False:
                 pass
+            
             elif event['data'].get('app', '').lower() in ('foot', 'xterm', ...): ## TODO: complete the list
                 self.log(f"Unknown terminal event {event['data']['title']}", event['timestamp'], attrs=["bold"])
-                if overdue:
-                    timew_ensure({'unknown', 'not-afk'}) ## is this smart?
             else:
                 self.log(f"No rules found for event {event['data']}", event['timestamp'], attrs=["bold"])
-            self.last_tick = event['timestamp']-timedelta(seconds=1)
-            print(f"{self.last_tick.astimezone().strftime("%H:%M")} - {event['data']}")
 
     def tick(self):
         self.timew_info = timew_retag(get_timew_info())
@@ -256,7 +277,7 @@ class Exporter:
         self.find_next_activity()
 
 def check_bucket_updated(bucket: dict):
-    if time()-bucket['last_updated_dt'].timestamp() > WARN_THRESHOLD:
+    if time()-bucket['last_updated_dt'].timestamp() > AW_WARN_THRESHOLD:
         logging.warning(f"Bucket {bucket['id']} seems not to have recent data!")
 
 ## TODO: none of this has anything to do with ActivityWatch and can be moved to a separate module
@@ -277,12 +298,25 @@ def timew_run(commands):
     cprint(f"Use timew undo if you don't agree!  You have {GRACE_TIME} seconds to press ctrl^c", attrs=["bold"])
     sleep(GRACE_TIME)
 
+def exclusive_overlapping(tags):
+    for gid in config['exclusive']:
+        group = set(config['exclusive'][gid]['tags'])
+        if len(group.intersection(tags)) > 1:
+            return True
+    return False
+
+## not really retag, more like expand tags?
 def retag_by_rules(source_tags):
+    assert not exclusive_overlapping(source_tags)
     new_tags = source_tags.copy()
     for tag_section in config['tags']:
         retags = config['tags'][tag_section]
         if source_tags.intersection(set(retags['source_tags'])):
-            new_tags = new_tags.union(set(retags.get('add', [])))
+            new_tags_ = new_tags.union(set(retags.get('add', [])))
+            if exclusive_overlapping(new_tags_):
+                logging.warning(f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts")
+            else:
+                new_tags = new_tags_
     if new_tags != source_tags:
         ## We could end up doing infinite recursion here
         ## TODO: add some recursion-safety here?
