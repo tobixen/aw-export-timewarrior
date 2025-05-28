@@ -72,17 +72,20 @@ class Exporter:
             rule = config['rules']['editor'][editor_rule_name]
             for project in rule.get('projects', []):
                 if(project == editor_event['data']['project']):
-                    return rule['timew_tags'] + [ 'not-afk' ]
+                    ret = set(rule['timew_tags'])
+                    ret.add('not-afk')
+                    return ret
             if 'path_regexp' in rule:
                 match = re.search(rule['path_regexp'], editor_event['data']['file'])
                 if match:
-                    tags = rule['timew_tags']
+                    tags = set(rule['timew_tags'])
                     for tag in tags:
                         if '$1' in tag:
                             ## todo: support for $2, etc
                             tags.remove(tag)
-                            tags.append(tag.replace('$1', match.group(1)))
-                    return tags  + [ 'not-afk' ]
+                            tags.add(tag.replace('$1', match.group(1)))
+                    tags.add('not-afk')
+                    return tags
                 
         self.log(f"Unhandled editor event.  File: {editor_event['data']['file']}", window_event['timestamp'], attrs=["bold"])
         return []
@@ -109,16 +112,17 @@ class Exporter:
             if 'url_regexp' in rule:
                 match = re.search(rule['url_regexp'], browser_event['data']['url'])
                 if match:
-                    tags = rule['timew_tags']
+                    tags = set(rule['timew_tags'])
                     for tag in tags:
                         if '$1' in tag:
                             ## todo: support for $2, etc
                             tags.remove(tag)
                             try:
-                                tags.append(tag.replace('$1', match.group(1)))
+                                tags.add(tag.replace('$1', match.group(1)))
                             except IndexError:
                                 pass
-                    return tags  + [ 'not-afk' ]
+                    tags.add('not-afk')
+                    return tags
         if browser_event['data']['url'] in ('chrome://newtab/', 'about:newtab'):
             return []
         self.log(f"Unhandled browser event.  URL: {browser_event['data']['url']}", window_event['timestamp'], attrs=["bold"])
@@ -154,7 +158,7 @@ class Exporter:
 
     def get_afk_tags(self, event):
         if 'status' in event['data']:
-            return event['data']['status']
+            return { event['data']['status'] }
         else:
             return False
     
@@ -210,9 +214,9 @@ class Exporter:
                     return
                 if set(tags).issubset(self.timew_info['tags']):
                     return
+                tags = retag_by_rules(tags)
                 timew_run(['start'] + list(tags) + [event['timestamp'].astimezone().strftime('%FT%H:%M:%S')])
                 self.timew_info = timew_retag(get_timew_info())
-
 
             ## "overdue" means the current recorded activity may have stopped "long" ago.
             if 'manual' in self.timew_info['tags']:
@@ -274,7 +278,6 @@ def timew_run(commands):
     sleep(GRACE_TIME)
 
 def retag_by_rules(source_tags):
-    source_tags = set(timew_info['tags'])
     new_tags = source_tags.copy()
     for tag_section in config['tags']:
         retags = config['tags'][tag_section]
@@ -283,10 +286,11 @@ def retag_by_rules(source_tags):
     if new_tags != source_tags:
         ## We could end up doing infinite recursion here
         ## TODO: add some recursion-safety here?
-        return retag_by_rules(source_tags)
+        return retag_by_rules(new_tags)
     return new_tags
 
 def timew_retag(timew_info):
+    source_tags = set(timew_info['tags'])
     new_tags = retag_by_rules(source_tags)
     if new_tags != source_tags:
         timew_run(["retag"] + list(new_tags))
