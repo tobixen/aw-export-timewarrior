@@ -13,11 +13,11 @@ from .config import config
 
 ## Those should be moved to config.py before releasing.  Possibly renamed.
 AW_WARN_THRESHOLD=300 ## the recent data from activity watch should not be elder than this
-SLEEP_INTERVAL=3 ## Sleeps between each run when the program is run in real-time
-IGNORE_INTERVAL=5 ## ignore any window visits lasting for less than five seconds (TODO: may need tuning if terminal windows change title for every command run)
+SLEEP_INTERVAL=30 ## Sleeps between each run when the program is run in real-time
+IGNORE_INTERVAL=3 ## ignore any window visits lasting for less than five seconds (TODO: may need tuning if terminal windows change title for every command run)
 MIN_RECORDING_INTERVAL=60 ## Never record an activities more frequently than once per minute.
 MIN_TAG_RECORDING_INTERVAL=30 ## When recording something, include every tag that has been observed for more than 30s
-STICKYNESS_FACTOR=0.25 ## Don't reset everything on each "tick".
+STICKYNESS_FACTOR=0.10 ## Don't reset everything on each "tick".
 MAX_MIXED_INTERVAL=180 ## Any window event lasting for more than three minutes should be considered independently from what you did before and after
 
 GRACE_TIME=float(os.environ.get('GRACE_TIME') or 10)
@@ -60,18 +60,13 @@ class Exporter:
             return False
         editor = window_event['data']['app'].lower()
         editor_id = self.bucket_short[f"aw-watcher-{editor}"]['id']
-        editor_events = self.aw.get_events(editor_id, start=window_event['timestamp'], end=window_event['timestamp']+window_event['duration'])
+        ## emacs cruft
+        ignorable = re.match(r'^( )?\*.*\*', window_event['data']['title'])
+        editor_event = self.get_corresponding_event(
+            window_event, editor_id, ignorable=ignorable)
         
-        ## TODO this is maybe too simplistic
-        editor_events.sort(key=lambda x: x['duration'])
-        if not editor_events:
-            ## emacs cruft
-            if (re.match(r'^( )?\*.*\*', window_event['data']['title'])):
-                return []
-
-            self.log("No editor event found.  Window title: {window_event['data']['title']}", window_event['timestamp'])
+        if not editor_event:
             return []
-        editor_event = editor_events[-1]
 
         for editor_rule_name in config.get('rules', {}).get('editor', {}):
             rule = config['rules']['editor'][editor_rule_name]
@@ -84,17 +79,41 @@ class Exporter:
                 match = re.search(rule['path_regexp'], editor_event['data']['file'])
                 if match:
                     tags = set(rule['timew_tags'])
-                    for tag in tags:
+                    for tag in list(tags):
                         if '$1' in tag:
                             ## todo: support for $2, etc
                             tags.remove(tag)
-                            tags.add(tag.replace('$1', match.group(1)))
+                            if len(match.groups())>0:
+                                tags.add(tag.replace('$1', match.group(1)))
                     tags.add('not-afk')
                     return tags
                 
         self.log(f"Unhandled editor event.  File: {editor_event['data']['file']}", window_event['timestamp'], attrs=["bold"])
         return []
+
+    ## TODO - remove hard coded constants!
+    def get_corresponding_event(self, window_event, event_type_id, ignorable=False, retry=True):
+        ret = self.aw.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=1), end=window_event['timestamp']+window_event['duration'])
+
+        ## If nothing found ... try harder
+        if not ret and not ignorable and retry:
+            ## Perhaps the event hasn't reached ActivityWatch yet?
+            sleep(1)
+            return self.get_corresponding_event(window_event, event_type_id, ignorable, retry=False)
         
+        if not ret and not ignorable and not retry:
+            ret = self.aw.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=15), end=window_event['timestamp']+window_event['duration']+timedelta(seconds=1))
+        if not ret:
+            if not ignorable:
+                self.log(f"No corresponding {event_type_id} found.  Window title: {window_event['data']['title']}.  If you see this often, you should verify that the relevant watchers are active and running.", window_event['timestamp'])
+            return None
+        if len(ret)>1:
+            ret2 = [x for x in ret if x.duration > timedelta(seconds=IGNORE_INTERVAL)]
+            if ret2:
+                ret = ret2
+            ## TODO this is maybe too simplistic
+            ret.sort(key=lambda x: -x['duration'])
+        return ret[0]
 
     def get_browser_tags(self, window_event):
         if not window_event['data'].get('app', '').lower() in ('chromium', 'firefox', 'chrome', ...): ## TODO - complete the list
@@ -102,32 +121,30 @@ class Exporter:
 
         browser = window_event['data']['app'].lower().replace('chromium', 'chrome')
         browser_id = self.bucket_short[f"aw-watcher-web-{browser}"]['id']
-        browser_events = self.aw.get_events(browser_id, start=window_event['timestamp'], end=window_event['timestamp']+window_event['duration'])
+        browser_event = self.get_corresponding_event(window_event, browser_id)
 
-        if not browser_events:
-            self.log(f"No browser event found.  Window title: {window_event['data']['title']}", window_event['timestamp'])
+        if not browser_event:
+            ## TODO: deal with this.  There should be a browser event?  It's just the start/end that is misset?
             return []
-            
-        ## TODO this is maybe too simplistic
-        browser_events.sort(key=lambda x: x['duration'])
-        browser_event = browser_events[-1]
-        
+
         for browser_rule_name in config.get('rules', {}).get('browser', {}):
             rule = config['rules']['browser'][browser_rule_name]
             if 'url_regexp' in rule:
                 match = re.search(rule['url_regexp'], browser_event['data']['url'])
                 if match:
                     tags = set(rule['timew_tags'])
-                    for tag in tags:
+                    for tag in list(tags):
                         if '$1' in tag:
                             ## todo: support for $2, etc
                             tags.remove(tag)
-                            try:
+                            if len(match.groups())>0:
+                                if match.group(1) is None:
+                                    breakpoint()
                                 tags.add(tag.replace('$1', match.group(1)))
-                            except IndexError:
-                                pass
                     tags.add('not-afk')
                     return tags
+            else:
+                self.log(f"Weird browser rule {browser_rule_name}")
         if browser_event['data']['url'] in ('chrome://newtab/', 'about:newtab'):
             return []
         self.log(f"Unhandled browser event.  URL: {browser_event['data']['url']}", window_event['timestamp'], attrs=["bold"])
@@ -151,10 +168,10 @@ class Exporter:
                 tags = set()
                 for tag in rule['timew_tags']:
                     if tag == '$app':
-                        tag = event['data']['app']
-                    if tag == '$1':
-                        tag = group
-                    if tag:
+                        tags.add(event['data']['app'])
+                    elif '$1' in tag and group:
+                        tags.add(tag.replace('$1', group))
+                    elif not '$' in tag:
                         tags.add(tag)
                 tags.add('not-afk')
                 return tags
@@ -181,15 +198,17 @@ class Exporter:
         afk_id = self.bucket_by_client['aw-watcher-afk'][0]
         window_id = self.bucket_by_client['aw-watcher-window'][0]
         tags_accumulated_time = defaultdict(timedelta)
+        num_skipped_events = 0
+        total_time_skipped_events = timedelta(0)
 
         afk_events = self.aw.get_events(afk_id, start=self.last_tick)
         ### START WORKAROUND
         ## TODO
         ## workaround for https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/41
         ## assume all gaps are afk
-        if len(afk_events) == 0:
-            afk_events = [{'data': {'status': 'afk'}, 'timestamp': self.last_tick, 'duration': timedelta(seconds=time()-self.last_tick.timestamp())}]
-        elif len(afk_events)>1: #and not any(x for x in afk_events if x['data']['status'] != 'not-afk'):
+        #if len(afk_events) == 0:
+            #afk_events = [{'data': {'status': 'afk'}, 'timestamp': self.last_tick, 'duration': timedelta(seconds=time()-self.last_tick.timestamp())}]
+        if len(afk_events)>1: #and not any(x for x in afk_events if x['data']['status'] != 'not-afk'):
             afk_events.reverse()
             afk_events.sort(key=lambda x: x['timestamp'])
             for i in range(1, len(afk_events)):
@@ -223,8 +242,16 @@ class Exporter:
 
             tags = self.find_tags_from_event(event)
 
-            print(f"{self.last_tick.astimezone().strftime("%H:%M")} - {event['duration'].total_seconds()}s duration, {event['data']} - tags found: {tags}")
-            
+            if tags is None:
+                num_skipped_events += 1
+                total_time_skipped_events += event['duration']
+                if total_time_skipped_events.total_seconds()>60:
+                    breakpoint()
+            else:
+                print(f"{self.last_tick.astimezone().strftime("%H:%M")} - {event['duration'].total_seconds()}s duration, {event['data']} - tags found: {tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)")
+                num_skipped_events = 0
+                total_time_skipped_events = timedelta(0)
+
             if tags == { 'not-afk' }:
                 self.last_known_tick = event['timestamp']
                 tags = []
@@ -256,8 +283,21 @@ class Exporter:
                             breakpoint()
                             exclusive_overlapping(tags)
                     tags_accumulated_time[tag] *= STICKYNESS_FACTOR
-                ## TODO: if `timew start` was run manually, then repopulate tags_accumulated_time to ensure sticiness of manually recorded tags
-                timew_ensure(tags, self.last_known_tick)
+                ## Check - if `timew start` was run manually since last "known tick", then reset everything
+                foo = self.timew_info
+                self.timew_info = timew_retag(get_timew_info())
+                if foo != self.timew_info:
+                    print("timew has been run manually")
+                    if self.timew_info['start_dt'] >= self.last_tick:
+                        self.last_known_tick = self.timew_info['start_dt']
+                        self.last_tick = self.last_known_tick
+                    tags_accumulated_time = defaultdict(timedelta)
+                    for tag in self.timew_info['tags']:
+                        tags_accumulated_time[tag] = STICKYNESS_FACTOR*MIN_RECORDING_INTERVAL
+                    continue
+                else:
+                    ## TODO: if `timew start` was run manually, then repopulate tags_accumulated_time to ensure sticiness of manually recorded tags
+                    timew_ensure(tags, self.last_known_tick)
 
             self.last_tick = event['timestamp']-timedelta(seconds=1)
 
@@ -305,14 +345,22 @@ def exclusive_overlapping(tags):
             return True
     return False
 
-## not really retag, more like expand tags?
+## not really retag, more like expand tags?  But it's my plan to allow replacement and not only addings
 def retag_by_rules(source_tags):
     assert not exclusive_overlapping(source_tags)
-    new_tags = source_tags.copy()
+    new_tags = source_tags.copy()  ## TODO: bad variable naming.  `revised_tags` maybe?
     for tag_section in config['tags']:
         retags = config['tags'][tag_section]
-        if source_tags.intersection(set(retags['source_tags'])):
-            new_tags_ = new_tags.union(set(retags.get('add', [])))
+        intersection = source_tags.intersection(set(retags['source_tags']))
+        if intersection:
+            new_tags_ = set()
+            for tag in retags.get('add', []):
+                if "$source_tag" in tag:
+                    for source_tag in intersection:
+                        new_tags_.add(tag.replace("$source_tag", source_tag))
+                else:
+                    new_tags_.add(tag)    
+            new_tags_ = new_tags.union(new_tags_)
             if exclusive_overlapping(new_tags_):
                 logging.warning(f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts")
             else:
