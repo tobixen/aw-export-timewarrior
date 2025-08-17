@@ -24,13 +24,13 @@ GRACE_TIME=float(os.environ.get('GRACE_TIME') or 10)
 
 SPECIAL_TAGS={'manual', 'override', 'not-afk'}
 
-def ts2str(ts, format="%FT%H:%M"):
+def ts2str(ts, format="%FT%H:%M:%S"):
     return(ts.astimezone().strftime(format))
 
 def ts2strtime(ts):
     if not ts:
-        return "XX:XX"
-    return ts2str(ts, "%H:%M")
+        return "XX:XX:XX:"
+    return ts2str(ts, "%H:%M:%S")
 
 class Exporter:
     def __init__(self):
@@ -52,7 +52,7 @@ class Exporter:
                 check_bucket_updated(self.buckets[b])
 
     def log(self, msg, ts=None, attrs=[]):
-        cprint(f"{ts2strtime(ts)} (tracking from {ts2strtime(self.timew_info['start_dt'])}: {self.timew_info['tags']}): {msg}", attrs=attrs)
+        cprint(f"{ts2strtime(datetime.now())} / {ts2strtime(ts)} (tracking from {ts2strtime(self.timew_info['start_dt'])}: {self.timew_info['tags']}): {msg}", attrs=attrs)
 
     def get_editor_tags(self, window_event):
         ## TODO: can we consolidate common code? I basically copied get_browser_tags and s/browser/editor/ and a little bit editing
@@ -248,7 +248,7 @@ class Exporter:
                 if total_time_skipped_events.total_seconds()>60:
                     breakpoint()
             else:
-                print(f"{self.last_tick.astimezone().strftime("%H:%M")} - {event['duration'].total_seconds()}s duration, {event['data']} - tags found: {tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)")
+                print(f"{ts2strtime(datetime.now())} / {ts2strtime(self.last_tick)} - {event['duration'].total_seconds()}s duration, {event['data']} - tags found: {tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)")
                 num_skipped_events = 0
                 total_time_skipped_events = timedelta(0)
 
@@ -279,9 +279,6 @@ class Exporter:
                 for tag in tags_accumulated_time:
                     if tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval:
                         tags.add(tag)
-                        if ('oss-contrib' in tags and 'entertainment' in tags):
-                            breakpoint()
-                            exclusive_overlapping(tags)
                     tags_accumulated_time[tag] *= STICKYNESS_FACTOR
                 ## Check - if `timew start` was run manually since last "known tick", then reset everything
                 foo = self.timew_info

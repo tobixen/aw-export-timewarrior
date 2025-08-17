@@ -1,8 +1,6 @@
 # Better Categorizer and Timewarrior Companion
 
-THIS IS WORK IN PROGRESS!  THERE WILL BE DRAGONS!  THERE ARE LOTS OF DEBUGGER BREAKPOINTS IN THE CODE!
-
-If you know some Python, like Activitywatch and use Timewarrior, you're invited to look into it and contribute.  If you don't know any Python, you should probably wait a bit before utilizing this.
+Be aware, this is not a mature project, there will be dragons, there are quite some debugger breakpoints and asserts in the code.  If you know some Python, like Activitywatch and use Timewarrior, then I'd encourage you to look into it and contribute.
 
 ## Background and rationale
 
@@ -12,7 +10,7 @@ I've had a journey into the "time tracking rabbit hole", this is covered in thre
 
 * [General thoughts on time tracking](https://www.redpill-linpro.com/techblog/2025/05/13/time-tracking-thoughts.html)
 * [Comparision of different software](https://www.redpill-linpro.com/techblog/2025/05/22/time-tracking-software.html)
-* Experiences using Timewarrior and Activitywatch ... TODO, not written yet
+* Experiences using Timewarrior and Activitywatch ... TODO, not published yet
 
 ## (Optional) Dependencies
 
