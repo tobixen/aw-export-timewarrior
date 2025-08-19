@@ -1,6 +1,6 @@
 # Better Categorizer and Timewarrior Companion
 
-Be aware, this is not a mature project, there will be dragons, there are quite some debugger breakpoints and asserts in the code.  If you know some Python, like Activitywatch and use Timewarrior, then I'd encourage you to look into it and contribute.
+Be aware, this is not a mature project, there will be dragons, there are quite some debugger breakpoints and asserts in the code.  If you know some Python, like Activitywatch and use Timewarrior, then I'd encourage you to look into it and contribute.  I'm available by email tobias@redpill-linpro.com as well as by the GitHub issues if you should have any questions or suggestions.
 
 ## Background and rationale
 
@@ -25,37 +25,47 @@ Briefly, this tool can do two things:
 
 ### Categorization rules
 
-This should probably be moved out to a separate tool, but currently it's a bit hard-coded to Timewarrior.  Timewarrior don't use terms like categories, projects, tasks etc - it's all about tags, and up to the user to figure out how to use the tags, hence the categorization is tag-based.  The current implementation also stores intermediate data in timew, picks it out and expands on it (ugly design, should be redone).  Rules are currently stored in `$HOME/.config/activitywatch/aw-export-timewarrior/aw-export-timewarrior.toml`.  Some fallback-rules on things that can be ignored are currently hard-coded in the script, but should be moved to the config.
+I believe that part of the work I've done here may be relevant for AcitvityWatch users even without using Timewarrior, and other parts of the work may be relevant for Timewarrior users even if they don't use ActivityWatch.  Perhaps the project should be split ... but I leave it as this for now.
 
-There are currently four kind of rules:
+Timewarrior don't use terms like categories, projects, tasks etc - it's all about tags, and up to the user to figure out how to use the tags.  Rules are currently stored in `$HOME/.config/activitywatch/aw-export-timewarrior/aw-export-timewarrior.toml`.  Some fallback-rules on things that can be ignored are currently hard-coded in the script, but should be moved to the config.
 
-* Tags - simple retagging rules, i.e. if running `timew start tea`, it may retag it into `4break afk tea`.  This does not touch activitywatch at all and could be split into a separate project.  Anyway, it eases the definition of the other rules as it's not needed to add all the tags to every rule.  Currently it can only add tags, but I'm intending to make it possible rewriting tags as well.  Takes `source_tags` and `add`, both lists of tags.
+Those rules are currently supported:
 
-* Browser rules.  Currently it takes only take one input, `url_regexp`.
+* Exlusive rules (`exclusive.${id}`) - some tags should not be combined (like, in my system I do have some main categories, like work and break - and I cannot be working and having a break at the same time - and I cannot be afk and not-afk at the same time, etc).  Takes one input `tags` with a list of tags that are mutually exclusive.
 
-* Editor rules.  It takes two inputs, `project` (exact match on what the editor reports as "project") and `path_regexp` (regexp match on the full file name path).  If both are given, the union of matches is utilized (OR-logic applies).
+* Tags (`tags.${id}`) - simple retagging rules, i.e. if running `timew start tea`, it may retag it into `break afk tea`.  This does not touch ActivityWatch at all, it's only about Timewarrior entries getting extra tags.  It eases the definition of the other rules as it's not needed to add all the tags to every rule.  Currently it can only add tags, but I'm intending to make it possible rewriting tags as well.  Takes `source_tags` and `add`, both lists of tags.
 
-* App rules.  Takes two inputs, `app_names` and `title_regexp`.  Both has to pass (AND-logic).
+* Browser rules (`rules.browser.${id}`).  Currently it takes only take one input, `url_regexp`.
 
-The three latter takes the parameter `timew_tags` and will start a new Timewarrior entry with the given tags.  For each category, currently the first match will be used, but it should probably be redone so that it uses a union of all tags matching.
+* Editor rules (`rules.editor.${id}`).  It takes two inputs, `project` (exact match on what the editor reports as "project") and `path_regexp` (regexp match on the full file name path).  If both are given, the union of matches is utilized (OR-logic applies).
+
+* App rules (`rules.app.${id}`).  Takes two inputs, `app_names` and `title_regexp`.  Both has to pass (AND-logic).
+
+The three latter takes the output parameter `timew_tags` and may start a new Timewarrior entry with the given tags.  For each category, currently the first match will be used, but it should probably be redone so that it uses a union of all tags matching.
 
 I'm planning to support extensions - for instance, you may want to write up some special browser rule logic applying to some specific URL and specific page title, do an external look-up to find the appropriate tags, etc - advanced logic is better done in Python than in a configuration language like toml.
+
+### Configuration tunables
+
+There are some configuration hardcoded at the top of the script.  TODO: should be documented and moved to the toml-file.
 
 ### "Stickyness" and tuning
 
 This is difficult!
 
-* Very short visits to windows should be completely ignored.
+General ideas:
+
+* Very short visits to windows should be completely ignored (I'm not sure about your working patterns, but I frequently let the mouse cursor pass active windows, visit browser tabs searching for the right one, etc).
 * Some "noise" should be ignored.  You don't want this script too frequently changing your activity status if you've set it manually.
-* There will be lots of events that cannot easily be categorized, i.e. work on the command line - unless we have strong hints on something else, we should assume you're still working on the same.
-* Sometimes a work task involves frequent switching between windows - tags from both windows should apply in such situations.  Meaning we have to store tags internally for a while before dumping them to timewarrior.
+* There will be lots of events that cannot easily be categorized, i.e. work on the command line - unless we have strong hints on something else, we should assume you're still working on the same.  This means you need to have an eye on the current tracked activity and change it manually if this script won't do it for you.
+* Sometimes a work task involves frequent switching between windows - tags from both windows may apply in such situations.  Meaning we have to store tags internally for a while before dumping them to timewarrior.
 
-Proposal:
+Current logic:
 
-* Very short visits to windows should be completely ignored.  You didn't really do anything in the window, just searching for the right window for your work, or the mouse coursor accidentally went over some window (`IGNORE_INTERVAL=5` seconds by default)
+* `IGNORE_INTERVAL=5` seconds by default, allows any visit to a window for less than 5s to be considered as noise
 * `MIN_RECORDING_INTERVAL=60` seconds is the very minimum time between each distinct entry recorded in timewarror.
-* Whenever some tags have been observed for accumulatively more than `MIN_RECORDING_INTERVAL`, we should consider to start some new activity.  All tags observed for more than `MIN_TAG_INTERVAL=30` seconds over the last open period applies.  If any of those tags are missing from the current activity tracking, `timew start` is appliced with the new list of tags.  (TODO: consider that some tags should not be combined in the same event)
-* We should have some stickyness - the records should not be completely reset when sending tags to timew.  Rather, multiply all existing tags in the accumulator with `STICKINESS_FACTOR=0.25` (Considering removing it - it breaks the requirement that the script should always to the same if doing `timew undo` an arbitrary number of times)
+* Whenever some tags have been observed for accumulatively more than `MIN_RECORDING_INTERVAL`, we should consider to start some new activity.  All tags observed for more than `MIN_TAG_INTERVAL=30` seconds over the last open period applies.  If any of those tags are missing from the current activity tracking, `timew start` is appliced with the new list of tags.  It's possible to configure in the rule files that some tags are mutually exclusive, then they will not be combined.
+* We should have some stickyness - the records should not be completely reset when sending tags to timew.  Rather, multiply all existing tags in the accumulator with `STICKINESS_FACTOR=0.1` (Considering removing it - it breaks the requirement that the script should always to the same if doing `timew undo` an arbitrary number of times and then restarting the script)
 * If `timew start` has been run manually, the accumulator should be reset and populated with tags from the manual run.
 * If a single window event lasts for more than, say, `MAX_MIXED_INTERVAL=300` seconds and can be identified with tags, then ignore all previous activity and treat it independently (if you did something quickly between two well-defined tasks, then that time will be attributed to the previous work task).
 
