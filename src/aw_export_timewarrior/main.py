@@ -9,18 +9,23 @@ from termcolor import cprint
 import re
 import os
 
+## TEMP TEMP TEMP ... I'm doing a lot of debugging those days, but I don't want the code in the public main branch to end up in the debugger
+breakpoint = lambda: None
+
+## TODO: logging sucks a bit and should be rethought thoroughly
+
 from .config import config
 
 ## Those should be moved to config.py before releasing.  Possibly renamed.
-AW_WARN_THRESHOLD=300 ## the recent data from activity watch should not be elder than this
-SLEEP_INTERVAL=30 ## Sleeps between each run when the program is run in real-time
-IGNORE_INTERVAL=3 ## ignore any window visits lasting for less than five seconds (TODO: may need tuning if terminal windows change title for every command run)
-MIN_RECORDING_INTERVAL=60 ## Never record an activities more frequently than once per minute.
-MIN_TAG_RECORDING_INTERVAL=30 ## When recording something, include every tag that has been observed for more than 30s
-STICKYNESS_FACTOR=0.10 ## Don't reset everything on each "tick".
-MAX_MIXED_INTERVAL=180 ## Any window event lasting for more than three minutes should be considered independently from what you did before and after
+AW_WARN_THRESHOLD=float(os.environ.get('AW2TW_AW_WARN_THRESHOLD') or 300) ## the recent data from activity watch should not be elder than this
+SLEEP_INTERVAL=float(os.environ.get('AW2TW_SLEEP_INTERVAL') or 30) ## Sleeps between each run when the program is run in real-time
+IGNORE_INTERVAL=float(os.environ.get('AW2TW_IGNORE_INTERVAL') or 3) ## ignore any window visits lasting for less than five seconds (TODO: may need tuning if terminal windows change title for every command run)
+MIN_RECORDING_INTERVAL=float(os.environ.get('AW2TW_MIN_RECORDING_INTERVAL') or 60) ## Never record an activities more frequently than once per minute.
+MIN_TAG_RECORDING_INTERVAL=float(os.environ.get('AW2TW_MIN_TAG_RECORDING_INTERVAL') or 30) ## When recording something, include every tag that has been observed for more than 30s
+STICKYNESS_FACTOR=float(os.environ.get('AW2TW_STICKYNESS_FACTOR') or 0.10) ## Don't reset everything on each "tick".
+MAX_MIXED_INTERVAL=float(os.environ.get('AW2TW_MAX_MIXED_INTERVAL') or 180) ## Any window event lasting for more than three minutes should be considered independently from what you did before and after
 
-GRACE_TIME=float(os.environ.get('GRACE_TIME') or 10)
+GRACE_TIME=float(os.environ.get('AW2TW_GRACE_TIME') or 10)
 
 SPECIAL_TAGS={'manual', 'override', 'not-afk'}
 
@@ -32,15 +37,44 @@ def ts2strtime(ts):
         return "XX:XX:XX:"
     return ts2str(ts, "%H:%M:%S")
 
+## Todo: consider data class?
+## We keep quite some statistics here, all the counters should be documented
+## TODO: Resetting counters should be done through explicit methods in this class and
+## not through arbitrary assignments in unrelated methods
 class Exporter:
     def __init__(self):
+        ## Last tick is updated all the time.  It's the end time of the last event handled.
+        ## Used for determinating when we should start fetching window information
         self.last_tick = None
+
+        ## last known tick is the end time of the last event causing tags to be "ensured"
+        ## (that is, exported if needed).  Should be set in the ensure algorithm.
+        self.last_known_tick = None
+
+        ## last known start time is the start time of the last event causing tags to be "ensured".
+        ## (that is, exported if needed).  Should be set in the ensure algorithm.
+        self.last_start_time = None
+
+        ## data fetching
         self.aw = aw_client.ActivityWatchClient(client_name="timewarrior_export")
         self.buckets = self.aw.get_buckets()
         self.bucket_by_client = defaultdict(list)
         self.bucket_short = {}
+
+        ## Assume we're afk when script is started ... but ... why?
+        self.afk = True
+
+        ## total_time_known_events is summing up the time spent on
+        ## tag-generating activities since last time a tag was
+        ## recorded.  So it should be nulled out only when ensure_tag
+        ## is run It is useful for debugging; if
+        ## total_time_known_events is very low compared to the time
+        ## since last known tick, then something is wrong.
+        self.total_time_known_events = timedelta(0)
+
         for x in self.buckets:
-            self.buckets[x]['last_updated_dt'] = datetime.fromisoformat(self.buckets[x]['last_updated'])
+            lu = self.buckets[x].get('last_updated')
+            self.buckets[x]['last_updated_dt'] = datetime.fromisoformat(lu) if lu else None
             client = self.buckets[x]['client']
             self.bucket_by_client[client].append(x)
             bucket_short = x[:x.find('_')]
@@ -51,8 +85,64 @@ class Exporter:
             for b in self.bucket_by_client[bucketclient]:
                 check_bucket_updated(self.buckets[b])
 
+    ## TODO: move all dealings with statistics to explicit statistics-handling methods
+    def ensure_tag_exported(self, tags, event, since=None):
+        if since is None:
+            since = event['timestamp']
+
+        ## Now, the previously tagged thing has been running (at least) since self.last_known_tick,
+        ## no matter if we have activity supporting it or not since self.last_known_tick.
+        last_activity_run_time = since - self.last_start_time
+
+        ## We'd like to compare with self.total_time_known_event, but it's counted from the end of the previous event to the end of the current event
+        tracked_gap = event['timestamp'] + event['duration'] - self.last_known_tick
+
+        ## if the time tracked is significantly less than the minimum
+        ## time we're supposed to track, something is also probably
+        ## wrong and should be investigated
+        if last_activity_run_time.total_seconds() < MIN_RECORDING_INTERVAL-3:
+            breakpoint()
+
+        ## If the tracked time is less than the known events time we've counted
+        ## then something is a little bit wrong.
+        if tracked_gap < self.total_time_known_events:
+            breakpoint()
+
+        ## If he time tracked is way longer than the
+        ## self.total_time_known_events, something is probably wrong
+        ## and should be investigated
+        if tracked_gap.total_seconds()>MAX_MIXED_INTERVAL and self.total_time_known_events/tracked_gap < 0.3:
+            breakpoint()
+
+        if 'afk' in tags:
+            self.afk = True
+        self.total_time_known_events = timedelta(0)
+        self.last_known_tick = event['timestamp'] + event['duration']
+        self.last_tick = self.last_known_tick
+        self.timew_info = timew_retag(get_timew_info())
+        if isinstance(tags, str):
+            tags = { tags }
+        ## Special logic with 'override', 'manual' and 'unknown' should be documented or removed!
+        if 'override' in self.timew_info['tags']:
+            return
+        if 'manual' in self.timew_info['tags'] and 'unknown' in tags:
+            return
+        if set(tags).issubset(self.timew_info['tags']):
+            return
+        tags = retag_by_rules(tags)
+        assert not exclusive_overlapping(tags)
+        timew_run(['start'] + list(tags) + [since.astimezone().strftime('%FT%H:%M:%S')])
+        self.timew_info = timew_retag(get_timew_info())
+
+    def arrived2keyboard(self, tags):
+        if tags and 'not-afk' in tags and 'afk' in self.timew_info['tags'] and self.afk:
+            self.afk = False
+            return True
+        return False
+
+    ## TODO: rethink logging and remove all logging done through "print" everywhere in the code
     def log(self, msg, ts=None, attrs=[]):
-        cprint(f"{ts2strtime(datetime.now())} / {ts2strtime(ts)} (tracking from {ts2strtime(self.timew_info['start_dt'])}: {self.timew_info['tags']}): {msg}", attrs=attrs)
+        cprint(f"{ts2strtime(datetime.now())} / {ts2strtime(self.last_tick)} / {ts2strtime(ts)} (tracking from {ts2strtime(self.timew_info['start_dt'])}: {self.timew_info['tags']}): {msg}", attrs=attrs)
 
     def get_editor_tags(self, window_event):
         ## TODO: can we consolidate common code? I basically copied get_browser_tags and s/browser/editor/ and a little bit editing
@@ -92,19 +182,23 @@ class Exporter:
         return []
 
     ## TODO - remove hard coded constants!
-    def get_corresponding_event(self, window_event, event_type_id, ignorable=False, retry=True):
+    def get_corresponding_event(self, window_event, event_type_id, ignorable=False, retry=6):
         ret = self.aw.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=1), end=window_event['timestamp']+window_event['duration'])
 
         ## If nothing found ... try harder
         if not ret and not ignorable and retry:
-            ## Perhaps the event hasn't reached ActivityWatch yet?
-            sleep(1)
-            return self.get_corresponding_event(window_event, event_type_id, ignorable, retry=False)
+            ## Perhaps the event hasn't reached ActivityWatch yet?  Perhaps it helps to sleep?
+            ## Obviously, it may only help if the wall clock matches the event time
+            if time() - SLEEP_INTERVAL*6 < (window_event['timestamp'] + window_event['duration']).timestamp():
+                print(f"Window event {window_event} not in yet, attempting to sleep for a while")
+                sleep(SLEEP_INTERVAL*3/retry+0.2)
+                retry -= 1
+                return self.get_corresponding_event(window_event, event_type_id, ignorable, retry)
         
-        if not ret and not ignorable and not retry:
-            ret = self.aw.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=15), end=window_event['timestamp']+window_event['duration']+timedelta(seconds=1))
+        if not ret and not ignorable:
+            ret = self.aw.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=15), end=window_event['timestamp']+window_event['duration']+timedelta(seconds=15))
         if not ret:
-            if not ignorable:
+            if not ignorable and not window_event['duration']<timedelta(seconds=IGNORE_INTERVAL*4):
                 self.log(f"No corresponding {event_type_id} found.  Window title: {window_event['data']['title']}.  If you see this often, you should verify that the relevant watchers are active and running.", window_event['timestamp'])
             return None
         if len(ret)>1:
@@ -184,11 +278,14 @@ class Exporter:
         else:
             return False
 
+    ## TODO: this is a bit messy - this will return None if the event is small
+    ## enough to be found "ignorable" and False if no tags are found
+    ## Otherwise a set of tags
     def find_tags_from_event(self, event):
         if event['duration'].total_seconds() < IGNORE_INTERVAL:
-            return
+            return None
 
-        for method in (self.get_app_tags, self.get_browser_tags, self.get_afk_tags, self.get_editor_tags):
+        for method in (self.get_afk_tags, self.get_app_tags, self.get_browser_tags, self.get_editor_tags):
             tags = method(event)
             if tags is not False:
                 break
@@ -197,11 +294,39 @@ class Exporter:
     def find_next_activity(self):
         afk_id = self.bucket_by_client['aw-watcher-afk'][0]
         window_id = self.bucket_by_client['aw-watcher-window'][0]
+
+        ## TODO: move all statistics from internal counters and up to the object
+        
+        ## tags_accumulated_time is a time counter for each tags that has been observed.
+        ## When enough time has been counted, we'll look through and run ensure_tag_exported on the tags that has accumulated most time.
+        ## tags_accumulated_time is cleared ...
+        ## 1) at the beginning of this function
+        ## 2) when one has been afk and coming non-afk
+        ## 3) when some event has been going on for MAX_MIXED_INTERVAL
+        ## 4) when some mixed events is recorded, the numbers are reduced - we
+        ## spill over some of the content to the next recording interval, to reduce flapping
         tags_accumulated_time = defaultdict(timedelta)
+
+        ## Skipped events are events that takes so little time that we ignore it completely.
+        ## The counter is nulled out when some non-skipped event comes in.
+        ## Used only for debug logging.
         num_skipped_events = 0
+
+        ## Unknown events are events lasting for some time, but without any
+        ## rules identifying any tags.
+        ## Nulled out only at the beginning of the function
+        num_unknown_events = 0
+
         total_time_skipped_events = timedelta(0)
 
+        ## This is not reliable as for now.  Should be moved to self
+        total_time_unknown_events = timedelta(0)
+
+        ## just to make sure we won't lose any events
+        #self.last_tick = self.last_tick - timedelta(1)
+        
         afk_events = self.aw.get_events(afk_id, start=self.last_tick)
+        
         ### START WORKAROUND
         ## TODO
         ## workaround for https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/41
@@ -219,50 +344,72 @@ class Exporter:
                     continue
                 afk_events.append({'data': {'status': 'afk'}, 'timestamp': start, 'duration': duration})
         ### END WORKAROUND
+
+        ## afk and window_events
         afk_window_events = self.aw.get_events(window_id, start=self.last_tick) + afk_events
         afk_window_events.sort(key=lambda x: x['timestamp'])
+        if not afk_window_events:
+            import pdb; pdb.set_trace()
+            return False
         for event in afk_window_events:
-
-            def timew_ensure(tags, since=event['timestamp']):
-                if tags != 'not-afk':
-                    self.last_known_tick = event['timestamp'] + event['duration']
-                self.timew_info = timew_retag(get_timew_info())
-                if isinstance(tags, str):
-                    tags = { tags }
-                if 'override' in self.timew_info['tags']:
-                    return
-                if 'manual' in self.timew_info['tags'] and 'unknown' in tags:
-                    return
-                if set(tags).issubset(self.timew_info['tags']):
-                    return
-                tags = retag_by_rules(tags)
-                assert not exclusive_overlapping(tags)
-                timew_run(['start'] + list(tags) + [since.astimezone().strftime('%FT%H:%M:%S')])
-                self.timew_info = timew_retag(get_timew_info())
-
             tags = self.find_tags_from_event(event)
+            if event['timestamp'] < self.last_tick or event['timestamp'] < self.last_known_tick:
+                if tags != { 'afk' } and tags != { 'not-afk' }:
+                    breakpoint()
+            
+            ## TODO: some more logic may be needed
+            ## 1) we should make sure that after going from afk to not-afk, the time gets tracked - with tag 'unknown' if needed.
+            ## 2) when going from not-afk to afk, we should always track that we've been not-afk
+            if self.arrived2keyboard(tags):
+                print(f"{ts2strtime(datetime.now())} / {ts2strtime(self.last_tick)} / {ts2strtime(event.get('timestamp'))} - {event['duration'].total_seconds()}s duration, {event['data']} afk -> not-afk ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)")
+                tags_accumulated_time = defaultdict(timedelta)
 
+            ## We should ignore the `{ 'not-afk' }`-event.  It may tell that we've been not afk for some hours.  There are more information in other events.
+            if tags == { 'not-afk' }:
+                continue
+
+            if tags == { 'afk' }:
+                import pdb; pdb.set_trace()
+                self.ensure_tag_exported(tags, event)
+                ## We should break the loop ... let the afk event override other events telling about window activities 
+                return True
+
+            if tags:
+                self.total_time_known_events += event['duration']
+
+            ## tags can be False or None and those means different things.
+            ## TODO: Bad design
+            ## TODO: duplicated code
             if tags is None:
                 num_skipped_events += 1
                 total_time_skipped_events += event['duration']
-                if total_time_skipped_events.total_seconds()>60:
+                if total_time_skipped_events.total_seconds()>MIN_RECORDING_INTERVAL:
                     breakpoint()
+                continue
+            
+            if tags is False:
+                num_unknown_events += 1
+                total_time_unknown_events += event['duration']
+                if total_time_unknown_events.total_seconds()>MAX_MIXED_INTERVAL*2:
+                    ## TODO: we should consider to timew tag 'unknown not-afk'
+                    breakpoint()
+                print(f"{ts2strtime(datetime.now())} / {ts2strtime(self.last_tick)} / {ts2strtime(event.get('timestamp'))} - {total_time_unknown_events.total_seconds()}s unknown events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)")
             else:
-                print(f"{ts2strtime(datetime.now())} / {ts2strtime(self.last_tick)} - {event['duration'].total_seconds()}s duration, {event['data']} - tags found: {tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)")
-                num_skipped_events = 0
-                total_time_skipped_events = timedelta(0)
-
-            if tags == { 'not-afk' }:
-                self.last_known_tick = event['timestamp']
-                tags = []
+                print(f"{ts2strtime(datetime.now())} / {ts2strtime(self.last_tick)} / {ts2strtime(event.get('timestamp'))} - {event['duration'].total_seconds()}s duration, {event['data']} - tags found: {tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)")
+            num_skipped_events = 0
+            total_time_skipped_events = timedelta(0)
 
             ## Ref README, if MAX_MIXED_INTERVAL is met, ignore accumulated minor activity
             ## (the mixed time will be attributed to the previous work task)
             if tags and event['duration'].total_seconds() > MAX_MIXED_INTERVAL:
-                tags_accumulated_time = defaultdict(timedelta)
-                timew_ensure(tags)
+                ## Theoretically, we may do lots of different things causing hundred of different independent tags to collect less than the minimum needed to record something.  In practice that doesn't happen.
+                #print(f"We're tossing data: {tags_accumulated_time}")
+                self.ensure_tag_exported(tags, event)
 
             interval_since_last_known_tick = event['timestamp'] + event['duration'] - self.last_known_tick
+            if (interval_since_last_known_tick < timedelta(0)):
+                import pdb; pdb.set_trace()
+            assert(interval_since_last_known_tick >= timedelta(0))
 
             ## Track things in internal accumulator if the focus between windows changes often
             if tags:
@@ -272,6 +419,7 @@ class Exporter:
                 
             if interval_since_last_known_tick.total_seconds() > MIN_RECORDING_INTERVAL and any(x for x in tags_accumulated_time if x not in SPECIAL_TAGS and tags_accumulated_time[x].total_seconds()>MIN_RECORDING_INTERVAL):
                 tags = set()
+                ## TODO: This looks like a bug - we reset tags, and then assert that they are not overlapping?
                 assert not exclusive_overlapping(tags)
                 min_tag_recording_interval=MIN_TAG_RECORDING_INTERVAL
                 while exclusive_overlapping(set([tag for tag in tags_accumulated_time if  tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval])):
@@ -285,8 +433,9 @@ class Exporter:
                 self.timew_info = timew_retag(get_timew_info())
                 if foo != self.timew_info:
                     print("timew has been run manually")
-                    if self.timew_info['start_dt'] >= self.last_tick:
+                    if self.timew_info['start_dt'] >= self.last_known_tick:
                         self.last_known_tick = self.timew_info['start_dt']
+                        self.last_start_time = self.timew_info['start_dt']
                         self.last_tick = self.last_known_tick
                     tags_accumulated_time = defaultdict(timedelta)
                     for tag in self.timew_info['tags']:
@@ -294,9 +443,12 @@ class Exporter:
                     continue
                 else:
                     ## TODO: if `timew start` was run manually, then repopulate tags_accumulated_time to ensure sticiness of manually recorded tags
-                    timew_ensure(tags, self.last_known_tick)
+                    ## TODO: duplicated code
+                    if 'afk' in tags:
+                        self.afk = True
+                    self.ensure_tag_exported(tags, event, self.last_known_tick)
 
-            self.last_tick = event['timestamp']-timedelta(seconds=1)
+            self.last_tick = event['timestamp'] + event['duration']
 
             if tags is not False:
                 pass
@@ -305,16 +457,20 @@ class Exporter:
                 self.log(f"Unknown terminal event {event['data']['title']}", event['timestamp'], attrs=["bold"])
             else:
                 self.log(f"No rules found for event {event['data']}", event['timestamp'], attrs=["bold"])
+        return True
 
     def tick(self):
         self.timew_info = timew_retag(get_timew_info())
         if not self.last_tick:
             self.last_tick = self.timew_info['start_dt']
             self.last_known_tick = self.last_tick
-        self.find_next_activity()
+            self.last_start_time = self.last_tick
+        if not self.find_next_activity():
+            print("sleeping, because no events found")
+            sleep(SLEEP_INTERVAL)
 
 def check_bucket_updated(bucket: dict):
-    if time()-bucket['last_updated_dt'].timestamp() > AW_WARN_THRESHOLD:
+    if not bucket['last_updated_dt'] or time()-bucket['last_updated_dt'].timestamp() > AW_WARN_THRESHOLD:
         logging.warning(f"Bucket {bucket['id']} seems not to have recent data!")
 
 ## TODO: none of this has anything to do with ActivityWatch and can be moved to a separate module
@@ -382,7 +538,6 @@ def main():
     exporter = Exporter()
     while True:
         exporter.tick()
-        sleep(SLEEP_INTERVAL)
 
 if __name__ == '__main__':
     main()
