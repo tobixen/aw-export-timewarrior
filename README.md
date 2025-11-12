@@ -2,6 +2,8 @@
 
 Be aware, this is not a mature project, there will be dragons, there are quite some debugger breakpoints and asserts in the code.  If you know some Python, like Activitywatch and use Timewarrior, then I'd encourage you to look into it and contribute.  I'm available by email tobias@redpill-linpro.com as well as by the GitHub issues if you should have any questions or suggestions.
 
+Be aware, that this README may not reflect the latest version of the code (TODO: look through things!)
+
 ## Background and rationale
 
 I found Timewarrior and Activitywatch to be the best open source tools for time tracking, but they do quite different things.  A combination would almost solve my time tracking needs perfectly.
