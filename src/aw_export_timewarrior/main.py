@@ -287,13 +287,12 @@ class Exporter:
                 if match:
                     tags = set(rule['timew_tags'])
                     for tag in list(tags):
-                        if '$1' in tag:
-                            ## todo: support for $2, etc
+                        if '$' in tag:
                             tags.remove(tag)
-                            if len(match.groups())>0:
-                                if match.group(1) is None:
-                                    breakpoint()
-                                tags.add(tag.replace('$1', match.group(1)))
+                            groups = match.groups()
+                            for i in range(0, len(groups)):
+                                tag = tag.replace(f"${i+1}", groups[i])
+                            tags.add(tag)
                     tags.add('not-afk')
                     return tags
             else:
@@ -498,6 +497,12 @@ class Exporter:
                 afk_events.append({'data': {'status': 'afk'}, 'timestamp': start, 'duration': duration})
         ### END WORKAROUND
 
+        ## The afk tracker is not reliable.  Sometimes it shows me
+        ## being afk even when I've been sitting constantly by the
+        ## computer, working most of the time, perhaps spending a
+        ## minute reading something?
+        afk_events = [ x for x in afk_events if x['duration'] > timedelta(seconds=MAX_MIXED_INTERVAL) ]
+
         ## afk and window_events
         afk_window_events = self.aw.get_events(window_id, start=self.last_tick) + afk_events
         afk_window_events.sort(key=lambda x: x['timestamp'])
@@ -509,7 +514,16 @@ class Exporter:
         cnt = 0
         for event in afk_window_events[:-1]:
             if event['timestamp'] < self.last_tick or event['timestamp'] < self.last_known_tick:
-                self.log(f"skipping event as the timestamp is too old - {event}", event=event)
+                if event['data'] == {'status': 'not-afk'}:
+                    continue
+                if event['timestamp']+event['duration'] > self.last_known_tick:
+                    import pdb; pdb.set_trace()
+                elif event['data'] != {'status': 'afk'} and event['timestamp'] > self.last_start_time:
+                    if event['duration']>timedelta(seconds=30):
+                        import pdb; pdb.set_trace()
+                    ## Do we need an exception here for afk events?
+                    self.log(f"skipping event as the timestamp is too old - {event}", event=event)
+                    continue
             tags = self.find_tags_from_event(event)
 
             ## Handling afk/not-afk
