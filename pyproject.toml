@@ -16,7 +16,7 @@ dependencies = [
 packages = [{include = "aw_export_timewarrior", from = "src"}]
 
 [tool.poetry.scripts]
-aw-export-timewarrior = "aw_export_timewarrior.main:main"
+aw-export-timewarrior = "aw_export_timewarrior.cli:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

@@ -1,0 +1,90 @@
+{
+  "description": "Simple 30-minute work session with coding and documentation lookup",
+  "metadata": {
+    "test_data": true,
+    "start_time": "2025-01-01T09:00:00+00:00",
+    "end_time": "2025-01-01T09:30:00+00:00",
+    "duration_seconds": 1800
+  },
+  "buckets": {
+    "aw-watcher-window_test": {
+      "id": "aw-watcher-window_test",
+      "client": "aw-watcher-window",
+      "hostname": "test-machine",
+      "last_updated": "2025-01-01T09:30:00+00:00"
+    },
+    "aw-watcher-afk_test": {
+      "id": "aw-watcher-afk_test",
+      "client": "aw-watcher-afk",
+      "hostname": "test-machine",
+      "last_updated": "2025-01-01T09:30:00+00:00"
+    },
+    "aw-watcher-web-chrome_test": {
+      "id": "aw-watcher-web-chrome_test",
+      "client": "aw-watcher-web-chrome",
+      "hostname": "test-machine",
+      "last_updated": "2025-01-01T09:30:00+00:00"
+    },
+    "aw-watcher-emacs_test": {
+      "id": "aw-watcher-emacs_test",
+      "client": "aw-watcher-emacs",
+      "hostname": "test-machine",
+      "last_updated": "2025-01-01T09:30:00+00:00"
+    }
+  },
+  "events": {
+    "aw-watcher-afk_test": [
+      {
+        "timestamp": "2025-01-01T09:00:00+00:00",
+        "duration": 1800,
+        "data": {"status": "not-afk"}
+      }
+    ],
+    "aw-watcher-window_test": [
+      {
+        "timestamp": "2025-01-01T09:00:00+00:00",
+        "duration": 1200,
+        "data": {
+          "app": "Code",
+          "title": "main.py - project - Visual Studio Code"
+        }
+      },
+      {
+        "timestamp": "2025-01-01T09:20:00+00:00",
+        "duration": 600,
+        "data": {
+          "app": "Chrome",
+          "title": "datetime — Python 3.13 Documentation"
+        }
+      }
+    ],
+    "aw-watcher-emacs_test": [
+      {
+        "timestamp": "2025-01-01T09:00:00+00:00",
+        "duration": 1200,
+        "data": {
+          "file": "/home/user/projects/myproject/main.py",
+          "project": "myproject",
+          "language": "python"
+        }
+      }
+    ],
+    "aw-watcher-web-chrome_test": [
+      {
+        "timestamp": "2025-01-01T09:20:00+00:00",
+        "duration": 600,
+        "data": {
+          "url": "https://docs.python.org/3/library/datetime.html",
+          "title": "datetime — Python 3.13 Documentation"
+        }
+      }
+    ]
+  },
+  "expected_output": {
+    "description": "Expected tags and timewarrior commands",
+    "tags": ["4work", "coding", "python"],
+    "timew_commands": [
+      "timew start 4work coding python 2025-01-01T09:00:00"
+    ]
+  }
+}

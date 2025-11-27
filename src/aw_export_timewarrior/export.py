@@ -1,0 +1,242 @@
+"""
+Export ActivityWatch data to JSON/YAML for testing and analysis.
+
+This module provides functionality to record real ActivityWatch data
+for use in tests and debugging.
+"""
+
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+import aw_client
+from dateutil import parser as date_parser
+
+
+def parse_datetime(dt_string: str) -> datetime:
+    """
+    Parse a datetime string in various formats.
+
+    Supports:
+    - ISO format: "2025-01-01T09:00:00Z"
+    - Natural language: "2 hours ago", "yesterday"
+    - Simple format: "2025-01-01 09:00"
+
+    Args:
+        dt_string: DateTime string to parse
+
+    Returns:
+        Timezone-aware datetime object (UTC)
+    """
+    # Try parsing with dateutil (handles many formats)
+    dt = date_parser.parse(dt_string)
+
+    # Ensure timezone aware
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return dt
+
+
+def serialize_event(event: Any) -> Dict[str, Any]:
+    """
+    Convert an ActivityWatch event object to a JSON-serializable dict.
+
+    Args:
+        event: AW event object
+
+    Returns:
+        Dictionary with event data
+    """
+    return {
+        'id': getattr(event, 'id', None),
+        'timestamp': event.timestamp.isoformat() if hasattr(event, 'timestamp') else None,
+        'duration': event.duration.total_seconds() if hasattr(event, 'duration') else 0,
+        'data': event.data if hasattr(event, 'data') else {}
+    }
+
+
+def export_aw_data(
+    start: Union[str, datetime],
+    end: Union[str, datetime],
+    output_file: Union[str, Path],
+    format: str = 'json',
+    anonymize: bool = False
+) -> None:
+    """
+    Export ActivityWatch data for a time period.
+
+    Args:
+        start: Start time (datetime or string)
+        end: End time (datetime or string)
+        output_file: Output file path
+        format: Output format ('json' or 'yaml')
+        anonymize: If True, anonymize sensitive data (URLs, titles, etc.)
+    """
+    # Parse datetime strings if needed
+    if isinstance(start, str):
+        start = parse_datetime(start)
+    if isinstance(end, str):
+        end = parse_datetime(end)
+
+    # Connect to ActivityWatch
+    aw = aw_client.ActivityWatchClient('data-exporter')
+    buckets = aw.get_buckets()
+
+    # Collect data from all relevant buckets
+    data = {
+        'metadata': {
+            'export_time': datetime.now(timezone.utc).isoformat(),
+            'start_time': start.isoformat(),
+            'end_time': end.isoformat(),
+            'duration_seconds': (end - start).total_seconds(),
+            'anonymized': anonymize
+        },
+        'buckets': {},
+        'events': {}
+    }
+
+    # Export bucket metadata
+    for bucket_id, bucket in buckets.items():
+        data['buckets'][bucket_id] = {
+            'id': bucket['id'],
+            'name': bucket.get('name', bucket_id),
+            'type': bucket.get('type', 'unknown'),
+            'client': bucket.get('client', 'unknown'),
+            'hostname': bucket.get('hostname', 'unknown'),
+            'created': bucket.get('created', None)
+        }
+
+    # Export events from each bucket
+    for bucket_id in buckets:
+        try:
+            events = aw.get_events(bucket_id, start=start, end=end)
+
+            if events:
+                serialized_events = [serialize_event(e) for e in events]
+
+                # Anonymize if requested
+                if anonymize:
+                    serialized_events = [
+                        anonymize_event(e) for e in serialized_events
+                    ]
+
+                data['events'][bucket_id] = serialized_events
+                print(f"  {bucket_id}: {len(events)} events")
+            else:
+                print(f"  {bucket_id}: No events")
+
+        except Exception as e:
+            print(f"  {bucket_id}: Error - {e}")
+            data['events'][bucket_id] = {'error': str(e)}
+
+    # Write output file
+    output_path = Path(output_file)
+
+    if format == 'yaml' or output_path.suffix in ['.yaml', '.yml']:
+        try:
+            import yaml
+            with open(output_path, 'w') as f:
+                yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+        except ImportError:
+            print("Warning: PyYAML not installed, using JSON instead")
+            format = 'json'
+
+    if format == 'json' or output_path.suffix == '.json':
+        with open(output_path, 'w') as f:
+            json.dump(data, f, indent=2, sort_keys=False)
+
+    print(f"\nExported {sum(len(e) if isinstance(e, list) else 0 for e in data['events'].values())} total events")
+
+
+def anonymize_event(event: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Anonymize sensitive data in an event.
+
+    Replaces URLs, titles, file paths, etc. with generic placeholders
+    while preserving the structure and patterns.
+
+    Args:
+        event: Event dictionary
+
+    Returns:
+        Anonymized event dictionary
+    """
+    anon_event = event.copy()
+    data = anon_event.get('data', {}).copy()
+
+    # Anonymize URLs
+    if 'url' in data:
+        from urllib.parse import urlparse
+        parsed = urlparse(data['url'])
+        # Keep domain pattern but anonymize specifics
+        domain_parts = parsed.netloc.split('.')
+        if len(domain_parts) >= 2:
+            anon_domain = f"{domain_parts[-2]}.{domain_parts[-1]}"  # Keep TLD
+        else:
+            anon_domain = "example.com"
+        data['url'] = f"{parsed.scheme}://{anon_domain}/[path]"
+
+    # Anonymize titles
+    if 'title' in data:
+        # Keep length and basic structure
+        words = data['title'].split()
+        data['title'] = ' '.join(['X' * min(len(w), 10) for w in words[:5]])
+
+    # Anonymize file paths
+    if 'file' in data:
+        path = Path(data['file'])
+        # Keep file extension and directory depth
+        data['file'] = '/'.join(['dir'] * (len(path.parts) - 1) + [f'file{path.suffix}'])
+
+    # Anonymize project names
+    if 'project' in data:
+        data['project'] = 'project_name'
+
+    anon_event['data'] = data
+    return anon_event
+
+
+def load_test_data(file_path: Union[str, Path]) -> Dict[str, Any]:
+    """
+    Load test data from a JSON or YAML file.
+
+    Args:
+        file_path: Path to test data file
+
+    Returns:
+        Dictionary with test data
+    """
+    path = Path(file_path)
+
+    if path.suffix in ['.yaml', '.yml']:
+        import yaml
+        with open(path) as f:
+            return yaml.safe_load(f)
+    else:
+        with open(path) as f:
+            return json.load(f)
+
+
+def create_minimal_fixture(
+    events: List[Dict[str, Any]],
+    description: str,
+    expected_output: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Create a minimal test fixture from events.
+
+    Args:
+        events: List of event dictionaries
+        description: Description of what this fixture tests
+        expected_output: Expected output (timew commands, tags, etc.)
+
+    Returns:
+        Test fixture dictionary
+    """
+    return {
+        'description': description,
+        'events': events,
+        'expected_output': expected_output or {}
+    }

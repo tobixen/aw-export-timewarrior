@@ -55,7 +55,7 @@ class Exporter:
     ## 4) when some mixed events is recorded, the numbers are reduced - we
     ## spill over some of the content to the next recording interval, to reduce flapping
     tags_accumulated_time: defaultdict = field(default_factory=lambda: defaultdict(timedelta))
-    
+
     ## Last tick is updated all the time.  It's the end time of the last event handled.
     ## Used for determinating when we should start fetching window information
     last_tick: datetime = None
@@ -70,7 +70,7 @@ class Exporter:
 
     ## Assume we're afk when script is started ... but ... why?
     afk: bool = None
-    
+
     ## total_time_known_events is summing up the time spent on
     ## tag-generating activities since last time a tag was
     ## recorded.  So it should be nulled out only when ensure_tag
@@ -90,14 +90,29 @@ class Exporter:
 
     ## Information from timew about the current tagging
     timew_info: dict = None
-    
+
     ## This is not quite reliable
     total_time_unknown_events: timedelta = timedelta(0)
 
+    ## Testing and debugging options
+    dry_run: bool = False  # If True, don't actually modify timewarrior
+    verbose: bool = False  # If True, show detailed reasoning
+    show_diff: bool = False  # If True, show diffs in dry-run mode
+    config_path: str = None  # Optional path to config file
+    test_data: dict = None  # Optional test data instead of querying AW
+    start_time: datetime = None  # Optional start time for processing window
+    end_time: datetime = None  # Optional end time for processing window
+
     def __post_init__(self):
-        ## data fetching
-        self.aw = aw_client.ActivityWatchClient(client_name="timewarrior_export")
-        self.buckets = self.aw.get_buckets()
+        ## data fetching - skip if using test data
+        if not self.test_data:
+            self.aw = aw_client.ActivityWatchClient(client_name="timewarrior_export")
+            self.buckets = self.aw.get_buckets()
+        else:
+            # Using test data - create mock AW client
+            self.aw = None
+            self.buckets = self.test_data.get('buckets', {})
+
         self.bucket_by_client = defaultdict(list)
         self.bucket_short = {}
 
@@ -113,6 +128,13 @@ class Exporter:
             assert bucketclient in self.bucket_by_client
             for b in self.bucket_by_client[bucketclient]:
                 check_bucket_updated(self.buckets[b])
+
+    def load_test_data(self, file_path):
+        """Load test data from a JSON/YAML file."""
+        from .export import load_test_data as load_file
+        self.test_data = load_file(file_path)
+        # Reinitialize with test data
+        self.__post_init__()
 
     def set_known_tick_stats(self, event=None, start=None, end=None, manual=False, tags=None, reset_accumulator=False, retain_accumulator=True):
         if event and not start:
@@ -181,8 +203,8 @@ class Exporter:
             return
         tags = retag_by_rules(tags)
         assert not exclusive_overlapping(tags)
-        timew_run(['start'] + list(tags) + [since.astimezone().strftime('%FT%H:%M:%S')])
-        self.set_timew_info(timew_retag(get_timew_info()))
+        timew_run(['start'] + list(tags) + [since.astimezone().strftime('%FT%H:%M:%S')], dry_run=self.dry_run)
+        self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run))
 
     def pretty_accumulator_string(self):
         a = self.tags_accumulated_time
@@ -655,8 +677,14 @@ def get_timew_info():
     current_timew['tags'] = set(current_timew['tags'])
     return current_timew
 
-def timew_run(commands):
+def timew_run(commands, dry_run=False):
+    """Execute a timewarrior command, or show what would be done if dry_run=True."""
     commands = ['timew'] + commands
+
+    if dry_run:
+        cprint(f"DRY RUN: Would execute: {' '.join(commands)}", color="yellow", attrs=["bold"])
+        return
+
     print("Running:")
     print(f"   {" ".join(commands)}")
     subprocess.run(commands)
@@ -696,13 +724,14 @@ def retag_by_rules(source_tags):
         return retag_by_rules(new_tags)
     return new_tags
 
-def timew_retag(timew_info):
+def timew_retag(timew_info, dry_run=False):
     source_tags = set(timew_info['tags'])
     new_tags = retag_by_rules(source_tags)
     if new_tags != source_tags:
-        timew_run(["retag"] + list(new_tags))
-        timew_info = get_timew_info()
-        assert set(timew_info['tags']) == new_tags
+        timew_run(["retag"] + list(new_tags), dry_run=dry_run)
+        if not dry_run:
+            timew_info = get_timew_info()
+            assert set(timew_info['tags']) == new_tags
         return timew_info
     return timew_info
 

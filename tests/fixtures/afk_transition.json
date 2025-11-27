@@ -1,0 +1,55 @@
+{
+  "description": "AFK transition during work - user goes AFK mid-session",
+  "metadata": {
+    "test_data": true,
+    "start_time": "2025-01-01T10:00:00+00:00",
+    "end_time": "2025-01-01T10:30:00+00:00",
+    "duration_seconds": 1800
+  },
+  "buckets": {
+    "aw-watcher-window_test": {
+      "id": "aw-watcher-window_test",
+      "client": "aw-watcher-window",
+      "hostname": "test-machine",
+      "last_updated": "2025-01-01T10:30:00+00:00"
+    },
+    "aw-watcher-afk_test": {
+      "id": "aw-watcher-afk_test",
+      "client": "aw-watcher-afk",
+      "hostname": "test-machine",
+      "last_updated": "2025-01-01T10:30:00+00:00"
+    }
+  },
+  "events": {
+    "aw-watcher-afk_test": [
+      {
+        "timestamp": "2025-01-01T10:00:00+00:00",
+        "duration": 900,
+        "data": {"status": "not-afk"}
+      },
+      {
+        "timestamp": "2025-01-01T10:15:00+00:00",
+        "duration": 900,
+        "data": {"status": "afk"}
+      }
+    ],
+    "aw-watcher-window_test": [
+      {
+        "timestamp": "2025-01-01T10:00:00+00:00",
+        "duration": 900,
+        "data": {
+          "app": "Code",
+          "title": "feature.py - myproject"
+        }
+      }
+    ]
+  },
+  "expected_output": {
+    "description": "Should track work until AFK, then stop tracking",
+    "behavior": "Track 15 minutes of work, then recognize AFK transition",
+    "timew_commands": [
+      "timew start [tags] 2025-01-01T10:00:00",
+      "timew stop (implied by AFK transition)"
+    ]
+  }
+}
