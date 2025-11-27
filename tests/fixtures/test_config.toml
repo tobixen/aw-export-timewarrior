@@ -1,0 +1,21 @@
+# Test configuration for simple_work_session.json
+
+[tags.coding]
+source_tags = ["python", "coding"]
+prepend = ["4work"]
+
+[rules.editor.python]
+file_regexp = "\\.py$"
+timew_tags = ["coding", "python"]
+
+[rules.app.vscode]
+app_names = ["Code"]
+title_regexp = "\\.py"
+timew_tags = ["coding", "python"]
+
+[rules.browser.python-docs]
+url_regexp = "docs\\.python\\.org"
+timew_tags = ["learning", "python"]
+
+[exclusive.main_category]
+tags = ["4work", "4break", "4chores"]

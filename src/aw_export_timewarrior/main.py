@@ -104,6 +104,15 @@ class Exporter:
     end_time: datetime = None  # Optional end time for processing window
 
     def __post_init__(self):
+        # Load custom config if provided
+        if self.config_path:
+            from . import config as config_module
+            config_module.load_custom_config(self.config_path)
+            self.config = config_module.config
+        else:
+            from .config import config as global_config
+            self.config = global_config
+
         ## data fetching - skip if using test data
         if not self.test_data:
             self.aw = aw_client.ActivityWatchClient(client_name="timewarrior_export")
@@ -124,10 +133,12 @@ class Exporter:
             bucket_short = x[:x.find('_')]
             assert not bucket_short in self.bucket_short
             self.bucket_short[bucket_short] = self.buckets[x]
-        for bucketclient in ('aw-watcher-window', 'aw-watcher-afk'):
-            assert bucketclient in self.bucket_by_client
-            for b in self.bucket_by_client[bucketclient]:
-                check_bucket_updated(self.buckets[b])
+        # Only check bucket freshness when using real ActivityWatch data
+        if not self.test_data:
+            for bucketclient in ('aw-watcher-window', 'aw-watcher-afk'):
+                assert bucketclient in self.bucket_by_client
+                for b in self.bucket_by_client[bucketclient]:
+                    check_bucket_updated(self.buckets[b])
 
     def load_test_data(self, file_path):
         """Load test data from a JSON/YAML file."""
@@ -135,6 +146,53 @@ class Exporter:
         self.test_data = load_file(file_path)
         # Reinitialize with test data
         self.__post_init__()
+
+    def get_events(self, bucket_id, start=None, end=None):
+        """Get events from ActivityWatch or test data."""
+        if self.test_data:
+            # Return events from test data
+            events = self.test_data.get('events', {}).get(bucket_id, [])
+
+            # Convert dict events to Event objects supporting both dict and attribute access
+            class Event(dict):
+                def _convert_value(self, key, val):
+                    """Convert values for consistency between dict and attribute access."""
+                    # Convert timestamp strings to datetime
+                    if key == 'timestamp' and isinstance(val, str):
+                        return datetime.fromisoformat(val)
+                    # Convert duration to timedelta
+                    if key == 'duration' and isinstance(val, (int, float)):
+                        return timedelta(seconds=val)
+                    return val
+
+                def __getitem__(self, key):
+                    val = super().__getitem__(key)
+                    return self._convert_value(key, val)
+
+                def __getattr__(self, key):
+                    if key.startswith('_'):
+                        raise AttributeError(f"Event has no attribute '{key}'")
+                    if key in self:
+                        return self[key]  # Use __getitem__ for conversion
+                    raise AttributeError(f"Event has no attribute '{key}'")
+
+            event_objs = [Event(e) for e in events]
+
+            # Filter by time range if specified
+            if start or end:
+                filtered = []
+                for event in event_objs:
+                    event_time = event.timestamp
+                    event_end = event_time + event.duration
+                    if start and event_end < start:
+                        continue
+                    if end and event_time > end:
+                        continue
+                    filtered.append(event)
+                return filtered
+            return event_objs
+        else:
+            return self.aw.get_events(bucket_id, start=start, end=end)
 
     def set_known_tick_stats(self, event=None, start=None, end=None, manual=False, tags=None, reset_accumulator=False, retain_accumulator=True):
         if event and not start:
@@ -192,7 +250,10 @@ class Exporter:
             self.afk = True
 
         self.set_known_tick_stats(event=event, start=since)
-        self.set_timew_info(timew_retag(get_timew_info()))
+
+        # Only update timew_info if not in dry-run mode
+        if not self.dry_run:
+            self.set_timew_info(timew_retag(get_timew_info()))
 
         ## Special logic with 'override', 'manual' and 'unknown' should be documented or removed!
         if 'override' in self.timew_info['tags']:
@@ -201,10 +262,13 @@ class Exporter:
             return
         if set(tags).issubset(self.timew_info['tags']):
             return
-        tags = retag_by_rules(tags)
-        assert not exclusive_overlapping(tags)
+        tags = retag_by_rules(tags, self.config)
+        assert not exclusive_overlapping(tags, self.config)
         timew_run(['start'] + list(tags) + [since.astimezone().strftime('%FT%H:%M:%S')], dry_run=self.dry_run)
-        self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run))
+
+        # Only update timew_info after command if not in dry-run mode
+        if not self.dry_run:
+            self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run))
 
     def pretty_accumulator_string(self):
         a = self.tags_accumulated_time
@@ -239,8 +303,8 @@ class Exporter:
         if not editor_event:
             return []
 
-        for editor_rule_name in config.get('rules', {}).get('editor', {}):
-            rule = config['rules']['editor'][editor_rule_name]
+        for editor_rule_name in self.config.get('rules', {}).get('editor', {}):
+            rule = self.config['rules']['editor'][editor_rule_name]
             for project in rule.get('projects', []):
                 if(project == editor_event['data']['project']):
                     ret = set(rule['timew_tags'])
@@ -264,7 +328,7 @@ class Exporter:
 
     ## TODO - remove hard coded constants!
     def get_corresponding_event(self, window_event, event_type_id, ignorable=False, retry=6):
-        ret = self.aw.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=1), end=window_event['timestamp']+window_event['duration'])
+        ret = self.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=1), end=window_event['timestamp']+window_event['duration'])
 
         ## If nothing found ... try harder
         if not ret and not ignorable and retry:
@@ -277,7 +341,7 @@ class Exporter:
                 return self.get_corresponding_event(window_event, event_type_id, ignorable, retry)
         
         if not ret and not ignorable:
-            ret = self.aw.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=15), end=window_event['timestamp']+window_event['duration']+timedelta(seconds=15))
+            ret = self.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=15), end=window_event['timestamp']+window_event['duration']+timedelta(seconds=15))
         if not ret:
             if not ignorable and not window_event['duration']<timedelta(seconds=IGNORE_INTERVAL*4):
                 self.log(f"No corresponding {event_type_id} found.  Window title: {window_event['data']['title']}.  If you see this often, you should verify that the relevant watchers are active and running.", event=window_event)
@@ -302,8 +366,8 @@ class Exporter:
             ## TODO: deal with this.  There should be a browser event?  It's just the start/end that is misset?
             return []
 
-        for browser_rule_name in config.get('rules', {}).get('browser', {}):
-            rule = config['rules']['browser'][browser_rule_name]
+        for browser_rule_name in self.config.get('rules', {}).get('browser', {}):
+            rule = self.config['rules']['browser'][browser_rule_name]
             if 'url_regexp' in rule:
                 match = re.search(rule['url_regexp'], browser_event['data']['url'])
                 if match:
@@ -325,8 +389,8 @@ class Exporter:
         return []
 
     def get_app_tags(self, event):
-        for apprulename in config['rules']['app']:
-            rule = config['rules']['app'][apprulename]
+        for apprulename in self.config['rules']['app']:
+            rule = self.config['rules']['app'][apprulename]
             group = None
             if event['data'].get('app') in rule['app_names']:
                 title_regexp = rule.get('title_regexp')
@@ -499,7 +563,7 @@ class Exporter:
         ## just to make sure we won't lose any events
         #self.last_tick = self.last_tick - timedelta(1)
         
-        afk_events = self.aw.get_events(afk_id, start=self.last_tick)
+        afk_events = self.get_events(afk_id, start=self.last_tick)
         
         ### START WORKAROUND
         ## TODO
@@ -526,7 +590,7 @@ class Exporter:
         afk_events = [ x for x in afk_events if x['duration'] > timedelta(seconds=MAX_MIXED_INTERVAL) ]
 
         ## afk and window_events
-        afk_window_events = self.aw.get_events(window_id, start=self.last_tick) + afk_events
+        afk_window_events = self.get_events(window_id, start=self.last_tick) + afk_events
         afk_window_events.sort(key=lambda x: x['timestamp'])
         if len(afk_window_events)<2:
             return False
@@ -602,19 +666,21 @@ class Exporter:
 
             ## Track things in internal accumulator if the focus between windows changes often
             if tags:
-                tags = retag_by_rules(tags)
+                tags = retag_by_rules(tags, self.config)
                 for tag in tags:
                     self.tags_accumulated_time[tag] += event['duration']
-                    
+
             ## Check - if `timew start` was run manually since last "known tick", then reset everything
-            self.set_timew_info(timew_retag(get_timew_info()))
+            # Only update timew_info if not in dry-run mode
+            if not self.dry_run:
+                self.set_timew_info(timew_retag(get_timew_info()))
             if interval_since_last_known_tick.total_seconds() > MIN_RECORDING_INTERVAL_ADJ and any(x for x in self.tags_accumulated_time if x not in SPECIAL_TAGS and self.tags_accumulated_time[x].total_seconds()>MIN_RECORDING_INTERVAL_ADJ):
                 self.log("Emptying the accumulator!")
                 tags = set()
                 ## TODO: This looks like a bug - we reset tags, and then assert that they are not overlapping?
-                assert not exclusive_overlapping(tags)
+                assert not exclusive_overlapping(tags, self.config)
                 min_tag_recording_interval=MIN_TAG_RECORDING_INTERVAL
-                while exclusive_overlapping(set([tag for tag in self.tags_accumulated_time if  self.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval])):
+                while exclusive_overlapping(set([tag for tag in self.tags_accumulated_time if  self.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval]), self.config):
                     min_tag_recording_interval += 1
                 for tag in self.tags_accumulated_time:
                     if self.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval:
@@ -653,15 +719,46 @@ class Exporter:
                 self.set_known_tick_stats(start=timew_info['start_dt'], manual=True, tags=timew_info['tags'])
 
     def tick(self):
-        self.set_timew_info(timew_retag(get_timew_info()))
+        # In test mode or dry-run with start_time, skip getting real timew info
+        if self.test_data or (self.dry_run and self.start_time):
+            # Create mock timew_info for test/dry-run mode
+            if not self.timew_info:
+                mock_start = self.start_time or datetime.now(timezone.utc)
+                self.timew_info = {
+                    'start': mock_start.strftime('%Y%m%dT%H%M%SZ'),
+                    'start_dt': mock_start,
+                    'tags': set()
+                }
+        elif not self.timew_info:
+            # Normal mode or dry-run without start_time - get current timew tracking state
+            try:
+                self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run))
+            except Exception as e:
+                # No active tracking - create mock info
+                if self.dry_run:
+                    mock_start = self.start_time or datetime.now(timezone.utc)
+                    self.timew_info = {
+                        'start': mock_start.strftime('%Y%m%dT%H%M%SZ'),
+                        'start_dt': mock_start,
+                        'tags': set()
+                    }
+                else:
+                    raise
+
         if not self.last_tick:
             ## TODO: think more through this.  This is in practice program initialization
-            self.last_tick = self.timew_info['start_dt']
+            # Use start_time if provided, otherwise use timew start
+            if self.start_time:
+                self.last_tick = self.start_time
+            else:
+                self.last_tick = self.timew_info['start_dt']
             self.last_known_tick = self.last_tick
             self.last_start_time = self.last_tick
+
         if not self.find_next_activity():
             self.log("sleeping, because no events found")
-            sleep(SLEEP_INTERVAL)
+            if not self.dry_run:  # Don't sleep in dry-run mode
+                sleep(SLEEP_INTERVAL)
 
 def check_bucket_updated(bucket: dict):
     if not bucket['last_updated_dt'] or time()-bucket['last_updated_dt'].timestamp() > AW_WARN_THRESHOLD:
@@ -691,19 +788,23 @@ def timew_run(commands, dry_run=False):
     cprint(f"Use timew undo if you don't agree!  You have {GRACE_TIME} seconds to press ctrl^c", attrs=["bold"])
     sleep(GRACE_TIME)
 
-def exclusive_overlapping(tags):
-    for gid in config['exclusive']:
-        group = set(config['exclusive'][gid]['tags'])
+def exclusive_overlapping(tags, cfg=None):
+    if cfg is None:
+        cfg = config
+    for gid in cfg.get('exclusive', {}):
+        group = set(cfg['exclusive'][gid]['tags'])
         if len(group.intersection(tags)) > 1:
             return True
     return False
 
 ## not really retag, more like expand tags?  But it's my plan to allow replacement and not only addings
-def retag_by_rules(source_tags):
-    assert not exclusive_overlapping(source_tags)
+def retag_by_rules(source_tags, cfg=None):
+    if cfg is None:
+        cfg = config
+    assert not exclusive_overlapping(source_tags, cfg)
     new_tags = source_tags.copy()  ## TODO: bad variable naming.  `revised_tags` maybe?
-    for tag_section in config['tags']:
-        retags = config['tags'][tag_section]
+    for tag_section in cfg.get('tags', {}):
+        retags = cfg['tags'][tag_section]
         intersection = source_tags.intersection(set(retags['source_tags']))
         if intersection:
             new_tags_ = set()

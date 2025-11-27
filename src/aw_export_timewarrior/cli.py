@@ -182,14 +182,30 @@ def main(argv=None) -> int:
             print("Configuration is valid")
             return 0
 
+        # Import helper functions
+        from .export import parse_datetime, load_test_data
+
         # Parse start/end times if provided
         start_time = None
         end_time = None
         if args.start and args.end:
-            from .export import parse_datetime
             start_time = parse_datetime(args.start)
             end_time = parse_datetime(args.end)
             print(f"Processing time range: {start_time} to {end_time}")
+
+        # Load test data if specified (must be done before creating Exporter)
+        test_data = None
+        if args.test_data:
+            print(f"Loading test data from {args.test_data}")
+            test_data = load_test_data(args.test_data)
+
+            # Extract start/end times from test data metadata if not provided via CLI
+            if not start_time and 'metadata' in test_data and 'start_time' in test_data['metadata']:
+                start_time = parse_datetime(test_data['metadata']['start_time'])
+                print(f"Using start time from test data: {start_time}")
+            if not end_time and 'metadata' in test_data and 'end_time' in test_data['metadata']:
+                end_time = parse_datetime(test_data['metadata']['end_time'])
+                print(f"Using end time from test data: {end_time}")
 
         # Create exporter with options
         exporter = Exporter(
@@ -198,13 +214,9 @@ def main(argv=None) -> int:
             verbose=args.verbose,
             show_diff=args.diff,
             start_time=start_time,
-            end_time=end_time
+            end_time=end_time,
+            test_data=test_data
         )
-
-        # Load test data if specified
-        if args.test_data:
-            print(f"Loading test data from {args.test_data}")
-            exporter.load_test_data(args.test_data)
 
         # Run exporter
         if args.dry_run:
