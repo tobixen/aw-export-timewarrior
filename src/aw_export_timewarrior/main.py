@@ -102,6 +102,7 @@ class Exporter:
     test_data: dict = None  # Optional test data instead of querying AW
     start_time: datetime = None  # Optional start time for processing window
     end_time: datetime = None  # Optional end time for processing window
+    captured_commands: list = field(default_factory=list)  # Captures timew commands in dry-run mode for testing
 
     def __post_init__(self):
         # Load custom config if provided
@@ -146,6 +147,19 @@ class Exporter:
         self.test_data = load_file(file_path)
         # Reinitialize with test data
         self.__post_init__()
+
+    def get_captured_commands(self):
+        """
+        Get the list of captured timew commands.
+
+        Returns:
+            List of command lists, e.g. [['timew', 'start', 'tag1', 'tag2', '2025-01-01T10:00:00'], ...]
+        """
+        return self.captured_commands
+
+    def clear_captured_commands(self):
+        """Clear the captured commands list."""
+        self.captured_commands.clear()
 
     def get_events(self, bucket_id, start=None, end=None):
         """Get events from ActivityWatch or test data."""
@@ -253,7 +267,7 @@ class Exporter:
 
         # Only update timew_info if not in dry-run mode
         if not self.dry_run:
-            self.set_timew_info(timew_retag(get_timew_info()))
+            self.set_timew_info(timew_retag(get_timew_info(), capture_to=self.captured_commands))
 
         ## Special logic with 'override', 'manual' and 'unknown' should be documented or removed!
         if 'override' in self.timew_info['tags']:
@@ -264,11 +278,13 @@ class Exporter:
             return
         tags = retag_by_rules(tags, self.config)
         assert not exclusive_overlapping(tags, self.config)
-        timew_run(['start'] + list(tags) + [since.astimezone().strftime('%FT%H:%M:%S')], dry_run=self.dry_run)
+        timew_run(['start'] + list(tags) + [since.astimezone().strftime('%FT%H:%M:%S')],
+                  dry_run=self.dry_run,
+                  capture_to=self.captured_commands)
 
         # Only update timew_info after command if not in dry-run mode
         if not self.dry_run:
-            self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run))
+            self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run, capture_to=self.captured_commands))
 
     def pretty_accumulator_string(self):
         a = self.tags_accumulated_time
@@ -673,7 +689,7 @@ class Exporter:
             ## Check - if `timew start` was run manually since last "known tick", then reset everything
             # Only update timew_info if not in dry-run mode
             if not self.dry_run:
-                self.set_timew_info(timew_retag(get_timew_info()))
+                self.set_timew_info(timew_retag(get_timew_info(), capture_to=self.captured_commands))
             if interval_since_last_known_tick.total_seconds() > MIN_RECORDING_INTERVAL_ADJ and any(x for x in self.tags_accumulated_time if x not in SPECIAL_TAGS and self.tags_accumulated_time[x].total_seconds()>MIN_RECORDING_INTERVAL_ADJ):
                 self.log("Emptying the accumulator!")
                 tags = set()
@@ -732,7 +748,7 @@ class Exporter:
         elif not self.timew_info:
             # Normal mode or dry-run without start_time - get current timew tracking state
             try:
-                self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run))
+                self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run, capture_to=self.captured_commands))
             except Exception as e:
                 # No active tracking - create mock info
                 if self.dry_run:
@@ -774,12 +790,21 @@ def get_timew_info():
     current_timew['tags'] = set(current_timew['tags'])
     return current_timew
 
-def timew_run(commands, dry_run=False):
-    """Execute a timewarrior command, or show what would be done if dry_run=True."""
+def timew_run(commands, dry_run=False, capture_to=None):
+    """
+    Execute a timewarrior command, or show what would be done if dry_run=True.
+
+    Args:
+        commands: List of command arguments (without 'timew' prefix)
+        dry_run: If True, don't execute, just print what would be done
+        capture_to: Optional list to append commands to (for testing)
+    """
     commands = ['timew'] + commands
 
     if dry_run:
         cprint(f"DRY RUN: Would execute: {' '.join(commands)}", color="yellow", attrs=["bold"])
+        if capture_to is not None:
+            capture_to.append(commands)
         return
 
     print("Running:")
@@ -825,11 +850,11 @@ def retag_by_rules(source_tags, cfg=None):
         return retag_by_rules(new_tags)
     return new_tags
 
-def timew_retag(timew_info, dry_run=False):
+def timew_retag(timew_info, dry_run=False, capture_to=None):
     source_tags = set(timew_info['tags'])
     new_tags = retag_by_rules(source_tags)
     if new_tags != source_tags:
-        timew_run(["retag"] + list(new_tags), dry_run=dry_run)
+        timew_run(["retag"] + list(new_tags), dry_run=dry_run, capture_to=capture_to)
         if not dry_run:
             timew_info = get_timew_info()
             assert set(timew_info['tags']) == new_tags
