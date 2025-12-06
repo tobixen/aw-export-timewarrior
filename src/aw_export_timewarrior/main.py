@@ -278,7 +278,7 @@ class Exporter:
             return
         tags = retag_by_rules(tags, self.config)
         assert not exclusive_overlapping(tags, self.config)
-        timew_run(['start'] + list(tags) + [since.astimezone().strftime('%FT%H:%M:%S')],
+        timew_run(['start'] + list(tags) + ['~aw', since.astimezone().strftime('%FT%H:%M:%S')],
                   dry_run=self.dry_run,
                   capture_to=self.captured_commands)
 
