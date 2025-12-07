@@ -9,13 +9,161 @@ from collections import defaultdict
 from termcolor import cprint
 import re
 import os
+import sys
 
 ## We have lots of breakpoints in the code.  Remove this line while debugging/developing ...
 breakpoint = lambda: None
 
-## TODO: logging sucks a bit and should be rethought thoroughly
-
 from .config import config
+
+# Configure structured logging
+logger = logging.getLogger(__name__)
+
+class StructuredFormatter(logging.Formatter):
+    """
+    Formatter that outputs structured logs with all relevant context.
+    Can output in JSON format for analysis/export to OpenSearch.
+    """
+    def __init__(self, use_json: bool = False) -> None:
+        super().__init__()
+        self.use_json = use_json
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Build structured log data
+        log_data = {
+            'timestamp': datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            'level': record.levelname,
+            'message': record.getMessage(),
+            'module': record.module,
+            'function': record.funcName,
+            'line': record.lineno,
+        }
+
+        # Add custom fields if present
+        for key in ['event_ts', 'event_duration', 'last_tick', 'tags', 'event_data']:
+            if hasattr(record, key):
+                val = getattr(record, key)
+                # Convert datetime and timedelta to strings
+                if isinstance(val, datetime):
+                    log_data[key] = val.isoformat()
+                elif isinstance(val, timedelta):
+                    log_data[key] = f"{val.total_seconds():.1f}s"
+                elif isinstance(val, set):
+                    log_data[key] = list(val)
+                else:
+                    log_data[key] = str(val)
+
+        if self.use_json:
+            return json.dumps(log_data)
+        else:
+            # Human-readable format with colors
+            return self._format_human(log_data, record.levelno)
+
+    def _format_human(self, log_data: dict, level: int) -> str:
+        """Format log data in a human-readable way with optional colors."""
+        now = datetime.now().strftime('%H:%M:%S')
+        last_tick = log_data.get('last_tick', 'XX:XX:XX')
+        event_ts = log_data.get('event_ts', '')
+
+        # Build timestamp prefix
+        if event_ts:
+            ts_prefix = f"{now} / {last_tick} / {event_ts}"
+        else:
+            ts_prefix = f"{now} / {last_tick}"
+
+        # Add duration if present
+        if 'event_duration' in log_data:
+            ts_prefix += log_data['event_duration']
+
+        # Build message with context
+        msg = log_data['message']
+        if 'tags' in log_data:
+            msg = f"{msg} (tags: {log_data['tags']})"
+        if 'event_data' in log_data:
+            msg = f"{msg} (data: {log_data['event_data']})"
+
+        full_msg = f"{ts_prefix}: {msg}"
+
+        # No color formatting here - that's handled by the handler
+        return full_msg
+
+class ColoredConsoleHandler(logging.StreamHandler):
+    """
+    Console handler that adds colors based on log level.
+    Warnings are bold, errors/criticals are bold and red.
+    """
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            attrs = []
+            color = None
+
+            # Map log levels to visual attributes
+            if record.levelno >= logging.ERROR:
+                attrs = ['bold', 'blink']
+                color = 'red'
+            elif record.levelno >= logging.WARNING:
+                attrs = ['bold']
+                color = 'yellow'
+            elif record.levelno >= logging.INFO:
+                # User-facing output - keep it clean
+                color = 'white'
+            # DEBUG level gets no special formatting
+
+            if color or attrs:
+                cprint(msg, color=color, attrs=attrs, file=self.stream)
+            else:
+                self.stream.write(msg + self.terminator)
+            self.flush()
+        except Exception:
+            self.handleError(record)
+
+def setup_logging(json_format: bool = False, level: int = logging.INFO, log_file: str = None) -> None:
+    """
+    Set up the logging system.
+
+    Args:
+        json_format: If True, output logs in JSON format
+        level: Logging level (default: INFO)
+        log_file: Optional file path to write logs to
+    """
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    # Clear any existing handlers
+    root_logger.handlers.clear()
+
+    # Console handler with colors
+    console_handler = ColoredConsoleHandler(sys.stdout)
+    console_handler.setLevel(level)
+    console_handler.setFormatter(StructuredFormatter(use_json=json_format))
+    root_logger.addHandler(console_handler)
+
+    # File handler if requested
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.DEBUG)  # Always log everything to file
+        file_handler.setFormatter(StructuredFormatter(use_json=json_format))
+        root_logger.addHandler(file_handler)
+
+# Initialize logging with defaults
+# This can be reconfigured by calling setup_logging() with different parameters
+setup_logging()
+
+def user_output(msg: str, color: str = None, attrs: list = None) -> None:
+    """
+    Output message to the user (program output, not debug logging).
+    This is separate from logging and is for user-facing program output.
+
+    Args:
+        msg: Message to display to the user
+        color: Optional color (e.g., 'yellow', 'red', 'white')
+        attrs: Optional attributes (e.g., ['bold'], ['bold', 'blink'])
+    """
+    if color or attrs:
+        cprint(msg, color=color, attrs=attrs)
+    else:
+        print(msg)
 
 ## Those should be moved to config.py before releasing.  Possibly renamed.
 AW_WARN_THRESHOLD=float(os.environ.get('AW2TW_AW_WARN_THRESHOLD') or 300) ## the recent data from activity watch should not be elder than this
@@ -286,24 +434,44 @@ class Exporter:
         if not self.dry_run:
             self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run, capture_to=self.captured_commands))
 
-    def pretty_accumulator_string(self):
+    def pretty_accumulator_string(self) -> str:
         a = self.tags_accumulated_time
         tags = [x for x in a if a[x].total_seconds() > MIN_TAG_RECORDING_INTERVAL]
         tags.sort(key=lambda x: -a[x])
         return "\n".join([f"{x}: {a[x].total_seconds():5.1f}s" for x in tags])
-        
-    ## TODO: rethink logging and remove all logging done through "print" everywhere in the code
-    ## TODO: some logs are hard-coded to be bold through attrs.  We should rather use the standard loglevel approach.  For printing to the screen, warnings may be bold, errors and criticals blinking, etc
-    ## TODO: why not use the python logging library?
-    def log(self, msg, tags=None, event=None, ts=None, attrs=[]):
-        ## temp!
-        #print(self.pretty_accumulator_string())
+
+    def log(self, msg: str, tags=None, event=None, ts=None, level: int = logging.INFO) -> None:
+        """
+        Log a message with context about the current event and state.
+
+        Args:
+            msg: The log message
+            tags: Optional tags being processed
+            event: Optional event being processed
+            ts: Optional timestamp (defaults to event timestamp if not provided)
+            level: Logging level (default: INFO, use logging.WARNING for bold, logging.ERROR for critical)
+        """
         if event and not ts:
             ts = event['timestamp']
-        dur = ""
+
+        # Build extra context for structured logging
+        extra = {
+            'last_tick': ts2strtime(self.last_tick) if self.last_tick else 'XX:XX:XX',
+        }
+
+        if ts:
+            extra['event_ts'] = ts2strtime(ts)
+
         if event:
-            dur = f"+ {event['duration'].total_seconds():6.1f}s"
-        cprint(f"{ts2strtime(datetime.now())} / {ts2strtime(self.last_tick)} / {ts2strtime(ts)}{dur}: {msg}", attrs=attrs)
+            extra['event_duration'] = f"+ {event['duration'].total_seconds():6.1f}s"
+            if event.get('data'):
+                extra['event_data'] = event['data']
+
+        if tags:
+            extra['tags'] = tags
+
+        # Log with appropriate level
+        logger.log(level, msg, extra=extra)
 
     def get_editor_tags(self, window_event):
         ## TODO: can we consolidate common code? I basically copied get_browser_tags and s/browser/editor/ and a little bit editing
@@ -339,7 +507,7 @@ class Exporter:
                     tags.add('not-afk')
                     return tags
                 
-        self.log(f"Unhandled editor event.  File: {editor_event['data']['file']}", event=window_event, attrs=["bold"])
+        self.log(f"Unhandled editor event.  File: {editor_event['data']['file']}", event=window_event, level=logging.WARNING)
         return []
 
     ## TODO - remove hard coded constants!
@@ -401,7 +569,7 @@ class Exporter:
                 self.log(f"Weird browser rule {browser_rule_name}")
         if browser_event['data']['url'] in ('chrome://newtab/', 'about:newtab'):
             return []
-        self.log(f"Unhandled browser event.  URL: {browser_event['data']['url']}", event=window_event, attrs=["bold"])
+        self.log(f"Unhandled browser event.  URL: {browser_event['data']['url']}", event=window_event, level=logging.WARNING)
         return []
 
     def get_app_tags(self, event):
@@ -716,9 +884,9 @@ class Exporter:
                 pass
             
             elif event['data'].get('app', '').lower() in ('foot', 'xterm', ...): ## TODO: complete the list
-                self.log(f"Unknown terminal event {event['data']['title']}", event=event, attrs=["bold"])
+                self.log(f"Unknown terminal event {event['data']['title']}", event=event, level=logging.WARNING)
             else:
-                self.log(f"No rules found for event {event['data']}", event=event, attrs=["bold"])
+                self.log(f"No rules found for event {event['data']}", event=event, level=logging.WARNING)
         return cnt>1
 
     def set_timew_info(self, timew_info):
@@ -776,9 +944,9 @@ class Exporter:
             if not self.dry_run:  # Don't sleep in dry-run mode
                 sleep(SLEEP_INTERVAL)
 
-def check_bucket_updated(bucket: dict):
+def check_bucket_updated(bucket: dict) -> None:
     if not bucket['last_updated_dt'] or time()-bucket['last_updated_dt'].timestamp() > AW_WARN_THRESHOLD:
-        logging.warning(f"Bucket {bucket['id']} seems not to have recent data!")
+        logger.warning(f"Bucket {bucket['id']} seems not to have recent data!")
 
 ## TODO: none of this has anything to do with ActivityWatch and can be moved to a separate module
 def get_timew_info():
@@ -802,15 +970,14 @@ def timew_run(commands, dry_run=False, capture_to=None):
     commands = ['timew'] + commands
 
     if dry_run:
-        cprint(f"DRY RUN: Would execute: {' '.join(commands)}", color="yellow", attrs=["bold"])
+        user_output(f"DRY RUN: Would execute: {' '.join(commands)}", color="yellow", attrs=["bold"])
         if capture_to is not None:
             capture_to.append(commands)
         return
 
-    print("Running:")
-    print(f"   {" ".join(commands)}")
+    user_output(f"Running: {' '.join(commands)}")
     subprocess.run(commands)
-    cprint(f"Use timew undo if you don't agree!  You have {GRACE_TIME} seconds to press ctrl^c", attrs=["bold"])
+    user_output(f"Use timew undo if you don't agree!  You have {GRACE_TIME} seconds to press ctrl^c", attrs=["bold"])
     sleep(GRACE_TIME)
 
 def exclusive_overlapping(tags, cfg=None):
@@ -841,7 +1008,7 @@ def retag_by_rules(source_tags, cfg=None):
                     new_tags_.add(tag)    
             new_tags_ = new_tags.union(new_tags_)
             if exclusive_overlapping(new_tags_):
-                logging.warning(f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts")
+                logger.warning(f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts")
             else:
                 new_tags = new_tags_
     if new_tags != source_tags:
