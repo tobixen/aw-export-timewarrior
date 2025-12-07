@@ -24,9 +24,10 @@ class StructuredFormatter(logging.Formatter):
     Formatter that outputs structured logs with all relevant context.
     Can output in JSON format for analysis/export to OpenSearch.
     """
-    def __init__(self, use_json: bool = False) -> None:
+    def __init__(self, use_json: bool = False, run_mode: dict = None) -> None:
         super().__init__()
         self.use_json = use_json
+        self.run_mode = run_mode or {}
 
     def format(self, record: logging.LogRecord) -> str:
         # Build structured log data
@@ -38,6 +39,10 @@ class StructuredFormatter(logging.Formatter):
             'function': record.funcName,
             'line': record.lineno,
         }
+
+        # Add run mode information (for filtering in log analysis)
+        if self.run_mode:
+            log_data['run_mode'] = self.run_mode
 
         # Add custom fields if present
         for key in ['event_ts', 'event_duration', 'last_tick', 'tags', 'event_data']:
@@ -118,37 +123,39 @@ class ColoredConsoleHandler(logging.StreamHandler):
         except Exception:
             self.handleError(record)
 
-def setup_logging(json_format: bool = False, level: int = logging.INFO, log_file: str = None) -> None:
+def setup_logging(json_format: bool = False, log_level: int = logging.DEBUG, console_log_level: int = logging.ERROR, log_file: str = None, run_mode: dict = None) -> None:
     """
     Set up the logging system.
 
     Args:
         json_format: If True, output logs in JSON format
         level: Logging level (default: INFO)
-        log_file: Optional file path to write logs to
+        log_file: Optional file path to write logs to. If None, logs to console.
+        run_mode: Optional dict with run mode info (dry_run, export_data, test_data, etc.) for filtering logs
     """
     root_logger = logging.getLogger()
-    root_logger.setLevel(level)
+    root_logger.setLevel(log_level)
 
     # Clear any existing handlers
     root_logger.handlers.clear()
 
-    # Console handler with colors
-    console_handler = ColoredConsoleHandler(sys.stdout)
-    console_handler.setLevel(level)
-    console_handler.setFormatter(StructuredFormatter(use_json=json_format))
-    root_logger.addHandler(console_handler)
-
-    # File handler if requested
+    # If logging to file, use file handler; otherwise use console
     if log_file:
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG)  # Always log everything to file
-        file_handler.setFormatter(StructuredFormatter(use_json=json_format))
+        file_handler.setFormatter(StructuredFormatter(use_json=json_format, run_mode=run_mode))
         root_logger.addHandler(file_handler)
+    else:
+        # Console handler with colors
+        console_handler = ColoredConsoleHandler(sys.stdout)
+        console_handler.setLevel(console_log_level)
+        console_handler.setFormatter(StructuredFormatter(use_json=json_format, run_mode=run_mode))
+        root_logger.addHandler(console_handler)
 
 # Initialize logging with defaults
-# This can be reconfigured by calling setup_logging() with different parameters
-setup_logging()
+# This will be reconfigured by CLI with appropriate parameters
+# For direct imports/testing, use basic console logging
+setup_logging(log_file=None)  # Console logging by default until CLI configures it
 
 def user_output(msg: str, color: str = None, attrs: list = None) -> None:
     """

@@ -6,11 +6,12 @@ Provides options for dry-run mode, custom configs, and test data.
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 from typing import Optional
 
-from .main import Exporter
+from .main import Exporter, setup_logging
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -99,6 +100,31 @@ Examples:
         help='In dry-run mode, show differences from current timewarrior state'
     )
 
+    # Logging options
+    parser.add_argument(
+        '--log-level',
+        choices=['NONE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        default='DEBUG',
+        help='Set normal logging level (default: DEBUG)'
+    )
+    parser.add_argument(
+        '--console-log-level',
+        choices=['NONE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        default='ERROR',
+        help='Set console logging level (default: ERROR)'
+    )
+    parser.add_argument(
+        '--log-file',
+        metavar='FILE',
+        type=Path,
+        help='Log file path (default: ~/.local/share/aw-export-timewarrior/aw-export.json.log)'
+    )
+    parser.add_argument(
+        '--no-log-json',
+        action='store_true',
+        help='Do not output logs in JSON format'
+    )
+
     # Single-run mode
     parser.add_argument(
         '--once',
@@ -108,6 +134,72 @@ Examples:
 
     return parser
 
+
+def get_default_log_file(json) -> Path:
+    """
+    Get the default log file path.
+
+    Returns:
+        Path to the default log file in the user's data directory
+    """
+    # Use XDG_DATA_HOME or fallback to ~/.local/share
+    import os
+    data_home = os.environ.get('XDG_DATA_HOME')
+    if data_home:
+        data_dir = Path(data_home)
+    else:
+        data_dir = Path.home() / '.local' / 'share'
+
+    log_dir = data_dir / 'aw-export-timewarrior'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    json_postfix = '.json' if json else ''
+
+    return log_dir / f'aw-export{json_postfix}.log'
+
+
+def configure_logging(args: argparse.Namespace) -> None:
+    """
+    Configure logging based on command-line arguments.
+
+    Default behavior:
+    - Always log to file by default (unless --log-to-console is specified)
+    - Log file includes run_mode info for filtering (dry_run, export_data, test_data)
+
+    Args:
+        args: Parsed command-line arguments
+    """
+    # Determine log level
+    log_level = getattr(logging, args.log_level, 0)
+    console_log_level = getattr(logging, args.console_log_level, 0)
+
+    # If verbose mode, enable DEBUG logging
+    if args.verbose:
+        console_log_level = logging.DEBUG
+
+    # Determine log file
+    log_file = None
+    if args.log_file and log_level > 0:
+        log_file = args.log_file  # Explicit log file
+    elif log_level > 0:
+        log_file = get_default_log_file(not args.no_log_json)  # Default log file
+
+    # Build run mode info for structured logging (allows filtering logs)
+    run_mode = {
+        'dry_run': args.dry_run,
+        'export_data': bool(args.export_data),
+        'test_data': bool(args.test_data),
+        'once': args.once,
+    }
+
+    # Configure the logging system
+    setup_logging(
+        json_format=not args.no_log_json,
+        log_level=log_level,
+        console_log_level=console_log_level,
+        log_file=log_file,
+        run_mode=run_mode
+    )
 
 def validate_args(args: argparse.Namespace) -> Optional[str]:
     """
@@ -160,6 +252,9 @@ def main(argv=None) -> int:
     if error:
         print(error, file=sys.stderr)
         return 1
+
+    # Configure logging based on arguments
+    configure_logging(args)
 
     try:
         # Handle export mode
