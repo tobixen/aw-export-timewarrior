@@ -208,8 +208,8 @@ class TestBucketUpdated:
     """Tests for check_bucket_updated function."""
 
     @patch('aw_export_timewarrior.main.time')
-    @patch('aw_export_timewarrior.main.logging')
-    def test_recent_bucket_no_warning(self, mock_logging: Mock, mock_time: Mock) -> None:
+    @patch('aw_export_timewarrior.main.logger')
+    def test_recent_bucket_no_warning(self, mock_logger: Mock, mock_time: Mock) -> None:
         """Test that recent buckets don't trigger warnings."""
         mock_time.return_value = 1000.0
         bucket = {
@@ -217,12 +217,12 @@ class TestBucketUpdated:
             'last_updated_dt': datetime.fromtimestamp(950.0, tz=timezone.utc)
         }
         check_bucket_updated(bucket)
-        mock_logging.warning.assert_not_called()
+        mock_logger.warning.assert_not_called()
 
     @patch('aw_export_timewarrior.main.time')
-    @patch('aw_export_timewarrior.main.logging')
+    @patch('aw_export_timewarrior.main.logger')
     @patch('aw_export_timewarrior.main.AW_WARN_THRESHOLD', 300)
-    def test_stale_bucket_triggers_warning(self, mock_logging: Mock, mock_time: Mock) -> None:
+    def test_stale_bucket_triggers_warning(self, mock_logger: Mock, mock_time: Mock) -> None:
         """Test that stale buckets trigger warnings."""
         mock_time.return_value = 1000.0
         bucket = {
@@ -230,17 +230,17 @@ class TestBucketUpdated:
             'last_updated_dt': datetime.fromtimestamp(500.0, tz=timezone.utc)
         }
         check_bucket_updated(bucket)
-        mock_logging.warning.assert_called_once()
+        mock_logger.warning.assert_called_once()
 
-    @patch('aw_export_timewarrior.main.logging')
-    def test_null_last_updated_triggers_warning(self, mock_logging: Mock) -> None:
+    @patch('aw_export_timewarrior.main.logger')
+    def test_null_last_updated_triggers_warning(self, mock_logger: Mock) -> None:
         """Test that buckets with no last_updated trigger warnings."""
         bucket = {
             'id': 'test-bucket',
             'last_updated_dt': None
         }
         check_bucket_updated(bucket)
-        mock_logging.warning.assert_called_once()
+        mock_logger.warning.assert_called_once()
 
 
 class TestExporterInitialization:

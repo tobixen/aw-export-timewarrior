@@ -111,6 +111,8 @@ def test_commands_not_captured_in_normal_mode() -> None:
     data = (TestDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
+        .add_window_event("Code", "test.py - VS Code", duration=600)
+        .add_afk_event("not-afk", duration=600)
         .build())
 
     exporter = Exporter(

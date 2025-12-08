@@ -104,15 +104,18 @@ class ColoredConsoleHandler(logging.StreamHandler):
             color = None
 
             # Map log levels to visual attributes
-            if record.levelno >= logging.ERROR:
+            if record.levelno > logging.ERROR:
                 attrs = ['bold', 'blink']
                 color = 'red'
-            elif record.levelno >= logging.WARNING:
+            elif record.levelno > logging.WARNING:
                 attrs = ['bold']
-                color = 'yellow'
-            elif record.levelno >= logging.INFO:
+                color = 'red'
+            elif record.levelno > logging.INFO:
                 # User-facing output - keep it clean
-                color = 'white'
+                attrs = ['bold']
+                color = 'red'
+            elif record.levelno == logging.INFO:
+                color = 'yellow'
             # DEBUG level gets no special formatting
 
             if color or attrs:
@@ -140,16 +143,16 @@ def setup_logging(json_format: bool = False, log_level: int = logging.DEBUG, con
     root_logger.handlers.clear()
 
     # If logging to file, use file handler; otherwise use console
-    if log_file:
+    if log_file and log_level:
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG)  # Always log everything to file
         file_handler.setFormatter(StructuredFormatter(use_json=json_format, run_mode=run_mode))
         root_logger.addHandler(file_handler)
-    else:
+    if console_log_level:
         # Console handler with colors
         console_handler = ColoredConsoleHandler(sys.stdout)
         console_handler.setLevel(console_log_level)
-        console_handler.setFormatter(StructuredFormatter(use_json=json_format, run_mode=run_mode))
+        console_handler.setFormatter(StructuredFormatter(run_mode=run_mode))
         root_logger.addHandler(console_handler)
 
 # Initialize logging with defaults
@@ -271,7 +274,11 @@ class Exporter:
 
         ## data fetching - skip if using test data
         if not self.test_data:
-            self.aw = aw_client.ActivityWatchClient(client_name="timewarrior_export")
+            if self.dry_run:
+                client_name = "timewarrior_test_export"
+            else:
+                client_name = "timewarrior_export"
+            self.aw = aw_client.ActivityWatchClient(client_name=client_name)
             self.buckets = self.aw.get_buckets()
         else:
             # Using test data - create mock AW client
@@ -421,7 +428,7 @@ class Exporter:
         self.set_known_tick_stats(event=event, start=since)
 
         # Only update timew_info if not in dry-run mode
-        if not self.dry_run:
+        if not self.dry_run and not self.test_data:
             self.set_timew_info(timew_retag(get_timew_info(), capture_to=self.captured_commands))
 
         ## Special logic with 'override', 'manual' and 'unknown' should be documented or removed!
@@ -434,11 +441,11 @@ class Exporter:
         tags = retag_by_rules(tags, self.config)
         assert not exclusive_overlapping(tags, self.config)
         timew_run(['start'] + list(tags) + ['~aw', since.astimezone().strftime('%FT%H:%M:%S')],
-                  dry_run=self.dry_run,
-                  capture_to=self.captured_commands)
+                  dry_run=self.dry_run or bool(self.test_data),
+                  capture_to=self.captured_commands if self.dry_run else None)
 
         # Only update timew_info after command if not in dry-run mode
-        if not self.dry_run:
+        if not self.dry_run and not self.test_data:
             self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run, capture_to=self.captured_commands))
 
     def pretty_accumulator_string(self) -> str:
@@ -447,7 +454,7 @@ class Exporter:
         tags.sort(key=lambda x: -a[x])
         return "\n".join([f"{x}: {a[x].total_seconds():5.1f}s" for x in tags])
 
-    def log(self, msg: str, tags=None, event=None, ts=None, level: int = logging.INFO) -> None:
+    def log(self, msg: str, tags=None, event=None, ts=None, level: int = logging.INFO, extra=None) -> None:
         """
         Log a message with context about the current event and state.
 
@@ -458,18 +465,20 @@ class Exporter:
             ts: Optional timestamp (defaults to event timestamp if not provided)
             level: Logging level (default: INFO, use logging.WARNING for bold, logging.ERROR for critical)
         """
-        if event and not ts:
-            ts = event['timestamp']
+        if not extra:
+            extra = {}
 
         # Build extra context for structured logging
-        extra = {
+        extra.update({
             'last_tick': ts2strtime(self.last_tick) if self.last_tick else 'XX:XX:XX',
-        }
+        })
 
         if ts:
-            extra['event_ts'] = ts2strtime(ts)
+            extra['ts'] = ts2strtime(ts)
 
         if event:
+            extra['event_start'] = event['timestamp']
+            extra['event_stop'] = event['timestamp'] + event['duration']
             extra['event_duration'] = f"+ {event['duration'].total_seconds():6.1f}s"
             if event.get('data'):
                 extra['event_data'] = event['data']
@@ -481,28 +490,32 @@ class Exporter:
         logger.log(level, msg, extra=extra)
 
     def get_editor_tags(self, window_event):
-        ## TODO: can we consolidate common code? I basically copied get_browser_tags and s/browser/editor/ and a little bit editing
-        if window_event['data'].get('app', '').lower() not in ('emacs', 'vi', 'vim', ...): ## TODO - complete the list
-            return False
-        editor = window_event['data']['app'].lower()
-        editor_id = self.bucket_short[f"aw-watcher-{editor}"]['id']
-        ## emacs cruft
-        ignorable = re.match(r'^( )?\*.*\*', window_event['data']['title'])
-        editor_event = self.get_corresponding_event(
-            window_event, editor_id, ignorable=ignorable)
+        return self.get_subevent_tags(window_event, subtype='editor', apps=('emacs', 'vi', 'vim'))
         
-        if not editor_event:
+    def get_subevent_tags(self, window_event, subtype, apps):
+        if window_event['data'].get('app', '').lower() not in apps:
+            return False
+        app = window_event['data']['app'].lower()
+        bucket_id = self.bucket_short[f"aw-watcher-{app}"]['id']
+        
+        ignorable = False
+        if app == 'emacs': ## emacs cruft
+            ignorable = re.match(r'^( )?\*.*\*', window_event['data']['title'])
+        sub_event = self.get_corresponding_event(
+            window_event, bucket_id, ignorable=ignorable)
+        
+        if not sub_event:
             return []
 
-        for editor_rule_name in self.config.get('rules', {}).get('editor', {}):
-            rule = self.config['rules']['editor'][editor_rule_name]
+        for rule_name in self.config.get('rules', {}).get(subtype, {}):
+            rule = self.config['rules'][subtype][rule_name]
             for project in rule.get('projects', []):
-                if(project == editor_event['data']['project']):
+                if(project == sub_event['data']['project']):
                     ret = set(rule['timew_tags'])
                     ret.add('not-afk')
                     return ret
             if 'path_regexp' in rule:
-                match = re.search(rule['path_regexp'], editor_event['data']['file'])
+                match = re.search(rule['path_regexp'], sub_event['data']['file'])
                 if match:
                     tags = set(rule['timew_tags'])
                     for tag in list(tags):
@@ -514,7 +527,7 @@ class Exporter:
                     tags.add('not-afk')
                     return tags
                 
-        self.log(f"Unhandled editor event.  File: {editor_event['data']['file']}", event=window_event, level=logging.WARNING)
+        self.log(f"Unhandled {subtype} event", event=window_event, extra={'sub_event': sub_event, 'event_type': subtype, 'log_event': 'unhandled'}, level=logging.WARNING)
         return []
 
     ## TODO - remove hard coded constants!
@@ -863,7 +876,7 @@ class Exporter:
 
             ## Check - if `timew start` was run manually since last "known tick", then reset everything
             # Only update timew_info if not in dry-run mode
-            if not self.dry_run:
+            if not self.dry_run and not self.test_data:
                 self.set_timew_info(timew_retag(get_timew_info(), capture_to=self.captured_commands))
             if interval_since_last_known_tick.total_seconds() > MIN_RECORDING_INTERVAL_ADJ and any(x for x in self.tags_accumulated_time if x not in SPECIAL_TAGS and self.tags_accumulated_time[x].total_seconds()>MIN_RECORDING_INTERVAL_ADJ):
                 self.log("Emptying the accumulator!")

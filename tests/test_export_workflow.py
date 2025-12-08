@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, Mock, patch, call
 import subprocess
+import logging
 
 import pytest
 
@@ -368,8 +369,8 @@ class TestExporterTick:
 class TestExporterLog:
     """Tests for logging method."""
 
-    @patch('aw_export_timewarrior.main.cprint')
-    def test_log_with_event(self, mock_cprint: Mock, mock_aw_client: Mock) -> None:
+    @patch('aw_export_timewarrior.main.logger')
+    def test_log_with_event(self, mock_logger: Mock, mock_aw_client: Mock) -> None:
         """Test logging with an event."""
         exporter = Exporter()
         exporter.last_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
@@ -381,20 +382,25 @@ class TestExporterLog:
 
         exporter.log("Test message", event=event)
 
-        mock_cprint.assert_called_once()
-        log_message = mock_cprint.call_args[0][0]
-        assert "Test message" in log_message
-        assert "300" in log_message or "300.0" in log_message  # Duration in seconds
+        mock_logger.log.assert_called_once()
+        # Check the message and extra data
+        call_args = mock_logger.log.call_args
+        assert call_args[0][1] == "Test message"  # Second arg is the message
+        extra = call_args[1]['extra']
+        assert 'event_duration' in extra
+        assert '300' in extra['event_duration'] or '300.0' in extra['event_duration']
 
-    @patch('aw_export_timewarrior.main.cprint')
-    def test_log_with_attrs(self, mock_cprint: Mock, mock_aw_client: Mock) -> None:
-        """Test logging with text attributes."""
+    @patch('aw_export_timewarrior.main.logger')
+    def test_log_with_level(self, mock_logger: Mock, mock_aw_client: Mock) -> None:
+        """Test logging with different log levels."""
         exporter = Exporter()
 
-        exporter.log("Important message", attrs=["bold"])
+        exporter.log("Important message", level=logging.WARNING)
 
-        mock_cprint.assert_called_once()
-        assert mock_cprint.call_args[1]['attrs'] == ["bold"]
+        mock_logger.log.assert_called_once()
+        call_args = mock_logger.log.call_args
+        assert call_args[0][0] == logging.WARNING  # First arg is the level
+        assert call_args[0][1] == "Important message"  # Second arg is the message
 
 
 if __name__ == '__main__':

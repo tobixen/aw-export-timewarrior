@@ -76,21 +76,21 @@ def mock_aw_client():
 class TestBrowserTagExtraction:
     """Tests for get_browser_tags method."""
 
-    @patch('aw_export_timewarrior.main.config', {
-        'rules': {
-            'browser': {
-                'github': {
-                    'url_regexp': r'github\.com/([^/]+)/([^/]+)',
-                    'timew_tags': ['4work', 'github', '$1']
-                }
-            }
-        },
-        'exclusive': {},
-        'tags': {}
-    })
     def test_browser_github_url_matches(self, mock_aw_client: Mock) -> None:
         """Test browser event matching GitHub URL."""
         exporter = Exporter()
+        exporter.config = {
+            'rules': {
+                'browser': {
+                    'github': {
+                        'url_regexp': r'github\.com/([^/]+)/([^/]+)',
+                        'timew_tags': ['4work', 'github', '$1']
+                    }
+                }
+            },
+            'exclusive': {},
+            'tags': {}
+        }
 
         # Mock browser event
         browser_event = create_aw_event(
@@ -121,14 +121,14 @@ class TestBrowserTagExtraction:
         assert 'python-caldav' in tags  # $1 from regex
         assert 'not-afk' in tags
 
-    @patch('aw_export_timewarrior.main.config', {
-        'rules': {'browser': {}},
-        'exclusive': {},
-        'tags': {}
-    })
     def test_browser_new_tab_returns_empty(self, mock_aw_client: Mock) -> None:
         """Test that new tab pages return empty tag list."""
         exporter = Exporter()
+        exporter.config = {
+            'rules': {'browser': {}},
+            'exclusive': {},
+            'tags': {}
+        }
 
         browser_event = create_aw_event(
             timestamp=datetime.now(timezone.utc),
@@ -210,21 +210,21 @@ class TestBrowserTagExtraction:
 class TestEditorTagExtraction:
     """Tests for get_editor_tags method."""
 
-    @patch('aw_export_timewarrior.main.config', {
-        'rules': {
-            'editor': {
-                'caldav_project': {
-                    'projects': ['caldav'],
-                    'timew_tags': ['4work', 'caldav', 'python']
-                }
-            }
-        },
-        'exclusive': {},
-        'tags': {}
-    })
     def test_editor_project_match(self, mock_aw_client: Mock) -> None:
         """Test editor event matching by project name."""
         exporter = Exporter()
+        exporter.config = {
+            'rules': {
+                'editor': {
+                    'caldav_project': {
+                        'projects': ['caldav'],
+                        'timew_tags': ['4work', 'caldav', 'python']
+                    }
+                }
+            },
+            'exclusive': {},
+            'tags': {}
+        }
 
         editor_event = create_aw_event(
             timestamp=datetime.now(timezone.utc),
@@ -254,21 +254,21 @@ class TestEditorTagExtraction:
         assert 'python' in tags
         assert 'not-afk' in tags
 
-    @patch('aw_export_timewarrior.main.config', {
-        'rules': {
-            'editor': {
-                'config_files': {
-                    'path_regexp': r'\.config/([^/]+)/',
-                    'timew_tags': ['4me', 'config', '$1']
-                }
-            }
-        },
-        'exclusive': {},
-        'tags': {}
-    })
     def test_editor_path_regexp_match(self, mock_aw_client: Mock) -> None:
         """Test editor event matching by file path regexp."""
         exporter = Exporter()
+        exporter.config = {
+            'rules': {
+                'editor': {
+                    'config_files': {
+                        'path_regexp': r'\.config/([^/]+)/',
+                        'timew_tags': ['4me', 'config', '$1']
+                    }
+                }
+            },
+            'exclusive': {},
+            'tags': {}
+        }
 
         editor_event = create_aw_event(
             timestamp=datetime.now(timezone.utc),
@@ -319,21 +319,21 @@ class TestEditorTagExtraction:
 class TestAppTagExtraction:
     """Tests for get_app_tags method."""
 
-    @patch('aw_export_timewarrior.main.config', {
-        'rules': {
-            'app': {
-                'communication': {
-                    'app_names': ['Signal', 'DeltaChat', 'Slack'],
-                    'timew_tags': ['4me', 'communication', '$app']
-                }
-            }
-        },
-        'exclusive': {},
-        'tags': {}
-    })
     def test_app_simple_match(self, mock_aw_client: Mock) -> None:
         """Test app event with simple app name match."""
         exporter = Exporter()
+        exporter.config = {
+            'rules': {
+                'app': {
+                    'communication': {
+                        'app_names': ['Signal', 'DeltaChat', 'Slack'],
+                        'timew_tags': ['4me', 'communication', '$app']
+                    }
+                }
+            },
+            'exclusive': {},
+            'tags': {}
+        }
 
         event = {
             'timestamp': datetime.now(timezone.utc),
@@ -351,22 +351,22 @@ class TestAppTagExtraction:
         assert 'Signal' in tags  # $app substitution
         assert 'not-afk' in tags
 
-    @patch('aw_export_timewarrior.main.config', {
-        'rules': {
-            'app': {
-                'terminal': {
-                    'app_names': ['Terminal', 'foot', 'xterm'],
-                    'title_regexp': r'ssh\s+(\S+)',
-                    'timew_tags': ['4work', 'ssh', '$1']
-                }
-            }
-        },
-        'exclusive': {},
-        'tags': {}
-    })
     def test_app_with_title_regexp(self, mock_aw_client: Mock) -> None:
         """Test app event with title regexp matching."""
         exporter = Exporter()
+        exporter.config = {
+            'rules': {
+                'app': {
+                    'terminal': {
+                        'app_names': ['Terminal', 'foot', 'xterm'],
+                        'title_regexp': r'ssh\s+(\S+)',
+                        'timew_tags': ['4work', 'ssh', '$1']
+                    }
+                }
+            },
+            'exclusive': {},
+            'tags': {}
+        }
 
         event = {
             'timestamp': datetime.now(timezone.utc),
