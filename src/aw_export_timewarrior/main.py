@@ -490,23 +490,54 @@ class Exporter:
         logger.log(level, msg, extra=extra)
 
     def get_editor_tags(self, window_event):
-        return self.get_subevent_tags(window_event, subtype='editor', apps=('emacs', 'vi', 'vim'))
+        return self.get_subevent_tags(window_event, subtype='editor', apps=('emacs', 'vi', 'vim'), regexp_rules=[('path_regexp', 'file')])
+
+    def get_browser_tags(self, window_event):
+        return self.get_subevent_tags(window_event, 'browser', ('chromium', 'chrome', 'firefox'), regexp_rules=[('url_regexp', 'url')])
+
+    def regexp_matching(self, rule, sub_event, rule_name, key):
+        if rule_name in rule:
+            match = re.search(rule[rule_name], sub_event['data'][key])
+            if match:
+                tags = set(rule['timew_tags'])
+                for tag in list(tags):
+                    if '$' in tag:
+                        tags.remove(tag)
+                        groups = match.groups()
+                        for i in range(0, len(groups)):
+                            tag = tag.replace(f"${i+1}", groups[i])
+                        tags.add(tag)
+                tags.add('not-afk')
+                return tags
         
-    def get_subevent_tags(self, window_event, subtype, apps):
+    def get_subevent_tags(self, window_event, subtype, apps, regexp_rules):
         if window_event['data'].get('app', '').lower() not in apps:
             return False
         app = window_event['data']['app'].lower()
-        bucket_id = self.bucket_short[f"aw-watcher-{app}"]['id']
+        
+        if subtype == 'browser':
+            if app == 'chromium':
+                app_ = 'chrome'
+            else:
+                app_ = app
+            bucket_id = self.bucket_short[f"aw-watcher-web-{app_}"]['id']
+        else:
+            bucket_id = self.bucket_short[f"aw-watcher-{app}"]['id']
         
         ignorable = False
         if app == 'emacs': ## emacs cruft
             ignorable = re.match(r'^( )?\*.*\*', window_event['data']['title'])
+
         sub_event = self.get_corresponding_event(
             window_event, bucket_id, ignorable=ignorable)
-        
+
         if not sub_event:
             return []
 
+        if app in ('chromium', 'chrome') and sub_event['data']['url'] in ('chrome://newtab/', 'about:newtab'):
+            return []
+
+        ## This only applies to editors?
         for rule_name in self.config.get('rules', {}).get(subtype, {}):
             rule = self.config['rules'][subtype][rule_name]
             for project in rule.get('projects', []):
@@ -514,18 +545,10 @@ class Exporter:
                     ret = set(rule['timew_tags'])
                     ret.add('not-afk')
                     return ret
-            if 'path_regexp' in rule:
-                match = re.search(rule['path_regexp'], sub_event['data']['file'])
-                if match:
-                    tags = set(rule['timew_tags'])
-                    for tag in list(tags):
-                        if '$1' in tag:
-                            ## todo: support for $2, etc
-                            tags.remove(tag)
-                            if len(match.groups())>0:
-                                tags.add(tag.replace('$1', match.group(1)))
-                    tags.add('not-afk')
-                    return tags
+        for (rule_name, key) in regexp_rules:
+            tags = self.regexp_matching(rule, sub_event, rule_name, key)
+            if tags:
+                return tags
                 
         self.log(f"Unhandled {subtype} event", event=window_event, extra={'sub_event': sub_event, 'event_type': subtype, 'log_event': 'unhandled'}, level=logging.WARNING)
         return []
@@ -557,40 +580,6 @@ class Exporter:
             ## TODO this is maybe too simplistic
             ret.sort(key=lambda x: -x['duration'])
         return ret[0]
-
-    def get_browser_tags(self, window_event):
-        if not window_event['data'].get('app', '').lower() in ('chromium', 'firefox', 'chrome', ...): ## TODO - complete the list
-            return False
-
-        browser = window_event['data']['app'].lower().replace('chromium', 'chrome')
-        browser_id = self.bucket_short[f"aw-watcher-web-{browser}"]['id']
-        browser_event = self.get_corresponding_event(window_event, browser_id)
-
-        if not browser_event:
-            ## TODO: deal with this.  There should be a browser event?  It's just the start/end that is misset?
-            return []
-
-        for browser_rule_name in self.config.get('rules', {}).get('browser', {}):
-            rule = self.config['rules']['browser'][browser_rule_name]
-            if 'url_regexp' in rule:
-                match = re.search(rule['url_regexp'], browser_event['data']['url'])
-                if match:
-                    tags = set(rule['timew_tags'])
-                    for tag in list(tags):
-                        if '$' in tag:
-                            tags.remove(tag)
-                            groups = match.groups()
-                            for i in range(0, len(groups)):
-                                tag = tag.replace(f"${i+1}", groups[i])
-                            tags.add(tag)
-                    tags.add('not-afk')
-                    return tags
-            else:
-                self.log(f"Weird browser rule {browser_rule_name}")
-        if browser_event['data']['url'] in ('chrome://newtab/', 'about:newtab'):
-            return []
-        self.log(f"Unhandled browser event.  URL: {browser_event['data']['url']}", event=window_event, level=logging.WARNING)
-        return []
 
     def get_app_tags(self, event):
         for apprulename in self.config['rules']['app']:
