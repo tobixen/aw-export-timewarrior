@@ -330,10 +330,13 @@ def main(argv=None) -> int:
                 exporter.run_comparison()
         else:
             if start_time and end_time:
-                print("Note: Time range specified but running continuously - only initial events will be in range")
-            print("Starting continuous monitoring (Ctrl+C to stop)...")
-            while True:
-                exporter.tick()
+                print(f"Processing time range: {start_time} to {end_time}")
+            else:
+                print("Starting continuous monitoring (Ctrl+C to stop)...")
+            while exporter.tick():
+                pass  # tick() returns False when we should stop
+            if start_time and end_time:
+                print(f"\nReached end of time range at {end_time}")
 
     except KeyboardInterrupt:
         print("\nExiting...")
