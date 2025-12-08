@@ -490,67 +490,189 @@ class Exporter:
         logger.log(level, msg, extra=extra)
 
     def get_editor_tags(self, window_event):
-        return self.get_subevent_tags(window_event, subtype='editor', apps=('emacs', 'vi', 'vim'), regexp_rules=[('path_regexp', 'file')])
+        """Get tags for editor events."""
+        return self._get_subevent_tags(
+            window_event=window_event,
+            subtype='editor',
+            apps=('emacs', 'vi', 'vim'),
+            bucket_pattern='aw-watcher-{app}',
+            matchers=[
+                ('projects', self._match_project),
+                ('path_regexp', self._match_path_regexp),
+            ]
+        )
 
     def get_browser_tags(self, window_event):
-        return self.get_subevent_tags(window_event, 'browser', ('chromium', 'chrome', 'firefox'), regexp_rules=[('url_regexp', 'url')])
+        """Get tags for browser events."""
+        return self._get_subevent_tags(
+            window_event=window_event,
+            subtype='browser',
+            apps=('chromium', 'chrome', 'firefox'),
+            bucket_pattern='aw-watcher-web-{app}',
+            app_normalizer=lambda app: 'chrome' if app == 'chromium' else app,
+            matchers=[
+                ('url_regexp', self._match_url_regexp),
+            ],
+            skip_if=lambda sub_event: sub_event['data'].get('url') in ('chrome://newtab/', 'about:newtab')
+        )
 
-    def regexp_matching(self, rule, sub_event, rule_name, key):
-        if rule_name in rule:
-            match = re.search(rule[rule_name], sub_event['data'][key])
-            if match:
-                tags = set(rule['timew_tags'])
-                for tag in list(tags):
-                    if '$' in tag:
-                        tags.remove(tag)
-                        groups = match.groups()
-                        for i in range(0, len(groups)):
-                            tag = tag.replace(f"${i+1}", groups[i])
-                        tags.add(tag)
-                tags.add('not-afk')
-                return tags
-        
-    def get_subevent_tags(self, window_event, subtype, apps, regexp_rules):
+    def _is_ignorable_event(self, app: str, window_event: dict) -> bool:
+        """Check if an event should be ignored (e.g., emacs internal buffers)."""
+        if app == 'emacs':
+            return bool(re.match(r'^( )?\*.*\*', window_event['data']['title']))
+        return False
+
+    def _match_project(self, rule: dict, sub_event: dict, rule_key: str):
+        """Match editor events by project name."""
+        for project in rule.get('projects', []):
+            if project == sub_event['data'].get('project'):
+                return self._build_tags(rule['timew_tags'])
+        return None
+
+    def _match_path_regexp(self, rule: dict, sub_event: dict, rule_key: str):
+        """Match editor events by file path regexp."""
+        return self._match_regexp(
+            rule=rule,
+            text=sub_event['data'].get('file', ''),
+            rule_key=rule_key
+        )
+
+    def _match_url_regexp(self, rule: dict, sub_event: dict, rule_key: str):
+        """Match browser events by URL regexp."""
+        return self._match_regexp(
+            rule=rule,
+            text=sub_event['data'].get('url', ''),
+            rule_key=rule_key
+        )
+
+    def _match_regexp(self, rule: dict, text: str, rule_key: str):
+        """
+        Generic regexp matcher with group substitution.
+
+        Args:
+            rule: The rule dict containing the regexp and timew_tags
+            text: The text to match against
+            rule_key: The key in the rule containing the regexp pattern
+
+        Returns:
+            Set of tags with substitutions applied, or None if no match
+        """
+        if rule_key not in rule:
+            return None
+
+        match = re.search(rule[rule_key], text)
+        if not match:
+            return None
+
+        # Build substitutions from match groups
+        substitutions = {}
+        for i, group in enumerate(match.groups(), start=1):
+            substitutions[f'${i}'] = group
+
+        return self._build_tags(rule['timew_tags'], substitutions)
+
+    def _build_tags(self, tag_templates: list, substitutions: dict = None):
+        """
+        Build a set of tags from templates with variable substitution.
+
+        Args:
+            tag_templates: List of tag templates (e.g., ['4work', 'github', '$1'])
+            substitutions: Dict of {variable: value} for substitution (e.g., {'$1': 'python-caldav'})
+
+        Returns:
+            Set of tags with 'not-afk' added
+        """
+        substitutions = substitutions or {}
+        tags = set()
+
+        for tag in tag_templates:
+            # Skip tags with variables that have no value
+            if '$' in tag:
+                # Try to substitute all variables
+                new_tag = tag
+                has_missing_var = False
+
+                for var, value in substitutions.items():
+                    if var in tag:
+                        if value is None:
+                            has_missing_var = True
+                            break
+                        new_tag = new_tag.replace(var, value)
+
+                # Skip if we couldn't substitute all variables
+                if has_missing_var or '$' in new_tag:
+                    continue
+
+                tags.add(new_tag)
+            else:
+                tags.add(tag)
+
+        tags.add('not-afk')
+        return tags
+
+    def _get_subevent_tags(self, window_event: dict, subtype: str, apps: tuple,
+                          bucket_pattern: str, app_normalizer=None, matchers=None, skip_if=None):
+        """
+        Generic method to extract tags from events that require sub-events.
+
+        Args:
+            window_event: The main window event
+            subtype: Type of rule ('browser', 'editor')
+            apps: Tuple of app names to match
+            bucket_pattern: Pattern for bucket ID (e.g., 'aw-watcher-{app}')
+            app_normalizer: Optional function to normalize app name (e.g., chromium -> chrome)
+            matchers: List of (rule_key, matcher_function) tuples to try in order
+            skip_if: Optional function that returns True if we should skip this sub_event
+
+        Returns:
+            Set of tags, empty list if no match, or False if wrong app type
+        """
+        # Check if this is the right app type
         if window_event['data'].get('app', '').lower() not in apps:
             return False
-        app = window_event['data']['app'].lower()
-        
-        if subtype == 'browser':
-            if app == 'chromium':
-                app_ = 'chrome'
-            else:
-                app_ = app
-            bucket_id = self.bucket_short[f"aw-watcher-web-{app_}"]['id']
-        else:
-            bucket_id = self.bucket_short[f"aw-watcher-{app}"]['id']
-        
-        ignorable = False
-        if app == 'emacs': ## emacs cruft
-            ignorable = re.match(r'^( )?\*.*\*', window_event['data']['title'])
 
-        sub_event = self.get_corresponding_event(
-            window_event, bucket_id, ignorable=ignorable)
+        app = window_event['data']['app'].lower()
+
+        # Normalize app name if needed
+        app_normalized = app_normalizer(app) if app_normalizer else app
+
+        # Get the bucket ID
+        bucket_id = self.bucket_short[bucket_pattern.format(app=app_normalized)]['id']
+
+        # Determine if we should ignore certain events (e.g., emacs buffers)
+        ignorable = self._is_ignorable_event(app, window_event)
+
+        # Get the corresponding sub-event
+        sub_event = self.get_corresponding_event(window_event, bucket_id, ignorable=ignorable)
 
         if not sub_event:
             return []
 
-        if app in ('chromium', 'chrome') and sub_event['data']['url'] in ('chrome://newtab/', 'about:newtab'):
+        # Check if we should skip this sub-event
+        if skip_if and skip_if(sub_event):
             return []
 
-        ## This only applies to editors?
-        for rule_name in self.config.get('rules', {}).get(subtype, {}):
-            rule = self.config['rules'][subtype][rule_name]
-            for project in rule.get('projects', []):
-                if(project == sub_event['data']['project']):
-                    ret = set(rule['timew_tags'])
-                    ret.add('not-afk')
-                    return ret
-        for (rule_name, key) in regexp_rules:
-            tags = self.regexp_matching(rule, sub_event, rule_name, key)
-            if tags:
-                return tags
-                
-        self.log(f"Unhandled {subtype} event", event=window_event, extra={'sub_event': sub_event, 'event_type': subtype, 'log_event': 'unhandled'}, level=logging.WARNING)
+        # Try each matcher in order
+        for rule_key, matcher_func in (matchers or []):
+            for rule_name in self.config.get('rules', {}).get(subtype, {}):
+                rule = self.config['rules'][subtype][rule_name]
+
+                # Skip rules that don't have this key
+                if rule_key not in rule:
+                    continue
+
+                # Try to match
+                tags = matcher_func(rule, sub_event, rule_key)
+                if tags:
+                    return tags
+
+        # No rules matched
+        self.log(
+            f"Unhandled {subtype} event",
+            event=window_event,
+            extra={'sub_event': sub_event, 'event_type': subtype, 'log_event': 'unhandled'},
+            level=logging.WARNING
+        )
         return []
 
     ## TODO - remove hard coded constants!
@@ -582,30 +704,37 @@ class Exporter:
         return ret[0]
 
     def get_app_tags(self, event):
-        for apprulename in self.config['rules']['app']:
-            rule = self.config['rules']['app'][apprulename]
-            group = None
-            if event['data'].get('app') in rule['app_names']:
-                title_regexp = rule.get('title_regexp')
-                if title_regexp:
-                    match = re.search(title_regexp, event['data'].get('title'))
-                    if match:
-                        try:
-                            group = match.group(1)
-                        except:
-                            group = None
-                    else:
-                        continue
-                tags = set()
-                for tag in rule['timew_tags']:
-                    if tag == '$app':
-                        tags.add(event['data']['app'])
-                    elif '$1' in tag and group:
-                        tags.add(tag.replace('$1', group))
-                    elif not '$' in tag:
-                        tags.add(tag)
-                tags.add('not-afk')
-                return tags
+        """
+        Get tags for app events (doesn't need sub-events).
+
+        Args:
+            event: The window event
+
+        Returns:
+            Set of tags, or False if no rules matched
+        """
+        for rule_name in self.config.get('rules', {}).get('app', {}):
+            rule = self.config['rules']['app'][rule_name]
+
+            # Check if app matches
+            if event['data'].get('app') not in rule.get('app_names', []):
+                continue
+
+            # Try to match title regexp if present
+            title_match = None
+            if 'title_regexp' in rule:
+                title_match = re.search(rule['title_regexp'], event['data'].get('title', ''))
+                if not title_match:
+                    continue  # Required regexp didn't match
+
+            # Build tags with variable substitution
+            substitutions = {
+                '$app': event['data'].get('app'),
+                '$1': title_match.group(1) if title_match and title_match.groups() else None,
+            }
+
+            return self._build_tags(rule['timew_tags'], substitutions)
+
         return False
 
 
