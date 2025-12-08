@@ -323,6 +323,98 @@ class Exporter:
         """Clear the captured commands list."""
         self.captured_commands.clear()
 
+    def get_suggested_intervals(self):
+        """
+        Extract suggested intervals from captured timew commands.
+
+        Returns:
+            List of SuggestedInterval objects
+        """
+        from .compare import SuggestedInterval
+
+        intervals = []
+        current_start = None
+        current_tags = set()
+
+        for cmd in self.captured_commands:
+            if len(cmd) < 2:
+                continue
+
+            command = cmd[1]  # 'start', 'stop', etc.
+
+            if command == 'start':
+                # Extract tags and timestamp
+                # Format: ['timew', 'start', 'tag1', 'tag2', ..., '2025-01-01T10:00:00']
+                tags = set(cmd[2:-1])  # All elements between 'start' and timestamp
+                timestamp_str = cmd[-1]
+
+                # Parse timestamp
+                start = datetime.fromisoformat(timestamp_str.replace('T', ' ', 1).rstrip('Z'))
+                if start.tzinfo is None:
+                    start = start.replace(tzinfo=timezone.utc)
+
+                # If there was a previous interval, close it
+                if current_start:
+                    intervals.append(SuggestedInterval(
+                        start=current_start,
+                        end=start,
+                        tags=current_tags
+                    ))
+
+                # Start new interval
+                current_start = start
+                current_tags = tags
+
+            elif command == 'stop' and current_start:
+                # Close current interval
+                # May have timestamp as last arg
+                if len(cmd) > 2 and cmd[-1].count('T') == 1:
+                    end = datetime.fromisoformat(cmd[-1].replace('T', ' ', 1).rstrip('Z'))
+                    if end.tzinfo is None:
+                        end = end.replace(tzinfo=timezone.utc)
+                else:
+                    end = datetime.now(timezone.utc)
+
+                intervals.append(SuggestedInterval(
+                    start=current_start,
+                    end=end,
+                    tags=current_tags
+                ))
+
+                current_start = None
+                current_tags = set()
+
+        return intervals
+
+    def run_comparison(self):
+        """
+        Run comparison between TimeWarrior database and ActivityWatch suggestions.
+
+        Requires show_diff=True and will use start_time/end_time for the comparison window.
+        """
+        from .compare import fetch_timew_intervals, compare_intervals, format_diff_output
+
+        if not self.show_diff:
+            return
+
+        if not self.start_time or not self.end_time:
+            raise ValueError("show_diff mode requires start_time and end_time to be set")
+
+        # Fetch what's in TimeWarrior
+        timew_intervals = fetch_timew_intervals(self.start_time, self.end_time)
+
+        # Get what we suggested
+        suggested_intervals = self.get_suggested_intervals()
+
+        # Compare
+        comparison = compare_intervals(timew_intervals, suggested_intervals)
+
+        # Display results
+        output = format_diff_output(comparison, verbose=self.verbose)
+        print(output)
+
+        return comparison
+
     def get_events(self, bucket_id, start=None, end=None):
         """Get events from ActivityWatch or test data."""
         if self.test_data:
@@ -885,8 +977,8 @@ class Exporter:
         ## just to make sure we won't lose any events
         #self.last_tick = self.last_tick - timedelta(1)
         
-        afk_events = self.get_events(afk_id, start=self.last_tick)
-        
+        afk_events = self.get_events(afk_id, start=self.last_tick, end=self.end_time)
+
         ### START WORKAROUND
         ## TODO
         ## workaround for https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/41
@@ -912,7 +1004,7 @@ class Exporter:
         afk_events = [ x for x in afk_events if x['duration'] > timedelta(seconds=MAX_MIXED_INTERVAL) ]
 
         ## afk and window_events
-        afk_window_events = self.get_events(window_id, start=self.last_tick) + afk_events
+        afk_window_events = self.get_events(window_id, start=self.last_tick, end=self.end_time) + afk_events
         afk_window_events.sort(key=lambda x: x['timestamp'])
         if len(afk_window_events)<2:
             return False
@@ -1040,7 +1132,13 @@ class Exporter:
             if not self.last_known_tick or timew_info['start_dt'] > self.last_known_tick:
                 self.set_known_tick_stats(start=timew_info['start_dt'], manual=True, tags=timew_info['tags'])
 
-    def tick(self):
+    def tick(self) -> bool:
+        """
+        Process one tick of events.
+
+        Returns:
+            bool: True if processing should continue, False if we've reached the end
+        """
         # In test mode or dry-run with start_time, skip getting real timew info
         if self.test_data or (self.dry_run and self.start_time):
             # Create mock timew_info for test/dry-run mode
@@ -1077,10 +1175,19 @@ class Exporter:
             self.last_known_tick = self.last_tick
             self.last_start_time = self.last_tick
 
-        if not self.find_next_activity():
+        found_activity = self.find_next_activity()
+
+        # If we have an end_time and we've reached it with no new activity, stop
+        if not found_activity and self.end_time and self.last_tick >= self.end_time:
+            self.log(f"Reached end_time {self.end_time}, stopping")
+            return False
+
+        if not found_activity:
             self.log("sleeping, because no events found")
             if not self.dry_run:  # Don't sleep in dry-run mode
                 sleep(SLEEP_INTERVAL)
+
+        return True
 
 def check_bucket_updated(bucket: dict) -> None:
     if not bucket['last_updated_dt'] or time()-bucket['last_updated_dt'].timestamp() > AW_WARN_THRESHOLD:

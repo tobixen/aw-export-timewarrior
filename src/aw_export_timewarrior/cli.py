@@ -214,8 +214,11 @@ def validate_args(args: argparse.Namespace) -> Optional[str]:
         if args.test_data:
             return "Error: --export-data and --test-data are mutually exclusive"
 
-    if args.diff and not args.dry_run:
-        return "Error: --diff requires --dry-run"
+    if args.diff:
+        if not args.dry_run:
+            return "Error: --diff requires --dry-run"
+        if not args.start or not args.end:
+            return "Error: --diff requires both --start and --end to define the comparison window"
 
     if args.test_data:
         if not args.test_data.exists():
@@ -321,6 +324,10 @@ def main(argv=None) -> int:
         if args.once:
             exporter.tick()
             print("\nSingle tick completed")
+
+            # Run comparison if in diff mode
+            if args.diff:
+                exporter.run_comparison()
         else:
             if start_time and end_time:
                 print("Note: Time range specified but running continuously - only initial events will be in range")
