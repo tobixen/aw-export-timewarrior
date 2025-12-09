@@ -21,7 +21,7 @@ def parse_datetime(dt_string: str) -> datetime:
     Supports:
     - ISO format: "2025-01-01T09:00:00Z"
     - Natural language: "2 hours ago", "yesterday"
-    - Simple format: "2025-01-01 09:00"
+    - Simple format: "2025-01-01 09:00" (interpreted as local time)
 
     Args:
         dt_string: DateTime string to parse
@@ -34,7 +34,11 @@ def parse_datetime(dt_string: str) -> datetime:
 
     # Ensure timezone aware
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        # Treat naive datetime as local time, then convert to UTC
+        dt = dt.astimezone(timezone.utc)
+    elif dt.tzinfo != timezone.utc:
+        # Convert to UTC if it's in a different timezone
+        dt = dt.astimezone(timezone.utc)
 
     return dt
 
