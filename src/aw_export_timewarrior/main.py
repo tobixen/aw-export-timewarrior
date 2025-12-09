@@ -256,11 +256,17 @@ class Exporter:
     dry_run: bool = False  # If True, don't actually modify timewarrior
     verbose: bool = False  # If True, show detailed reasoning
     show_diff: bool = False  # If True, show diffs in dry-run mode
+    show_fix_commands: bool = False  # If True, show timew track commands to fix differences
+    apply_fix: bool = False  # If True, execute timew track commands to fix differences
+    hide_diff_report: bool = False  # If True, hide the detailed comparison report
+    hide_processing_output: bool = False  # If True, hide "would execute" messages
+    show_unmatched: bool = False  # If True, show events that didn't match any rules
     config_path: str = None  # Optional path to config file
     test_data: dict = None  # Optional test data instead of querying AW
     start_time: datetime = None  # Optional start time for processing window
     end_time: datetime = None  # Optional end time for processing window
     captured_commands: list = field(default_factory=list)  # Captures timew commands in dry-run mode for testing
+    unmatched_events: list = field(default_factory=list)  # Tracks events that didn't match any rules
 
     def __post_init__(self):
         # Load custom config if provided
@@ -348,10 +354,12 @@ class Exporter:
                 tags = set(cmd[2:-1])  # All elements between 'start' and timestamp
                 timestamp_str = cmd[-1]
 
-                # Parse timestamp
+                # Parse timestamp - timestamps in commands are in local timezone
+                # (because they're generated with since.astimezone().strftime())
                 start = datetime.fromisoformat(timestamp_str.replace('T', ' ', 1).rstrip('Z'))
                 if start.tzinfo is None:
-                    start = start.replace(tzinfo=timezone.utc)
+                    # Assume local timezone, then convert to UTC
+                    start = start.astimezone(timezone.utc)
 
                 # If there was a previous interval, close it
                 if current_start:
@@ -371,7 +379,8 @@ class Exporter:
                 if len(cmd) > 2 and cmd[-1].count('T') == 1:
                     end = datetime.fromisoformat(cmd[-1].replace('T', ' ', 1).rstrip('Z'))
                     if end.tzinfo is None:
-                        end = end.replace(tzinfo=timezone.utc)
+                        # Assume local timezone, then convert to UTC
+                        end = end.astimezone(timezone.utc)
                 else:
                     end = datetime.now(timezone.utc)
 
@@ -386,16 +395,19 @@ class Exporter:
 
         return intervals
 
-    def run_comparison(self):
+    def run_comparison(self) -> dict:
         """
         Run comparison between TimeWarrior database and ActivityWatch suggestions.
 
         Requires show_diff=True and will use start_time/end_time for the comparison window.
+
+        Returns:
+            Comparison dictionary with keys: 'matching', 'different_tags', 'missing', 'extra'
         """
-        from .compare import fetch_timew_intervals, compare_intervals, format_diff_output
+        from .compare import fetch_timew_intervals, compare_intervals, format_diff_output, generate_fix_commands
 
         if not self.show_diff:
-            return
+            return {}
 
         if not self.start_time or not self.end_time:
             raise ValueError("show_diff mode requires start_time and end_time to be set")
@@ -409,11 +421,87 @@ class Exporter:
         # Compare
         comparison = compare_intervals(timew_intervals, suggested_intervals)
 
-        # Display results
-        output = format_diff_output(comparison, verbose=self.verbose)
-        print(output)
+        # Display comparison report (unless hidden)
+        if not self.hide_diff_report:
+            output = format_diff_output(comparison, verbose=self.verbose)
+            print(output)
+
+        # Generate and display/execute fix commands
+        if self.show_fix_commands or self.apply_fix:
+            fix_commands = generate_fix_commands(comparison)
+
+            if fix_commands:
+                if self.apply_fix:
+                    print("\n" + "=" * 80)
+                    print("Applying fixes to TimeWarrior database...")
+                    print("=" * 80 + "\n")
+
+                    for cmd in fix_commands:
+                        print(f"Executing: {cmd}")
+                        # Parse and execute the command
+                        import subprocess
+                        try:
+                            result = subprocess.run(
+                                cmd.split(),
+                                capture_output=True,
+                                text=True,
+                                check=True
+                            )
+                            print("  ✓ Success")
+                        except subprocess.CalledProcessError as e:
+                            print(f"  ✗ Failed: {e.stderr}")
+
+                    print("\n" + "=" * 80 + "\n")
+                else:
+                    # Just show the commands
+                    print("\n" + "=" * 80)
+                    print("Commands to fix differences:")
+                    print("=" * 80 + "\n")
+
+                    for cmd in fix_commands:
+                        print(cmd)
+
+                    print("\n" + "=" * 80 + "\n")
+            else:
+                if self.hide_diff_report:
+                    print("No differences found - TimeWarrior matches ActivityWatch suggestions.")
 
         return comparison
+
+    def show_unmatched_events_report(self) -> None:
+        """Display a report of events that didn't match any rules."""
+        if not self.unmatched_events:
+            print("\nNo unmatched events found - all events matched configuration rules.")
+            return
+
+        print("\n" + "=" * 80)
+        print("Events Not Matching Any Rules")
+        print("=" * 80)
+        print(f"\nFound {len(self.unmatched_events)} unmatched events:\n")
+
+        # Group by app for easier analysis
+        from collections import defaultdict
+        by_app = defaultdict(list)
+
+        for event in self.unmatched_events:
+            app = event['data'].get('app', 'unknown')
+            by_app[app].append(event)
+
+        for app in sorted(by_app.keys()):
+            events = by_app[app]
+            total_duration = sum((e['duration'].total_seconds() for e in events), 0)
+            print(f"\n{app} ({len(events)} events, {total_duration/60:.1f} min total):")
+
+            for event in events[:5]:  # Show first 5 events per app
+                duration_min = event['duration'].total_seconds() / 60
+                timestamp = event['timestamp'].astimezone().strftime('%H:%M:%S')
+                title = event['data'].get('title', '(no title)')[:60]
+                print(f"  [{timestamp}] {duration_min:.1f}min - {title}")
+
+            if len(events) > 5:
+                print(f"  ... and {len(events) - 5} more")
+
+        print("\n" + "=" * 80 + "\n")
 
     def get_events(self, bucket_id, start=None, end=None):
         """Get events from ActivityWatch or test data."""
@@ -534,7 +622,8 @@ class Exporter:
         assert not exclusive_overlapping(tags, self.config)
         timew_run(['start'] + list(tags) + ['~aw', since.astimezone().strftime('%FT%H:%M:%S')],
                   dry_run=self.dry_run or bool(self.test_data),
-                  capture_to=self.captured_commands if self.dry_run else None)
+                  capture_to=self.captured_commands if self.dry_run else None,
+                  hide_output=self.hide_processing_output)
 
         # Only update timew_info after command if not in dry-run mode
         if not self.dry_run and not self.test_data:
@@ -1016,11 +1105,11 @@ class Exporter:
             if event['timestamp'] < self.last_tick or event['timestamp'] < self.last_known_tick:
                 if event['data'] == {'status': 'not-afk'}:
                     continue
-                if event['timestamp']+event['duration'] > self.last_known_tick:
-                    import pdb; pdb.set_trace()
+                #if event['timestamp']+event['duration'] > self.last_known_tick:
+                    #import pdb; pdb.set_trace()
                 elif event['data'] != {'status': 'afk'} and event['timestamp'] > self.last_start_time:
-                    if event['duration']>timedelta(seconds=30):
-                        import pdb; pdb.set_trace()
+                    #if event['duration']>timedelta(seconds=30):
+                        #import pdb; pdb.set_trace()
                     ## Do we need an exception here for afk events?
                     self.log(f"skipping event as the timestamp is too old - {event}", event=event)
                     continue
@@ -1056,10 +1145,16 @@ class Exporter:
             if tags is False:
                 num_unknown_events += 1
                 self.total_time_unknown_events += event['duration']
+                # Track unmatched event if requested
+                if self.show_unmatched:
+                    self.unmatched_events.append(event)
                 if self.total_time_unknown_events.total_seconds()>MAX_MIXED_INTERVAL*2:
-                    ## TODO: we should consider to timew tag 'unknown not-afk'
-                    breakpoint()
-                self.log(f"{self.total_time_unknown_events.total_seconds()}s unknown events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)", event=event)
+                    # Significant unknown activity - tag it as UNKNOWN
+                    self.log(f"Significant unknown activity ({self.total_time_unknown_events.total_seconds()}s), tagging as UNKNOWN", event=event)
+                    self.ensure_tag_exported({'UNKNOWN', 'not-afk'}, event)
+                    self.total_time_unknown_events = timedelta(0)
+                else:
+                    self.log(f"{self.total_time_unknown_events.total_seconds()}s unknown events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)", event=event)
             else:
                 self.log(f"{event['data']} - tags found: {tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)")
             num_skipped_events = 0
@@ -1132,9 +1227,12 @@ class Exporter:
             if not self.last_known_tick or timew_info['start_dt'] > self.last_known_tick:
                 self.set_known_tick_stats(start=timew_info['start_dt'], manual=True, tags=timew_info['tags'])
 
-    def tick(self) -> bool:
+    def tick(self, process_all: bool = False) -> bool:
         """
         Process one tick of events.
+
+        Args:
+            process_all: If True, keep processing until all events are consumed
 
         Returns:
             bool: True if processing should continue, False if we've reached the end
@@ -1175,19 +1273,43 @@ class Exporter:
             self.last_known_tick = self.last_tick
             self.last_start_time = self.last_tick
 
-        found_activity = self.find_next_activity()
+        # If process_all is True, keep finding activity until there's none left
+        if process_all:
+            while True:
+                found_activity = self.find_next_activity()
+                if not found_activity:
+                    # Check if we've reached end_time
+                    if self.end_time and self.last_tick < self.end_time:
+                        self.log(f"No more events before end_time, advancing to {self.end_time}")
+                        self.last_tick = self.end_time
+                        found_activity = self.find_next_activity()
+                    if not found_activity:
+                        break
+            return False  # All done processing
+        else:
+            # Single tick processing
+            found_activity = self.find_next_activity()
 
-        # If we have an end_time and we've reached it with no new activity, stop
-        if not found_activity and self.end_time and self.last_tick >= self.end_time:
-            self.log(f"Reached end_time {self.end_time}, stopping")
-            return False
+            # If we have an end_time and no new activity was found, check if we should stop
+            if not found_activity and self.end_time:
+                # Update last_tick to end_time if we've processed everything up to it
+                if self.last_tick < self.end_time:
+                    self.log(f"No more events before end_time, advancing to {self.end_time}")
+                    self.last_tick = self.end_time
+                    # Try one more time to find activity
+                    found_activity = self.find_next_activity()
 
-        if not found_activity:
-            self.log("sleeping, because no events found")
-            if not self.dry_run:  # Don't sleep in dry-run mode
-                sleep(SLEEP_INTERVAL)
+                # If still no activity, we've reached the end
+                if not found_activity:
+                    self.log(f"Reached end_time {self.end_time}, stopping")
+                    return False
 
-        return True
+            if not found_activity:
+                self.log("sleeping, because no events found")
+                if not self.dry_run:  # Don't sleep in dry-run mode
+                    sleep(SLEEP_INTERVAL)
+
+            return True
 
 def check_bucket_updated(bucket: dict) -> None:
     if not bucket['last_updated_dt'] or time()-bucket['last_updated_dt'].timestamp() > AW_WARN_THRESHOLD:
@@ -1203,7 +1325,7 @@ def get_timew_info():
     current_timew['tags'] = set(current_timew['tags'])
     return current_timew
 
-def timew_run(commands, dry_run=False, capture_to=None):
+def timew_run(commands, dry_run=False, capture_to=None, hide_output=False):
     """
     Execute a timewarrior command, or show what would be done if dry_run=True.
 
@@ -1211,16 +1333,19 @@ def timew_run(commands, dry_run=False, capture_to=None):
         commands: List of command arguments (without 'timew' prefix)
         dry_run: If True, don't execute, just print what would be done
         capture_to: Optional list to append commands to (for testing)
+        hide_output: If True, don't print the "DRY RUN" or "Running" messages
     """
     commands = ['timew'] + commands
 
     if dry_run:
-        user_output(f"DRY RUN: Would execute: {' '.join(commands)}", color="yellow", attrs=["bold"])
+        if not hide_output:
+            user_output(f"DRY RUN: Would execute: {' '.join(commands)}", color="yellow", attrs=["bold"])
         if capture_to is not None:
             capture_to.append(commands)
         return
 
-    user_output(f"Running: {' '.join(commands)}")
+    if not hide_output:
+        user_output(f"Running: {' '.join(commands)}")
     subprocess.run(commands)
     user_output(f"Use timew undo if you don't agree!  You have {GRACE_TIME} seconds to press ctrl^c", attrs=["bold"])
     sleep(GRACE_TIME)

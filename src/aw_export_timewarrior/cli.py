@@ -77,15 +77,22 @@ Examples:
     )
 
     # Time range options (for export, dry-run, or limiting processing)
-    parser.add_argument(
-        '--start',
+    # Start time aliases
+    start_group = parser.add_mutually_exclusive_group()
+    start_group.add_argument(
+        '--start', '--from', '--since', '--begin', '--after',
+        dest='start',
         metavar='DATETIME',
-        help='Start time (for export, dry-run, or processing window)'
+        help='Start time (aliases: --from, --since, --begin, --after)'
     )
-    parser.add_argument(
-        '--end',
+
+    # End time aliases
+    end_group = parser.add_mutually_exclusive_group()
+    end_group.add_argument(
+        '--end', '--to', '--until', '--before',
+        dest='end',
         metavar='DATETIME',
-        help='End time (for export, dry-run, or processing window)'
+        help='End time (aliases: --to, --until, --before). Defaults to current time if start is specified.'
     )
 
     # Output options
@@ -98,6 +105,31 @@ Examples:
         '--diff',
         action='store_true',
         help='In dry-run mode, show differences from current timewarrior state'
+    )
+    parser.add_argument(
+        '--show-fix-commands',
+        action='store_true',
+        help='With --diff, show timew track commands to fix differences'
+    )
+    parser.add_argument(
+        '--apply-fix',
+        action='store_true',
+        help='With --diff, execute timew track commands to fix differences (implies --show-fix-commands)'
+    )
+    parser.add_argument(
+        '--hide-diff-report',
+        action='store_true',
+        help='With --diff, hide the detailed comparison report'
+    )
+    parser.add_argument(
+        '--hide-processing-output',
+        action='store_true',
+        help='Hide the "would execute" messages during processing'
+    )
+    parser.add_argument(
+        '--show-unmatched',
+        action='store_true',
+        help='Show events that did not match any configuration rules'
     )
 
     # Logging options
@@ -220,6 +252,18 @@ def validate_args(args: argparse.Namespace) -> Optional[str]:
         if not args.start or not args.end:
             return "Error: --diff requires both --start and --end to define the comparison window"
 
+    if args.show_fix_commands and not args.diff:
+        return "Error: --show-fix-commands requires --diff"
+
+    if args.apply_fix:
+        if not args.diff:
+            return "Error: --apply-fix requires --diff"
+        if args.dry_run:
+            return "Error: --apply-fix and --dry-run are incompatible (--apply-fix actually modifies the database)"
+
+    if args.hide_diff_report and not args.diff:
+        return "Error: --hide-diff-report requires --diff"
+
     if args.test_data:
         if not args.test_data.exists():
             return f"Error: Test data file not found: {args.test_data}"
@@ -229,10 +273,14 @@ def validate_args(args: argparse.Namespace) -> Optional[str]:
     if args.config and not args.config.exists():
         return f"Error: Config file not found: {args.config}"
 
-    # If start or end is specified without --export-data, both must be specified
-    if (args.start or args.end) and not args.export_data:
-        if not (args.start and args.end):
-            return "Error: Both --start and --end must be specified together"
+    # For export-data, both start and end are required
+    # For other modes, start alone is allowed (end defaults to now)
+    if args.export_data and not (args.start and args.end):
+        return "Error: --export-data requires both --start and --end"
+
+    # End without start doesn't make sense
+    if args.end and not args.start:
+        return "Error: --end requires --start to be specified"
 
     return None
 
@@ -286,10 +334,18 @@ def main(argv=None) -> int:
         # Parse start/end times if provided
         start_time = None
         end_time = None
-        if args.start and args.end:
+        if args.start:
             start_time = parse_datetime(args.start)
-            end_time = parse_datetime(args.end)
+            # Default end time to now if not specified
+            if args.end:
+                end_time = parse_datetime(args.end)
+            else:
+                from datetime import datetime, timezone
+                end_time = datetime.now(timezone.utc)
             print(f"Processing time range: {start_time} to {end_time}")
+        elif args.end:
+            # End without start doesn't make sense, but parse it anyway
+            end_time = parse_datetime(args.end)
 
         # Load test data if specified (must be done before creating Exporter)
         test_data = None
@@ -311,6 +367,11 @@ def main(argv=None) -> int:
             config_path=args.config,
             verbose=args.verbose,
             show_diff=args.diff,
+            show_fix_commands=args.show_fix_commands,
+            apply_fix=args.apply_fix,
+            hide_diff_report=args.hide_diff_report,
+            hide_processing_output=args.hide_processing_output,
+            show_unmatched=args.show_unmatched,
             start_time=start_time,
             end_time=end_time,
             test_data=test_data
@@ -322,21 +383,40 @@ def main(argv=None) -> int:
             print("No changes will be made to timewarrior\n")
 
         if args.once:
-            exporter.tick()
-            print("\nSingle tick completed")
+            # Process all available events in one call
+            exporter.tick(process_all=True)
+            print("\nProcessing completed")
 
             # Run comparison if in diff mode
             if args.diff:
                 exporter.run_comparison()
+
+            # Show unmatched events if requested
+            if args.show_unmatched:
+                exporter.show_unmatched_events_report()
         else:
+            # Continuous monitoring mode
+            # In dry-run, we need a time range to avoid infinite looping
+            if args.dry_run and not (start_time and end_time):
+                print("Error: --dry-run requires --start and --end when not using --once", file=sys.stderr)
+                return 1
+
             if start_time and end_time:
                 print(f"Processing time range: {start_time} to {end_time}")
             else:
                 print("Starting continuous monitoring (Ctrl+C to stop)...")
+
             while exporter.tick():
                 pass  # tick() returns False when we should stop
+
             if start_time and end_time:
                 print(f"\nReached end of time range at {end_time}")
+                # Run comparison if in diff mode
+                if args.diff:
+                    exporter.run_comparison()
+                # Show unmatched events if requested
+                if args.show_unmatched:
+                    exporter.show_unmatched_events_report()
 
     except KeyboardInterrupt:
         print("\nExiting...")
