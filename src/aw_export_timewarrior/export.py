@@ -70,10 +70,16 @@ def export_aw_data(
     Args:
         start: Start time (datetime or string)
         end: End time (datetime or string)
-        output_file: Output file path
+        output_file: Output file path (use '-' for stdout)
         format: Output format ('json' or 'yaml')
         anonymize: If True, anonymize sensitive data (URLs, titles, etc.)
     """
+    import sys
+
+    # Check if output is stdout (for directing progress messages)
+    use_stdout = str(output_file) == '-'
+    progress_output = sys.stderr if use_stdout else sys.stdout
+
     # Parse datetime strings if needed
     if isinstance(start, str):
         start = parse_datetime(start)
@@ -123,31 +129,53 @@ def export_aw_data(
                     ]
 
                 data['events'][bucket_id] = serialized_events
-                print(f"  {bucket_id}: {len(events)} events")
+                print(f"  {bucket_id}: {len(events)} events", file=progress_output)
             else:
-                print(f"  {bucket_id}: No events")
+                print(f"  {bucket_id}: No events", file=progress_output)
 
         except Exception as e:
-            print(f"  {bucket_id}: Error - {e}")
+            print(f"  {bucket_id}: Error - {e}", file=progress_output)
             data['events'][bucket_id] = {'error': str(e)}
 
-    # Write output file
-    output_path = Path(output_file)
+    # Write output file or stdout
+    # (use_stdout already determined above)
 
-    if format == 'yaml' or output_path.suffix in ['.yaml', '.yml']:
-        try:
-            import yaml
-            with open(output_path, 'w') as f:
-                yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-        except ImportError:
-            print("Warning: PyYAML not installed, using JSON instead")
+    if not use_stdout:
+        output_path = Path(output_file)
+        # Determine format from file extension if not explicitly set
+        if format == 'json' and output_path.suffix in ['.yaml', '.yml']:
+            format = 'yaml'
+    else:
+        output_path = None
+        # Default to JSON for stdout unless explicitly set
+        if format != 'yaml':
             format = 'json'
 
-    if format == 'json' or output_path.suffix == '.json':
-        with open(output_path, 'w') as f:
-            json.dump(data, f, indent=2, sort_keys=False)
+    # Write YAML format
+    if format == 'yaml':
+        try:
+            import yaml
+            if use_stdout:
+                yaml.dump(data, sys.stdout, default_flow_style=False, sort_keys=False)
+            else:
+                with open(output_path, 'w') as f:
+                    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+        except ImportError:
+            print("Warning: PyYAML not installed, using JSON instead", file=sys.stderr)
+            format = 'json'
 
-    print(f"\nExported {sum(len(e) if isinstance(e, list) else 0 for e in data['events'].values())} total events")
+    # Write JSON format
+    if format == 'json':
+        if use_stdout:
+            json.dump(data, sys.stdout, indent=2, sort_keys=False)
+            sys.stdout.write('\n')  # Add newline at end
+        else:
+            with open(output_path, 'w') as f:
+                json.dump(data, f, indent=2, sort_keys=False)
+
+    # Print summary to stderr when using stdout, otherwise to stdout
+    summary_output = sys.stderr if use_stdout else sys.stdout
+    print(f"\nExported {sum(len(e) if isinstance(e, list) else 0 for e in data['events'].values())} total events", file=summary_output)
 
 
 def anonymize_event(event: Dict[str, Any]) -> Dict[str, Any]:

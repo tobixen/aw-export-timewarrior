@@ -261,6 +261,7 @@ class Exporter:
     hide_diff_report: bool = False  # If True, hide the detailed comparison report
     hide_processing_output: bool = False  # If True, hide "would execute" messages
     show_unmatched: bool = False  # If True, show events that didn't match any rules
+    enable_pdb: bool = False  # If True, drop into debugger on unexpected states
     config_path: str = None  # Optional path to config file
     test_data: dict = None  # Optional test data instead of querying AW
     start_time: datetime = None  # Optional start time for processing window
@@ -1302,6 +1303,8 @@ class Exporter:
                     # Check if we've reached end_time
                     if self.end_time and self.last_tick < self.end_time:
                         self.log(f"No more events before end_time, advancing to {self.end_time}")
+                        if self.enable_pdb:
+                            import pdb; pdb.set_trace()
                         self.last_tick = self.end_time
                         found_activity = self.find_next_activity()
                     if not found_activity:
@@ -1326,6 +1329,12 @@ class Exporter:
                     return False
 
             if not found_activity:
+                # In dry-run mode without end_time, we can't continue (would loop forever)
+                if self.dry_run and not self.end_time:
+                    if self.enable_pdb:
+                        import pdb; pdb.set_trace()
+                    raise ValueError("dry-run mode without end_time would loop forever - this should be prevented by CLI validation")
+
                 self.log("sleeping, because no events found")
                 if not self.dry_run:  # Don't sleep in dry-run mode
                     sleep(SLEEP_INTERVAL)

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Command-line interface for aw-export-timewarrior.
+Command-line interface for aw-export-timewarrior with subcommand structure.
 
-Provides options for dry-run mode, custom configs, and test data.
+Provides subcommands for different operational modes: sync, diff, analyze, export, validate.
 """
 
 import argparse
@@ -10,134 +10,64 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
+from datetime import datetime, timezone
 
 from .main import Exporter, setup_logging
 
 
 def create_parser() -> argparse.ArgumentParser:
-    """Create and configure the argument parser."""
+    """Create and configure the argument parser with subcommands."""
     parser = argparse.ArgumentParser(
         description='Export ActivityWatch data to Timewarrior',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+Subcommands:
+  sync      Synchronize ActivityWatch to TimeWarrior (default)
+  diff      Compare TimeWarrior with ActivityWatch and optionally fix
+  analyze   Analyze events and show unmatched activities
+  export    Export ActivityWatch data to file
+  validate  Validate configuration file
+
 Examples:
-  # Normal operation (live tracking)
-  %(prog)s
+  # Continuous sync (default)
+  %(prog)s sync
+  %(prog)s  # implicit sync
 
-  # Dry run - see what would be done without modifying timewarrior
-  %(prog)s --dry-run
+  # Dry-run for yesterday
+  %(prog)s sync --dry-run --from yesterday --to today
 
-  # Use custom config file
-  %(prog)s --config my_config.toml
+  # Show differences and fix commands
+  %(prog)s diff --from yesterday --show-commands
 
-  # Test with recorded data
-  %(prog)s --dry-run --test-data tests/fixtures/sample_day.json
+  # Apply fixes automatically
+  %(prog)s diff --from "2025-12-08 10:00" --to "2025-12-08 11:00" --apply
 
-  # Validate config without running
-  %(prog)s --validate-config
+  # Analyze unmatched events
+  %(prog)s analyze --from yesterday
 
-  # Export current AW data for testing
-  %(prog)s --export-data output.json --start "2025-01-01 09:00" --end "2025-01-01 17:00"
+  # Export data to file
+  %(prog)s export --from "2025-01-01 09:00" --to "2025-01-01 17:00" -o output.json
+
+  # Export to stdout and pipe to jq
+  %(prog)s export --from yesterday | jq '.metadata'
+
+  # Validate config
+  %(prog)s validate
         """
     )
 
-    # Main operational modes
-    mode_group = parser.add_mutually_exclusive_group()
-    mode_group.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Show what would be done without actually modifying timewarrior'
-    )
-    mode_group.add_argument(
-        '--validate-config',
-        action='store_true',
-        help='Validate configuration file and exit'
-    )
-    mode_group.add_argument(
-        '--export-data',
-        metavar='FILE',
-        type=Path,
-        help='Export ActivityWatch data to file (JSON/YAML format)'
-    )
-
-    # Data source options
-    parser.add_argument(
-        '--test-data',
-        metavar='FILE',
-        type=Path,
-        help='Load test data from file instead of querying ActivityWatch'
-    )
-
-    # Configuration options
+    # Global options (available for all subcommands)
     parser.add_argument(
         '--config',
         metavar='FILE',
         type=Path,
         help='Path to configuration file (default: uses standard config locations)'
     )
-
-    # Time range options (for export, dry-run, or limiting processing)
-    # Start time aliases
-    start_group = parser.add_mutually_exclusive_group()
-    start_group.add_argument(
-        '--start', '--from', '--since', '--begin', '--after',
-        dest='start',
-        metavar='DATETIME',
-        help='Start time (aliases: --from, --since, --begin, --after)'
-    )
-
-    # End time aliases
-    end_group = parser.add_mutually_exclusive_group()
-    end_group.add_argument(
-        '--end', '--to', '--until', '--before',
-        dest='end',
-        metavar='DATETIME',
-        help='End time (aliases: --to, --until, --before). Defaults to current time if start is specified.'
-    )
-
-    # Output options
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Enable verbose output (show decisions and reasoning)'
-    )
-    parser.add_argument(
-        '--diff',
-        action='store_true',
-        help='In dry-run mode, show differences from current timewarrior state'
-    )
-    parser.add_argument(
-        '--show-fix-commands',
-        action='store_true',
-        help='With --diff, show timew track commands to fix differences'
-    )
-    parser.add_argument(
-        '--apply-fix',
-        action='store_true',
-        help='With --diff, execute timew track commands to fix differences (implies --show-fix-commands)'
-    )
-    parser.add_argument(
-        '--hide-diff-report',
-        action='store_true',
-        help='With --diff, hide the detailed comparison report'
-    )
-    parser.add_argument(
-        '--hide-processing-output',
-        action='store_true',
-        help='Hide the "would execute" messages during processing'
-    )
-    parser.add_argument(
-        '--show-unmatched',
-        action='store_true',
-        help='Show events that did not match any configuration rules'
-    )
-
-    # Logging options
     parser.add_argument(
         '--log-level',
         choices=['NONE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
         default='DEBUG',
-        help='Set normal logging level (default: DEBUG)'
+        help='Set logging level (default: DEBUG)'
     )
     parser.add_argument(
         '--console-log-level',
@@ -156,18 +86,256 @@ Examples:
         action='store_true',
         help='Do not output logs in JSON format'
     )
-
-    # Single-run mode
     parser.add_argument(
+        '--pdb',
+        action='store_true',
+        help='Drop into debugger on unexpected states (for development)'
+    )
+
+    # Create subparsers
+    subparsers = parser.add_subparsers(dest='subcommand', help='Subcommand to run')
+
+    # ===== SYNC subcommand =====
+    sync_parser = subparsers.add_parser(
+        'sync',
+        help='Synchronize ActivityWatch to TimeWarrior (default)',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Continuous sync (default)
+  %(prog)s
+
+  # Dry-run for yesterday
+  %(prog)s --dry-run --from yesterday --to today
+
+  # Process specific time range once
+  %(prog)s --from "2025-12-08 09:00" --to "2025-12-08 17:00" --once
+        """
+    )
+    sync_parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Show what would be done without modifying TimeWarrior'
+    )
+    sync_parser.add_argument(
         '--once',
         action='store_true',
         help='Process once and exit (instead of continuous monitoring)'
     )
 
+    # Start time aliases
+    sync_start_group = sync_parser.add_mutually_exclusive_group()
+    sync_start_group.add_argument(
+        '--from', '--since', '--begin', '--start',
+        dest='start',
+        metavar='DATETIME',
+        help='Start time for processing window (defaults to last observed timew tagging timestamp)'
+    )
+
+    # End time aliases
+    sync_end_group = sync_parser.add_mutually_exclusive_group()
+    sync_end_group.add_argument(
+        '--to', '--until', '--end',
+        dest='end',
+        metavar='DATETIME',
+        help='End time (continuous mode: runs indefinitely; with --once or --dry-run: defaults to now)'
+    )
+
+    sync_parser.add_argument(
+        '--verbose', '-v',
+        action='store_true',
+        help='Enable verbose output'
+    )
+    sync_parser.add_argument(
+        '--hide-processing-output',
+        action='store_true',
+        help='Hide command execution messages'
+    )
+    sync_parser.add_argument(
+        '--quiet', '-q',
+        action='store_true',
+        help='Suppress all console output (for headless/systemd usage)'
+    )
+    sync_parser.add_argument(
+        '--test-data',
+        metavar='FILE',
+        type=Path,
+        help='Use test data instead of live ActivityWatch'
+    )
+
+    # ===== DIFF subcommand =====
+    diff_parser = subparsers.add_parser(
+        'diff',
+        help='Compare TimeWarrior with ActivityWatch and optionally fix',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Show differences for yesterday
+  %(prog)s --from yesterday --to today
+
+  # Show differences with fix commands
+  %(prog)s --from "2025-12-08 10:00" --show-commands
+
+  # Apply fixes automatically
+  %(prog)s --from "2025-12-08 10:00" --to "2025-12-08 11:00" --apply
+        """
+    )
+
+    # Start time aliases
+    diff_start_group = diff_parser.add_mutually_exclusive_group()
+    diff_start_group.add_argument(
+        '--from', '--since', '--begin', '--start',
+        dest='start',
+        metavar='DATETIME',
+        help='Start of comparison window (defaults to beginning of current day)'
+    )
+
+    # End time aliases
+    diff_end_group = diff_parser.add_mutually_exclusive_group()
+    diff_end_group.add_argument(
+        '--to', '--until', '--end',
+        dest='end',
+        metavar='DATETIME',
+        help='End of comparison window (defaults to now)'
+    )
+
+    diff_parser.add_argument(
+        '--show-commands',
+        action='store_true',
+        help='Show timew track commands to fix differences'
+    )
+    diff_parser.add_argument(
+        '--apply',
+        action='store_true',
+        help='Execute the fix commands (implies --show-commands)'
+    )
+    diff_parser.add_argument(
+        '--hide-report',
+        action='store_true',
+        help='Hide the detailed diff report'
+    )
+    diff_parser.add_argument(
+        '--verbose', '-v',
+        action='store_true',
+        help='Show more details in the diff'
+    )
+
+    # ===== ANALYZE subcommand =====
+    analyze_parser = subparsers.add_parser(
+        'analyze',
+        help='Analyze events and show unmatched activities',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Analyze yesterday's unmatched events
+  %(prog)s --from yesterday --to today
+
+  # Analyze with detailed output
+  %(prog)s --from "2025-12-08 09:00" --verbose
+
+  # Find long unmatched events
+  %(prog)s --from yesterday --to today --min-duration 5
+        """
+    )
+
+    # Start time aliases
+    analyze_start_group = analyze_parser.add_mutually_exclusive_group()
+    analyze_start_group.add_argument(
+        '--from', '--since', '--begin', '--start',
+        dest='start',
+        metavar='DATETIME',
+        help='Start of analysis window (defaults to beginning of current day)'
+    )
+
+    # End time aliases
+    analyze_end_group = analyze_parser.add_mutually_exclusive_group()
+    analyze_end_group.add_argument(
+        '--to', '--until', '--end',
+        dest='end',
+        metavar='DATETIME',
+        help='End of analysis window (defaults to now)'
+    )
+
+    analyze_parser.add_argument(
+        '--verbose', '-v',
+        action='store_true',
+        help='Show more details per event'
+    )
+    analyze_parser.add_argument(
+        '--group-by',
+        choices=['app', 'hour', 'day'],
+        default='app',
+        help='How to group results (default: app)'
+    )
+    analyze_parser.add_argument(
+        '--min-duration',
+        type=int,
+        metavar='MINUTES',
+        help='Only show events longer than X minutes'
+    )
+
+    # ===== EXPORT subcommand =====
+    export_parser = subparsers.add_parser(
+        'export',
+        help='Export ActivityWatch data to file',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Export to stdout (default)
+  %(prog)s --from "2025-12-08 09:00" --to "2025-12-08 17:00"
+
+  # Export to file
+  %(prog)s --from "2025-12-08 09:00" --to "2025-12-08 17:00" -o sample.json
+
+  # Export and pipe to jq
+  %(prog)s --from yesterday | jq '.events'
+        """
+    )
+
+    # Start time aliases
+    export_start_group = export_parser.add_mutually_exclusive_group()
+    export_start_group.add_argument(
+        '--from', '--since', '--begin', '--start',
+        dest='start',
+        metavar='DATETIME',
+        help='Start time (defaults to beginning of current day)'
+    )
+
+    # End time aliases
+    export_end_group = export_parser.add_mutually_exclusive_group()
+    export_end_group.add_argument(
+        '--to', '--until', '--end',
+        dest='end',
+        metavar='DATETIME',
+        help='End time (defaults to now)'
+    )
+
+    export_parser.add_argument(
+        '--output', '-o',
+        metavar='FILE',
+        default='-',
+        help='Output file path (default: stdout). Use "-" for stdout or specify a file path'
+    )
+
+    # ===== VALIDATE subcommand =====
+    validate_parser = subparsers.add_parser(
+        'validate',
+        help='Validate configuration file',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Validate default config
+  %(prog)s
+
+  # Validate custom config
+  %(prog)s --config my_config.toml
+        """
+    )
+
     return parser
 
 
-def get_default_log_file(json) -> Path:
+def get_default_log_file(json: bool) -> Path:
     """
     Get the default log file path.
 
@@ -184,30 +352,31 @@ def get_default_log_file(json) -> Path:
 
     log_dir = data_dir / 'aw-export-timewarrior'
     log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     json_postfix = '.json' if json else ''
 
     return log_dir / f'aw-export{json_postfix}.log'
 
 
-def configure_logging(args: argparse.Namespace) -> None:
+def configure_logging(args: argparse.Namespace, subcommand: str) -> None:
     """
     Configure logging based on command-line arguments.
 
-    Default behavior:
-    - Always log to file by default (unless --log-to-console is specified)
-    - Log file includes run_mode info for filtering (dry_run, export_data, test_data)
-
     Args:
         args: Parsed command-line arguments
+        subcommand: The subcommand being executed
     """
     # Determine log level
     log_level = getattr(logging, args.log_level, 0)
     console_log_level = getattr(logging, args.console_log_level, 0)
 
     # If verbose mode, enable DEBUG logging
-    if args.verbose:
+    if hasattr(args, 'verbose') and args.verbose:
         console_log_level = logging.DEBUG
+
+    # If quiet mode (sync only), suppress console output
+    if hasattr(args, 'quiet') and args.quiet:
+        console_log_level = logging.CRITICAL + 1  # Above all levels
 
     # Determine log file
     log_file = None
@@ -218,10 +387,10 @@ def configure_logging(args: argparse.Namespace) -> None:
 
     # Build run mode info for structured logging (allows filtering logs)
     run_mode = {
-        'dry_run': args.dry_run,
-        'export_data': bool(args.export_data),
-        'test_data': bool(args.test_data),
-        'once': args.once,
+        'subcommand': subcommand,
+        'dry_run': getattr(args, 'dry_run', False),
+        'test_data': hasattr(args, 'test_data') and args.test_data is not None,
+        'once': getattr(args, 'once', False),
     }
 
     # Configure the logging system
@@ -233,56 +402,230 @@ def configure_logging(args: argparse.Namespace) -> None:
         run_mode=run_mode
     )
 
-def validate_args(args: argparse.Namespace) -> Optional[str]:
-    """
-    Validate argument combinations.
 
-    Returns:
-        Error message if validation fails, None otherwise
-    """
-    if args.export_data:
-        if not args.start or not args.end:
-            return "Error: --export-data requires both --start and --end"
-        if args.test_data:
-            return "Error: --export-data and --test-data are mutually exclusive"
-
-    if args.diff:
-        if not args.dry_run:
-            return "Error: --diff requires --dry-run"
-        if not args.start or not args.end:
-            return "Error: --diff requires both --start and --end to define the comparison window"
-
-    if args.show_fix_commands and not args.diff:
-        return "Error: --show-fix-commands requires --diff"
-
-    if args.apply_fix:
-        if not args.diff:
-            return "Error: --apply-fix requires --diff"
-        if args.dry_run:
-            return "Error: --apply-fix and --dry-run are incompatible (--apply-fix actually modifies the database)"
-
-    if args.hide_diff_report and not args.diff:
-        return "Error: --hide-diff-report requires --diff"
-
+def validate_sync_args(args: argparse.Namespace) -> Optional[str]:
+    """Validate arguments for sync subcommand."""
     if args.test_data:
         if not args.test_data.exists():
             return f"Error: Test data file not found: {args.test_data}"
         if args.start or args.end:
             return "Error: --start/--end not compatible with --test-data (test data has its own time range)"
 
-    if args.config and not args.config.exists():
-        return f"Error: Config file not found: {args.config}"
-
-    # For export-data, both start and end are required
-    # For other modes, start alone is allowed (end defaults to now)
-    if args.export_data and not (args.start and args.end):
-        return "Error: --export-data requires both --start and --end"
+    # Dry-run without --once requires time boundaries to prevent infinite loop
+    if args.dry_run and not args.once:
+        if not (args.start and args.end):
+            return "Error: --dry-run without --once requires both --start and --end (to prevent infinite loop)"
 
     # End without start doesn't make sense
     if args.end and not args.start:
         return "Error: --end requires --start to be specified"
 
     return None
+
+
+def validate_diff_args(args: argparse.Namespace) -> Optional[str]:
+    """Validate arguments for diff subcommand."""
+    # diff always requires time range
+    if not args.start:
+        return "Error: diff requires --start (defaults to beginning of current day if not specified)"
+
+    # End without start doesn't make sense
+    if args.end and not args.start:
+        return "Error: --end requires --start to be specified"
+
+    return None
+
+
+def validate_analyze_args(args: argparse.Namespace) -> Optional[str]:
+    """Validate arguments for analyze subcommand."""
+    # End without start doesn't make sense
+    if args.end and not args.start:
+        return "Error: --end requires --start to be specified"
+
+    return None
+
+
+def validate_export_args(args: argparse.Namespace) -> Optional[str]:
+    """Validate arguments for export subcommand."""
+    # Export requires output file (enforced by required=True in argparse)
+    # End without start doesn't make sense
+    if args.end and not args.start:
+        return "Error: --end requires --start to be specified"
+
+    return None
+
+
+def validate_validate_args(args: argparse.Namespace) -> Optional[str]:
+    """Validate arguments for validate subcommand."""
+    # No special validation needed
+    return None
+
+
+def run_sync(args: argparse.Namespace) -> int:
+    """Execute the sync subcommand."""
+    from .export import parse_datetime, load_test_data
+
+    # Parse start/end times if provided
+    start_time = None
+    end_time = None
+    if args.start:
+        start_time = parse_datetime(args.start)
+        # Default end time to now if not specified
+        if args.end:
+            end_time = parse_datetime(args.end)
+        else:
+            end_time = datetime.now(timezone.utc)
+        print(f"Processing time range: {start_time} to {end_time}")
+
+    # Load test data if specified
+    test_data = None
+    if args.test_data:
+        print(f"Loading test data from {args.test_data}")
+        test_data = load_test_data(args.test_data)
+
+        # Extract start/end times from test data metadata if not provided via CLI
+        if not start_time and 'metadata' in test_data and 'start_time' in test_data['metadata']:
+            start_time = parse_datetime(test_data['metadata']['start_time'])
+            print(f"Using start time from test data: {start_time}")
+        if not end_time and 'metadata' in test_data and 'end_time' in test_data['metadata']:
+            end_time = parse_datetime(test_data['metadata']['end_time'])
+            print(f"Using end time from test data: {end_time}")
+
+    # Create exporter with options
+    exporter = Exporter(
+        dry_run=args.dry_run,
+        config_path=args.config,
+        verbose=args.verbose,
+        hide_processing_output=args.hide_processing_output,
+        enable_pdb=args.pdb,
+        start_time=start_time,
+        end_time=end_time,
+        test_data=test_data
+    )
+
+    # Run exporter
+    if args.dry_run:
+        print("=== DRY RUN MODE ===")
+        print("No changes will be made to timewarrior\n")
+
+    if args.once:
+        # Process all available events in one call
+        exporter.tick(process_all=True)
+        print("\nProcessing completed")
+    else:
+        # Continuous monitoring mode
+        if start_time and end_time:
+            print(f"Processing time range: {start_time} to {end_time}")
+        else:
+            print("Starting continuous monitoring (Ctrl+C to stop)...")
+
+        while exporter.tick():
+            pass  # tick() returns False when we should stop
+
+        if start_time and end_time:
+            print(f"\nReached end of time range at {end_time}")
+
+    return 0
+
+
+def run_diff(args: argparse.Namespace) -> int:
+    """Execute the diff subcommand."""
+    from .export import parse_datetime
+
+    # Parse start/end times with defaults
+    start_time = parse_datetime(args.start) if args.start else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_time = parse_datetime(args.end) if args.end else datetime.now(timezone.utc)
+
+    print(f"Comparing time range: {start_time} to {end_time}")
+
+    # Create exporter in dry-run mode (diff doesn't modify unless --apply)
+    exporter = Exporter(
+        dry_run=not args.apply,  # dry_run=False only if applying
+        config_path=args.config,
+        verbose=args.verbose,
+        show_diff=True,
+        show_fix_commands=args.show_commands or args.apply,
+        apply_fix=args.apply,
+        hide_diff_report=args.hide_report,
+        enable_pdb=args.pdb,
+        start_time=start_time,
+        end_time=end_time
+    )
+
+    # Process all events first (to build suggested intervals)
+    exporter.tick(process_all=True)
+
+    # Run comparison
+    exporter.run_comparison()
+
+    return 0
+
+
+def run_analyze(args: argparse.Namespace) -> int:
+    """Execute the analyze subcommand."""
+    from .export import parse_datetime
+
+    # Parse start/end times with defaults
+    start_time = parse_datetime(args.start) if args.start else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_time = parse_datetime(args.end) if args.end else datetime.now(timezone.utc)
+
+    print(f"Analyzing time range: {start_time} to {end_time}")
+
+    # Create exporter in dry-run mode with show_unmatched
+    exporter = Exporter(
+        dry_run=True,
+        config_path=args.config,
+        verbose=args.verbose,
+        show_unmatched=True,
+        enable_pdb=args.pdb,
+        start_time=start_time,
+        end_time=end_time
+    )
+
+    # Process all events
+    exporter.tick(process_all=True)
+
+    # Show unmatched events report
+    exporter.show_unmatched_events_report()
+
+    return 0
+
+
+def run_export(args: argparse.Namespace) -> int:
+    """Execute the export subcommand."""
+    from .export import export_aw_data, parse_datetime
+    import sys
+
+    # Parse start/end times with defaults
+    start_time = parse_datetime(args.start) if args.start else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_time = parse_datetime(args.end) if args.end else datetime.now(timezone.utc)
+
+    # Direct progress messages to stderr if outputting to stdout
+    use_stdout = str(args.output) == '-'
+    progress_output = sys.stderr if use_stdout else sys.stdout
+
+    print(f"Exporting data from {start_time} to {end_time}...", file=progress_output)
+    export_aw_data(args.start or str(start_time), args.end or str(end_time), args.output)
+
+    # Don't print completion message when outputting to stdout (export_aw_data already prints summary to stderr)
+    if not use_stdout:
+        print(f"Data exported to {args.output}")
+
+    return 0
+
+
+def run_validate(args: argparse.Namespace) -> int:
+    """Execute the validate subcommand."""
+    from .config import config, validate_config
+
+    errors = validate_config(config, args.config)
+    if errors:
+        print("Configuration errors found:")
+        for error in errors:
+            print(f"  - {error}")
+        return 1
+    print("Configuration is valid")
+    return 0
 
 
 def main(argv=None) -> int:
@@ -298,137 +641,72 @@ def main(argv=None) -> int:
     parser = create_parser()
     args = parser.parse_args(argv)
 
-    # Validate arguments
-    error = validate_args(args)
-    if error:
-        print(error, file=sys.stderr)
+    # Default to 'sync' if no subcommand specified
+    subcommand = args.subcommand or 'sync'
+    if not args.subcommand:
+        # Re-parse with 'sync' as the subcommand
+        argv_with_sync = ['sync'] + (argv if argv else sys.argv[1:])
+        args = parser.parse_args(argv_with_sync)
+        args.subcommand = 'sync'
+
+    # Validate config file if specified
+    if args.config and not args.config.exists():
+        print(f"Error: Config file not found: {args.config}", file=sys.stderr)
         return 1
 
     # Configure logging based on arguments
-    configure_logging(args)
+    configure_logging(args, subcommand)
 
     try:
-        # Handle export mode
-        if args.export_data:
-            from .export import export_aw_data
-            print(f"Exporting data from {args.start} to {args.end}...")
-            export_aw_data(args.start, args.end, args.export_data)
-            print(f"Data exported to {args.export_data}")
-            return 0
-
-        # Handle config validation mode
-        if args.validate_config:
-            from .config import config, validate_config
-            errors = validate_config(config, args.config)
-            if errors:
-                print("Configuration errors found:")
-                for error in errors:
-                    print(f"  - {error}")
+        # Validate and run the appropriate subcommand
+        if subcommand == 'sync':
+            error = validate_sync_args(args)
+            if error:
+                print(error, file=sys.stderr)
                 return 1
-            print("Configuration is valid")
-            return 0
+            return run_sync(args)
 
-        # Import helper functions
-        from .export import parse_datetime, load_test_data
+        elif subcommand == 'diff':
+            error = validate_diff_args(args)
+            if error:
+                print(error, file=sys.stderr)
+                return 1
+            return run_diff(args)
 
-        # Parse start/end times if provided
-        start_time = None
-        end_time = None
-        if args.start:
-            start_time = parse_datetime(args.start)
-            # Default end time to now if not specified
-            if args.end:
-                end_time = parse_datetime(args.end)
-            else:
-                from datetime import datetime, timezone
-                end_time = datetime.now(timezone.utc)
-            print(f"Processing time range: {start_time} to {end_time}")
-        elif args.end:
-            # End without start doesn't make sense, but parse it anyway
-            end_time = parse_datetime(args.end)
+        elif subcommand == 'analyze':
+            error = validate_analyze_args(args)
+            if error:
+                print(error, file=sys.stderr)
+                return 1
+            return run_analyze(args)
 
-        # Load test data if specified (must be done before creating Exporter)
-        test_data = None
-        if args.test_data:
-            print(f"Loading test data from {args.test_data}")
-            test_data = load_test_data(args.test_data)
+        elif subcommand == 'export':
+            error = validate_export_args(args)
+            if error:
+                print(error, file=sys.stderr)
+                return 1
+            return run_export(args)
 
-            # Extract start/end times from test data metadata if not provided via CLI
-            if not start_time and 'metadata' in test_data and 'start_time' in test_data['metadata']:
-                start_time = parse_datetime(test_data['metadata']['start_time'])
-                print(f"Using start time from test data: {start_time}")
-            if not end_time and 'metadata' in test_data and 'end_time' in test_data['metadata']:
-                end_time = parse_datetime(test_data['metadata']['end_time'])
-                print(f"Using end time from test data: {end_time}")
+        elif subcommand == 'validate':
+            error = validate_validate_args(args)
+            if error:
+                print(error, file=sys.stderr)
+                return 1
+            return run_validate(args)
 
-        # Create exporter with options
-        exporter = Exporter(
-            dry_run=args.dry_run,
-            config_path=args.config,
-            verbose=args.verbose,
-            show_diff=args.diff,
-            show_fix_commands=args.show_fix_commands,
-            apply_fix=args.apply_fix,
-            hide_diff_report=args.hide_diff_report,
-            hide_processing_output=args.hide_processing_output,
-            show_unmatched=args.show_unmatched,
-            start_time=start_time,
-            end_time=end_time,
-            test_data=test_data
-        )
-
-        # Run exporter
-        if args.dry_run:
-            print("=== DRY RUN MODE ===")
-            print("No changes will be made to timewarrior\n")
-
-        if args.once:
-            # Process all available events in one call
-            exporter.tick(process_all=True)
-            print("\nProcessing completed")
-
-            # Run comparison if in diff mode
-            if args.diff:
-                exporter.run_comparison()
-
-            # Show unmatched events if requested
-            if args.show_unmatched:
-                exporter.show_unmatched_events_report()
         else:
-            # Continuous monitoring mode
-            # In dry-run, we need a time range to avoid infinite looping
-            if args.dry_run and not (start_time and end_time):
-                print("Error: --dry-run requires --start and --end when not using --once", file=sys.stderr)
-                return 1
-
-            if start_time and end_time:
-                print(f"Processing time range: {start_time} to {end_time}")
-            else:
-                print("Starting continuous monitoring (Ctrl+C to stop)...")
-
-            while exporter.tick():
-                pass  # tick() returns False when we should stop
-
-            if start_time and end_time:
-                print(f"\nReached end of time range at {end_time}")
-                # Run comparison if in diff mode
-                if args.diff:
-                    exporter.run_comparison()
-                # Show unmatched events if requested
-                if args.show_unmatched:
-                    exporter.show_unmatched_events_report()
+            print(f"Error: Unknown subcommand: {subcommand}", file=sys.stderr)
+            return 1
 
     except KeyboardInterrupt:
         print("\nExiting...")
         return 0
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
-        if args.verbose:
+        if hasattr(args, 'verbose') and args.verbose:
             import traceback
             traceback.print_exc()
         return 1
-
-    return 0
 
 
 if __name__ == '__main__':
