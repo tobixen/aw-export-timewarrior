@@ -477,9 +477,12 @@ class Exporter:
         print("\n" + "=" * 80)
         print("Events Not Matching Any Rules")
         print("=" * 80)
-        print(f"\nFound {len(self.unmatched_events)} unmatched events:\n")
 
-        # Group by app for easier analysis
+        # Calculate total unmatched time
+        total_unmatched_seconds = sum((e['duration'].total_seconds() for e in self.unmatched_events), 0)
+        print(f"\nFound {len(self.unmatched_events)} unmatched events, {total_unmatched_seconds/60:.1f} min total:\n")
+
+        # Group by app and title for easier analysis
         from collections import defaultdict
         by_app = defaultdict(list)
 
@@ -487,19 +490,37 @@ class Exporter:
             app = event['data'].get('app', 'unknown')
             by_app[app].append(event)
 
-        for app in sorted(by_app.keys()):
+        # Sort apps by total duration (descending)
+        app_durations = [(app, sum(e['duration'].total_seconds() for e in events))
+                         for app, events in by_app.items()]
+        app_durations.sort(key=lambda x: x[1], reverse=True)
+
+        for app, app_total_seconds in app_durations:
             events = by_app[app]
-            total_duration = sum((e['duration'].total_seconds() for e in events), 0)
-            print(f"\n{app} ({len(events)} events, {total_duration/60:.1f} min total):")
+            print(f"\n{app} ({len(events)} events, {app_total_seconds/60:.1f} min total):")
 
-            for event in events[:5]:  # Show first 5 events per app
-                duration_min = event['duration'].total_seconds() / 60
-                timestamp = event['timestamp'].astimezone().strftime('%H:%M:%S')
-                title = event['data'].get('title', '(no title)')[:60]
-                print(f"  [{timestamp}] {duration_min:.1f}min - {title}")
+            # Group by title and sum durations
+            title_durations = defaultdict(float)
+            title_count = defaultdict(int)
+            for event in events:
+                title = event['data'].get('title', '(no title)')
+                title_durations[title] += event['duration'].total_seconds()
+                title_count[title] += 1
 
-            if len(events) > 5:
-                print(f"  ... and {len(events) - 5} more")
+            # Sort titles by duration (descending) and show top 5
+            sorted_titles = sorted(title_durations.items(), key=lambda x: x[1], reverse=True)
+
+            for title, duration_seconds in sorted_titles[:5]:
+                count = title_count[title]
+                title_display = title[:60] + "..." if len(title) > 60 else title
+                print(f"  {duration_seconds/60:5.1f}min ({count:2d}x) - {title_display}")
+
+            # Show "long tail" summary
+            if len(sorted_titles) > 5:
+                remaining_count = len(sorted_titles) - 5
+                remaining_time = sum(duration for _, duration in sorted_titles[5:])
+                remaining_events = sum(title_count[title] for title, _ in sorted_titles[5:])
+                print(f"  {remaining_time/60:5.1f}min ({remaining_events:2d}x) - ... and {remaining_count} other titles")
 
         print("\n" + "=" * 80 + "\n")
 
