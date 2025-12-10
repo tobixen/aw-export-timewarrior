@@ -228,6 +228,9 @@ class TestFormatDiffOutput:
 
     def test_format_with_differences(self) -> None:
         """Test formatting with differences."""
+        missing_start = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        missing_end = datetime(2025, 1, 1, 13, 0, 0, tzinfo=timezone.utc)
+
         comparison = {
             'matching': [(
                 TimewInterval(
@@ -245,8 +248,8 @@ class TestFormatDiffOutput:
             'different_tags': [],
             'missing': [
                 SuggestedInterval(
-                    start=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
-                    end=datetime(2025, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+                    start=missing_start,
+                    end=missing_end,
                     tags={'4me'}
                 )
             ],
@@ -257,4 +260,6 @@ class TestFormatDiffOutput:
 
         assert 'Matching intervals:      1' in output
         assert 'Missing from TimeWarrior: 1' in output
-        assert '12:00:00 - 13:00:00' in output  # Missing interval time
+        # Times are now displayed in local time, so convert for assertion
+        expected_time = f"{missing_start.astimezone().strftime('%H:%M:%S')} - {missing_end.astimezone().strftime('%H:%M:%S')}"
+        assert expected_time in output  # Missing interval time (in local time)

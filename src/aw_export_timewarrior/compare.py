@@ -182,7 +182,10 @@ def format_diff_output(comparison: Dict[str, List], verbose: bool = False) -> st
         lines.append(f"\n{colored('Missing from TimeWarrior (suggested by ActivityWatch):', 'red', attrs=['bold'])}")
         for suggested in comparison['missing']:
             duration = suggested.duration()
-            lines.append(colored(f"  - {suggested.start.strftime('%H:%M:%S')} - {suggested.end.strftime('%H:%M:%S')} "
+            # Convert to local time for display
+            start_local = suggested.start.astimezone().strftime('%H:%M:%S')
+            end_local = suggested.end.astimezone().strftime('%H:%M:%S')
+            lines.append(colored(f"  - {start_local} - {end_local} "
                                f"({duration.total_seconds()/60:.1f}min)", 'red'))
             lines.append(colored(f"    Tags: {', '.join(sorted(suggested.tags))}", 'red'))
 
@@ -191,8 +194,10 @@ def format_diff_output(comparison: Dict[str, List], verbose: bool = False) -> st
         lines.append(f"\n{colored('Extra in TimeWarrior (not suggested by ActivityWatch):', 'yellow', attrs=['bold'])}")
         for timew_int in comparison['extra']:
             duration = timew_int.duration()
-            end_str = timew_int.end.strftime('%H:%M:%S') if timew_int.end else 'ongoing'
-            lines.append(colored(f"  + {timew_int.start.strftime('%H:%M:%S')} - {end_str} "
+            # Convert to local time for display
+            start_local = timew_int.start.astimezone().strftime('%H:%M:%S')
+            end_local = timew_int.end.astimezone().strftime('%H:%M:%S') if timew_int.end else 'ongoing'
+            lines.append(colored(f"  + {start_local} - {end_local} "
                                f"({duration.total_seconds()/60:.1f}min)", 'yellow'))
             lines.append(colored(f"    Tags: {', '.join(sorted(timew_int.tags))}", 'yellow'))
 
@@ -200,8 +205,10 @@ def format_diff_output(comparison: Dict[str, List], verbose: bool = False) -> st
     if comparison['different_tags']:
         lines.append(f"\n{colored('Intervals with different tags:', 'cyan', attrs=['bold'])}")
         for timew_int, suggested in comparison['different_tags']:
-            lines.append(f"  {timew_int.start.strftime('%H:%M:%S')} - "
-                        f"{timew_int.end.strftime('%H:%M:%S') if timew_int.end else 'ongoing'}")
+            # Convert to local time for display
+            start_local = timew_int.start.astimezone().strftime('%H:%M:%S')
+            end_local = timew_int.end.astimezone().strftime('%H:%M:%S') if timew_int.end else 'ongoing'
+            lines.append(f"  {start_local} - {end_local}")
 
             # Show tag differences
             timew_tags = timew_int.tags
@@ -223,8 +230,10 @@ def format_diff_output(comparison: Dict[str, List], verbose: bool = False) -> st
         lines.append(f"\n{colored('Matching intervals:', 'green', attrs=['bold'])}")
         for timew_int, suggested in comparison['matching']:
             duration = timew_int.duration()
-            lines.append(colored(f"  ✓ {timew_int.start.strftime('%H:%M:%S')} - "
-                               f"{timew_int.end.strftime('%H:%M:%S') if timew_int.end else 'ongoing'} "
+            # Convert to local time for display
+            start_local = timew_int.start.astimezone().strftime('%H:%M:%S')
+            end_local = timew_int.end.astimezone().strftime('%H:%M:%S') if timew_int.end else 'ongoing'
+            lines.append(colored(f"  ✓ {start_local} - {end_local} "
                                f"({duration.total_seconds()/60:.1f}min)", 'green'))
             if verbose:
                 lines.append(colored(f"    Tags: {', '.join(sorted(timew_int.tags))}", 'green'))
@@ -236,7 +245,10 @@ def format_diff_output(comparison: Dict[str, List], verbose: bool = False) -> st
 
 def generate_fix_commands(comparison: Dict[str, List]) -> List[str]:
     """
-    Generate timew track commands to fix differences.
+    Generate timew commands to fix differences.
+
+    Uses 'timew track' for missing intervals and 'timew retag' for intervals
+    with different tags.
 
     Args:
         comparison: Result from compare_intervals
@@ -246,7 +258,7 @@ def generate_fix_commands(comparison: Dict[str, List]) -> List[str]:
     """
     commands = []
 
-    # Add missing intervals
+    # Add missing intervals using 'timew track'
     for suggested in comparison['missing']:
         # Format: timew track 2025-12-08T10:00:00 - 2025-12-08T11:00:00 tag1 tag2 :adjust
         start_str = suggested.start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
@@ -254,12 +266,13 @@ def generate_fix_commands(comparison: Dict[str, List]) -> List[str]:
         tags = ' '.join(sorted(suggested.tags))
         commands.append(f"timew track {start_str} - {end_str} {tags} :adjust")
 
-    # Fix intervals with different tags
+    # Fix intervals with different tags using 'timew retag'
     for timew_int, suggested in comparison['different_tags']:
-        # Format: timew track 2025-12-08T10:00:00 - 2025-12-08T11:00:00 tag1 tag2 :adjust
-        start_str = suggested.start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
-        end_str = suggested.end.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
+        # Use the timew interval's ID for retag command
+        # Format: timew retag @<id> tag1 tag2 tag3
+        # First, remove all existing tags, then add the suggested ones
+        # This is done by specifying all new tags - timew retag replaces all tags
         tags = ' '.join(sorted(suggested.tags))
-        commands.append(f"timew track {start_str} - {end_str} {tags} :adjust")
+        commands.append(f"timew retag @{timew_int.id} {tags}")
 
     return commands
