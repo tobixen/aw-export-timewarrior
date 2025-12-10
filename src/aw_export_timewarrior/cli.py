@@ -425,23 +425,12 @@ def validate_sync_args(args: argparse.Namespace) -> Optional[str]:
 
 def validate_diff_args(args: argparse.Namespace) -> Optional[str]:
     """Validate arguments for diff subcommand."""
-    # diff always requires time range
-    if not args.start:
-        return "Error: diff requires --start (defaults to beginning of current day if not specified)"
-
-    # End without start doesn't make sense
-    if args.end and not args.start:
-        return "Error: --end requires --start to be specified"
-
     return None
 
 
 def validate_analyze_args(args: argparse.Namespace) -> Optional[str]:
     """Validate arguments for analyze subcommand."""
     # End without start doesn't make sense
-    if args.end and not args.start:
-        return "Error: --end requires --start to be specified"
-
     return None
 
 
@@ -449,9 +438,6 @@ def validate_export_args(args: argparse.Namespace) -> Optional[str]:
     """Validate arguments for export subcommand."""
     # Export requires output file (enforced by required=True in argparse)
     # End without start doesn't make sense
-    if args.end and not args.start:
-        return "Error: --end requires --start to be specified"
-
     return None
 
 

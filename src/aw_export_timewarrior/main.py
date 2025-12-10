@@ -410,9 +410,6 @@ class Exporter:
         if not self.show_diff:
             return {}
 
-        if not self.start_time or not self.end_time:
-            raise ValueError("show_diff mode requires start_time and end_time to be set")
-
         # Fetch what's in TimeWarrior
         timew_intervals = fetch_timew_intervals(self.start_time, self.end_time)
 
