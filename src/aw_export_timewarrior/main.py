@@ -1131,11 +1131,9 @@ class Exporter:
             if event['timestamp'] < self.last_tick or event['timestamp'] < self.last_known_tick:
                 if event['data'] == {'status': 'not-afk'}:
                     continue
-                #if event['timestamp']+event['duration'] > self.last_known_tick:
-                    #import pdb; pdb.set_trace()
-                elif event['data'] != {'status': 'afk'} and event['timestamp'] > self.last_start_time:
-                    #if event['duration']>timedelta(seconds=30):
-                        #import pdb; pdb.set_trace()
+                if event['data'] != {'status': 'afk'} and event['timestamp'] > self.last_start_time:
+                    if self.enable_pdb and event['duration']>timedelta(seconds=30):
+                        import pdb; pdb.set_trace()
                     ## Do we need an exception here for afk events?
                     self.log(f"skipping event as the timestamp is too old - {event}", event=event)
                     continue

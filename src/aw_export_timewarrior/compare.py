@@ -307,19 +307,39 @@ def format_timeline(timew_intervals: List[TimewInterval],
     lines.append(f"Time range: {start_local.strftime('%Y-%m-%d %H:%M:%S')} - {end_local.strftime('%H:%M:%S')}")
     lines.append("")
 
-    # Collect all time points (start and end of all intervals)
+    # Collect all time points from timew intervals (include those starting before start_time)
+    # and from suggested intervals (only those within the requested window)
     time_points = set()
-    time_points.add(start_time)
-    time_points.add(end_time)
 
+    # Add all timew interval boundaries that overlap with or extend into the display window
     for interval in timew_intervals:
+        interval_end = interval.end if interval.end else datetime.max.replace(tzinfo=timezone.utc)
+        # Skip intervals that end before the window starts
+        if interval_end <= start_time:
+            continue
+        # Skip intervals that start after the window ends
+        if interval.start >= end_time:
+            continue
+        # Add start time (even if before start_time - we'll show it)
         time_points.add(interval.start)
+        # Add end time if it exists
         if interval.end:
             time_points.add(interval.end)
 
+    # Add suggested interval boundaries only within the requested window
     for interval in suggested_intervals:
-        time_points.add(interval.start)
-        time_points.add(interval.end)
+        # Skip intervals completely outside the window
+        if interval.end <= start_time or interval.start >= end_time:
+            continue
+        # Add start/end times only if within the window
+        if interval.start >= start_time:
+            time_points.add(interval.start)
+        if interval.end <= end_time:
+            time_points.add(interval.end)
+
+    # Always include the requested window boundaries
+    time_points.add(start_time)
+    time_points.add(end_time)
 
     # Sort time points
     time_points = sorted(time_points)
@@ -328,50 +348,94 @@ def format_timeline(timew_intervals: List[TimewInterval],
     lines.append(f"{'Time':<20} {'TimeWarrior':<40} {'ActivityWatch':<40}")
     lines.append("-" * 100)
 
+    # Track previous intervals to detect continuations
+    prev_timew_active = None
+    prev_suggested_active = None
+
     for i, time_point in enumerate(time_points[:-1]):
         next_point = time_points[i + 1]
         time_local = time_point.astimezone()
         time_str = time_local.strftime('%H:%M:%S')
 
-        # Find what's active in this time slice
+        # Check if this time slice is within the requested window
+        in_requested_window = time_point >= start_time and next_point <= end_time
+
+        # Find what's active in this time slice [time_point, next_point)
+        # An interval is active if it overlaps with this time slice
         timew_active = []
         for interval in timew_intervals:
-            if interval.start <= time_point and (not interval.end or interval.end > time_point):
+            # Check if interval overlaps with [time_point, next_point)
+            interval_end = interval.end if interval.end else datetime.max.replace(tzinfo=timezone.utc)
+            if interval.start < next_point and interval_end > time_point:
                 timew_active.append(interval)
 
         suggested_active = []
         for interval in suggested_intervals:
-            if interval.start <= time_point and interval.end > time_point:
+            # Check if interval overlaps with [time_point, next_point)
+            if interval.start < next_point and interval.end > time_point:
                 suggested_active.append(interval)
 
-        # Format the active intervals
+        # Format the TimeWarrior intervals
         if timew_active:
-            timew_str = ", ".join([", ".join(sorted(iv.tags)) for iv in timew_active])
-            if len(timew_str) > 38:
-                timew_str = timew_str[:35] + "..."
+            # Check if any interval starts exactly at this time point
+            interval_starts_here = any(iv.start == time_point for iv in timew_active)
+
+            # Check if this interval started before the requested window and is continuing through
+            interval_from_before_window = (in_requested_window and
+                                          len(timew_active) == 1 and
+                                          timew_active[0].start < start_time)
+
+            # Show continuation marker if:
+            # 1. We're in the requested window, AND
+            # 2. The interval started before the window, AND
+            # 3. No new interval starts at this time point
+            if interval_from_before_window and not interval_starts_here:
+                # Interval from before the window continuing - show blank or continuation marker
+                timew_str = ""
+            else:
+                # New interval or interval that started in this window - show tags
+                timew_str = ", ".join([", ".join(sorted(iv.tags)) for iv in timew_active])
+                if len(timew_str) > 38:
+                    timew_str = timew_str[:35] + "..."
         else:
             timew_str = colored("(no tracking)", "red")
 
-        if suggested_active:
+        prev_timew_active = timew_active
+
+        # Format the ActivityWatch intervals
+        if not in_requested_window:
+            # Outside requested window - mark as N/A
+            suggested_str = "(N/A - outside window)"
+        elif suggested_active:
             suggested_str = ", ".join([", ".join(sorted(iv.tags)) for iv in suggested_active])
             if len(suggested_str) > 38:
                 suggested_str = suggested_str[:35] + "..."
         else:
             suggested_str = colored("(no activity)", "yellow")
 
-        # Color code based on match status
-        if timew_active and suggested_active:
-            # Both have something - check if tags match
-            timew_tags = set().union(*[iv.tags for iv in timew_active])
-            suggested_tags = set().union(*[iv.tags for iv in suggested_active])
-            if timew_tags == suggested_tags:
-                # Perfect match
-                timew_str = colored(timew_str, "green")
-                suggested_str = colored(suggested_str, "green")
-            else:
-                # Different tags
-                timew_str = colored(timew_str, "yellow")
-                suggested_str = colored(suggested_str, "yellow")
+        # Color code based on match status (only for time slices within requested window)
+        if in_requested_window:
+            # Check if timew interval is from before the window (blank display)
+            timew_from_before = (timew_active and
+                               len(timew_active) == 1 and
+                               timew_active[0].start < start_time and
+                               timew_str == "")
+
+            if timew_active and suggested_active and not timew_from_before:
+                # Both have something in the window - check if tags match
+                timew_tags = set().union(*[iv.tags for iv in timew_active])
+                suggested_tags = set().union(*[iv.tags for iv in suggested_active])
+                if timew_tags == suggested_tags:
+                    # Perfect match
+                    timew_str = colored(timew_str, "green")
+                    suggested_str = colored(suggested_str, "green")
+                else:
+                    # Different tags
+                    timew_str = colored(timew_str, "yellow")
+                    suggested_str = colored(suggested_str, "yellow")
+            elif (not timew_active or timew_from_before) and suggested_active:
+                # Missing from TimeWarrior (or timew interval is from before window) - mark as red
+                suggested_str = colored(suggested_str, "red")
 
         lines.append(f"{time_str:<20} {timew_str:<50} {suggested_str:<50}")
 
