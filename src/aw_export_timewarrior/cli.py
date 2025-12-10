@@ -115,7 +115,12 @@ Examples:
     sync_parser.add_argument(
         '--dry-run',
         action='store_true',
-        help='Show what would be done without modifying TimeWarrior'
+        help='Show what would be done without modifying TimeWarrior.'
+    )
+    sync_parser.add_argument(
+        '--no-dry-run',
+        action='store_true',
+        help='dry-run is by default enabled when using test-data.  This option explicitly disables dry run'
     )
     sync_parser.add_argument(
         '--once',
@@ -218,6 +223,23 @@ Examples:
         '--verbose', '-v',
         action='store_true',
         help='Show more details in the diff'
+    )
+    diff_parser.add_argument(
+        '--timeline',
+        action='store_true',
+        help='Show side-by-side timeline of TimeWarrior vs ActivityWatch intervals'
+    )
+    diff_parser.add_argument(
+        '--test-data',
+        metavar='FILE',
+        type=Path,
+        help='Use test data instead of live ActivityWatch'
+    )
+    diff_parser.add_argument(
+        '--config',
+        metavar='FILE',
+        type=Path,
+        help='Path to configuration file'
     )
 
     # ===== ANALYZE subcommand =====
@@ -477,6 +499,9 @@ def run_sync(args: argparse.Namespace) -> int:
             end_time = parse_datetime(test_data['metadata']['end_time'])
             print(f"Using end time from test data: {end_time}")
 
+    if args.test_data and not args.no_dry_run:
+        args.dry_run = True
+
     # Create exporter with options
     exporter = Exporter(
         dry_run=args.dry_run,
@@ -503,6 +528,7 @@ def run_sync(args: argparse.Namespace) -> int:
         if start_time and end_time:
             print(f"Processing time range: {start_time} to {end_time}")
         else:
+            ## TODO: is this right?  Do we ever get to this line in the first place?
             print("Starting continuous monitoring (Ctrl+C to stop)...")
 
         while exporter.tick():
@@ -516,11 +542,32 @@ def run_sync(args: argparse.Namespace) -> int:
 
 def run_diff(args: argparse.Namespace) -> int:
     """Execute the diff subcommand."""
-    from .export import parse_datetime
+    from .export import parse_datetime, load_test_data
+
+    # Load test data if specified
+    test_data = None
+    if hasattr(args, 'test_data') and args.test_data:
+        print(f"Loading test data from {args.test_data}")
+        test_data = load_test_data(args.test_data)
 
     # Parse start/end times with defaults
-    start_time = parse_datetime(args.start) if args.start else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    end_time = parse_datetime(args.end) if args.end else datetime.now(timezone.utc)
+    start_time = parse_datetime(args.start) if hasattr(args, 'start') and args.start else None
+    end_time = parse_datetime(args.end) if hasattr(args, 'end') and args.end else None
+
+    # Extract start/end times from test data metadata if not provided via CLI
+    if test_data:
+        if not start_time and 'metadata' in test_data and 'start_time' in test_data['metadata']:
+            start_time = parse_datetime(test_data['metadata']['start_time'])
+            print(f"Using start time from test data: {start_time}")
+        if not end_time and 'metadata' in test_data and 'end_time' in test_data['metadata']:
+            end_time = parse_datetime(test_data['metadata']['end_time'])
+            print(f"Using end time from test data: {end_time}")
+
+    # Apply defaults if still not set
+    if not start_time:
+        start_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    if not end_time:
+        end_time = datetime.now(timezone.utc)
 
     print(f"Comparing time range: {start_time} to {end_time}")
 
@@ -535,7 +582,9 @@ def run_diff(args: argparse.Namespace) -> int:
         hide_diff_report=args.hide_report,
         enable_pdb=args.pdb,
         start_time=start_time,
-        end_time=end_time
+        end_time=end_time,
+        test_data=test_data,
+        show_timeline=args.timeline if hasattr(args, 'timeline') else False
     )
 
     # Process all events first (to build suggested intervals)

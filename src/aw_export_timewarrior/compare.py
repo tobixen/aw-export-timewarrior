@@ -276,3 +276,110 @@ def generate_fix_commands(comparison: Dict[str, List]) -> List[str]:
         commands.append(f"timew retag @{timew_int.id} {tags}")
 
     return commands
+
+
+def format_timeline(timew_intervals: List[TimewInterval],
+                   suggested_intervals: List[SuggestedInterval],
+                   start_time: datetime,
+                   end_time: datetime) -> str:
+    """
+    Format a timeline view showing TimeWarrior vs ActivityWatch intervals side-by-side.
+
+    Args:
+        timew_intervals: List of intervals from TimeWarrior
+        suggested_intervals: List of suggested intervals from ActivityWatch
+        start_time: Start of the time range
+        end_time: End of the time range
+
+    Returns:
+        Formatted timeline string
+    """
+    lines = []
+    lines.append("=" * 100)
+    lines.append("Timeline: TimeWarrior vs ActivityWatch")
+    lines.append("=" * 100)
+    lines.append("")
+
+    # Convert to local time for display
+    start_local = start_time.astimezone()
+    end_local = end_time.astimezone()
+
+    lines.append(f"Time range: {start_local.strftime('%Y-%m-%d %H:%M:%S')} - {end_local.strftime('%H:%M:%S')}")
+    lines.append("")
+
+    # Collect all time points (start and end of all intervals)
+    time_points = set()
+    time_points.add(start_time)
+    time_points.add(end_time)
+
+    for interval in timew_intervals:
+        time_points.add(interval.start)
+        if interval.end:
+            time_points.add(interval.end)
+
+    for interval in suggested_intervals:
+        time_points.add(interval.start)
+        time_points.add(interval.end)
+
+    # Sort time points
+    time_points = sorted(time_points)
+
+    # Create timeline entries
+    lines.append(f"{'Time':<20} {'TimeWarrior':<40} {'ActivityWatch':<40}")
+    lines.append("-" * 100)
+
+    for i, time_point in enumerate(time_points[:-1]):
+        next_point = time_points[i + 1]
+        time_local = time_point.astimezone()
+        time_str = time_local.strftime('%H:%M:%S')
+
+        # Find what's active in this time slice
+        timew_active = []
+        for interval in timew_intervals:
+            if interval.start <= time_point and (not interval.end or interval.end > time_point):
+                timew_active.append(interval)
+
+        suggested_active = []
+        for interval in suggested_intervals:
+            if interval.start <= time_point and interval.end > time_point:
+                suggested_active.append(interval)
+
+        # Format the active intervals
+        if timew_active:
+            timew_str = ", ".join([", ".join(sorted(iv.tags)) for iv in timew_active])
+            if len(timew_str) > 38:
+                timew_str = timew_str[:35] + "..."
+        else:
+            timew_str = colored("(no tracking)", "red")
+
+        if suggested_active:
+            suggested_str = ", ".join([", ".join(sorted(iv.tags)) for iv in suggested_active])
+            if len(suggested_str) > 38:
+                suggested_str = suggested_str[:35] + "..."
+        else:
+            suggested_str = colored("(no activity)", "yellow")
+
+        # Color code based on match status
+        if timew_active and suggested_active:
+            # Both have something - check if tags match
+            timew_tags = set().union(*[iv.tags for iv in timew_active])
+            suggested_tags = set().union(*[iv.tags for iv in suggested_active])
+            if timew_tags == suggested_tags:
+                # Perfect match
+                timew_str = colored(timew_str, "green")
+                suggested_str = colored(suggested_str, "green")
+            else:
+                # Different tags
+                timew_str = colored(timew_str, "yellow")
+                suggested_str = colored(suggested_str, "yellow")
+
+        lines.append(f"{time_str:<20} {timew_str:<50} {suggested_str:<50}")
+
+    lines.append("")
+    lines.append("Legend:")
+    lines.append(f"  {colored('Green', 'green')}  - Matching intervals")
+    lines.append(f"  {colored('Yellow', 'yellow')} - Different tags")
+    lines.append(f"  {colored('Red', 'red')}    - Missing from TimeWarrior")
+    lines.append("")
+
+    return "\n".join(lines)

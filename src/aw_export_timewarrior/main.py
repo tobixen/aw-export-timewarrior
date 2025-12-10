@@ -261,6 +261,7 @@ class Exporter:
     hide_diff_report: bool = False  # If True, hide the detailed comparison report
     hide_processing_output: bool = False  # If True, hide "would execute" messages
     show_unmatched: bool = False  # If True, show events that didn't match any rules
+    show_timeline: bool = False  # If True, show side-by-side timeline view in diff mode
     enable_pdb: bool = False  # If True, drop into debugger on unexpected states
     config_path: str = None  # Optional path to config file
     test_data: dict = None  # Optional test data instead of querying AW
@@ -405,7 +406,7 @@ class Exporter:
         Returns:
             Comparison dictionary with keys: 'matching', 'different_tags', 'missing', 'extra'
         """
-        from .compare import fetch_timew_intervals, compare_intervals, format_diff_output, generate_fix_commands
+        from .compare import fetch_timew_intervals, compare_intervals, format_diff_output, generate_fix_commands, format_timeline
 
         if not self.show_diff:
             return {}
@@ -419,8 +420,13 @@ class Exporter:
         # Compare
         comparison = compare_intervals(timew_intervals, suggested_intervals)
 
-        # Display comparison report (unless hidden)
-        if not self.hide_diff_report:
+        # Display timeline view if requested
+        if self.show_timeline:
+            timeline_output = format_timeline(timew_intervals, suggested_intervals, self.start_time, self.end_time)
+            print(timeline_output)
+
+        # Display comparison report (unless hidden or showing timeline)
+        if not self.hide_diff_report and not self.show_timeline:
             output = format_diff_output(comparison, verbose=self.verbose)
             print(output)
 
@@ -627,25 +633,26 @@ class Exporter:
         self.set_known_tick_stats(event=event, start=since)
 
         # Only update timew_info if not in dry-run mode
-        if not self.dry_run and not self.test_data:
+        if not self.dry_run:
             self.set_timew_info(timew_retag(get_timew_info(), capture_to=self.captured_commands))
 
         ## Special logic with 'override', 'manual' and 'unknown' should be documented or removed!
-        if 'override' in self.timew_info['tags']:
-            return
-        if 'manual' in self.timew_info['tags'] and 'unknown' in tags:
-            return
-        if set(tags).issubset(self.timew_info['tags']):
-            return
+        if self.timew_info is not None:
+            if 'override' in self.timew_info['tags']:
+                return
+            if 'manual' in self.timew_info['tags'] and 'unknown' in tags:
+                return
+            if set(tags).issubset(self.timew_info['tags']):
+                return
         tags = retag_by_rules(tags, self.config)
         assert not exclusive_overlapping(tags, self.config)
         timew_run(['start'] + list(tags) + ['~aw', since.astimezone().strftime('%FT%H:%M:%S')],
-                  dry_run=self.dry_run or bool(self.test_data),
+                  dry_run=self.dry_run,
                   capture_to=self.captured_commands if self.dry_run else None,
                   hide_output=self.hide_processing_output)
 
         # Only update timew_info after command if not in dry-run mode
-        if not self.dry_run and not self.test_data:
+        if not self.dry_run:
             self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run, capture_to=self.captured_commands))
 
     def pretty_accumulator_string(self) -> str:
@@ -1200,7 +1207,7 @@ class Exporter:
 
             ## Check - if `timew start` was run manually since last "known tick", then reset everything
             # Only update timew_info if not in dry-run mode
-            if not self.dry_run and not self.test_data:
+            if not self.dry_run:
                 self.set_timew_info(timew_retag(get_timew_info(), capture_to=self.captured_commands))
             if interval_since_last_known_tick.total_seconds() > MIN_RECORDING_INTERVAL_ADJ and any(x for x in self.tags_accumulated_time if x not in SPECIAL_TAGS and self.tags_accumulated_time[x].total_seconds()>MIN_RECORDING_INTERVAL_ADJ):
                 self.log("Emptying the accumulator!")
@@ -1234,6 +1241,16 @@ class Exporter:
         return cnt>1
 
     def set_timew_info(self, timew_info):
+        """Set the current TimeWarrior tracking info.
+
+        Args:
+            timew_info: Current interval info, or None if no active tracking
+        """
+        if timew_info is None:
+            # No active tracking
+            self.timew_info = None
+            return
+
         if self.afk is None and 'afk' in timew_info['tags']:
             self.afk = True
         if self.afk is None and 'not-afk' in timew_info['tags']:
@@ -1257,7 +1274,7 @@ class Exporter:
             bool: True if processing should continue, False if we've reached the end
         """
         # In test mode or dry-run with start_time, skip getting real timew info
-        if self.test_data or (self.dry_run and self.start_time):
+        if self.dry_run and self.start_time:
             # Create mock timew_info for test/dry-run mode
             if not self.timew_info:
                 mock_start = self.start_time or datetime.now(timezone.utc)
@@ -1344,13 +1361,24 @@ def check_bucket_updated(bucket: dict) -> None:
 
 ## TODO: none of this has anything to do with ActivityWatch and can be moved to a separate module
 def get_timew_info():
-    ## TODO: this will break if there is no active tracking
-    current_timew = json.loads(subprocess.check_output(["timew", "get", "dom.active.json"]))
-    dt = datetime.strptime(current_timew['start'], "%Y%m%dT%H%M%SZ")
-    dt = dt.replace(tzinfo=timezone.utc)
-    current_timew['start_dt'] = dt
-    current_timew['tags'] = set(current_timew['tags'])
-    return current_timew
+    """Get information about the currently active TimeWarrior interval.
+
+    Returns:
+        dict: Information about the active interval, or None if there's no active tracking
+    """
+    try:
+        current_timew = json.loads(subprocess.check_output(
+            ["timew", "get", "dom.active.json"],
+            stderr=subprocess.DEVNULL
+        ))
+        dt = datetime.strptime(current_timew['start'], "%Y%m%dT%H%M%SZ")
+        dt = dt.replace(tzinfo=timezone.utc)
+        current_timew['start_dt'] = dt
+        current_timew['tags'] = set(current_timew['tags'])
+        return current_timew
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
+        # No active tracking, empty database, or invalid data
+        return None
 
 def timew_run(commands, dry_run=False, capture_to=None, hide_output=False):
     """
@@ -1415,13 +1443,28 @@ def retag_by_rules(source_tags, cfg=None):
     return new_tags
 
 def timew_retag(timew_info, dry_run=False, capture_to=None):
+    """Retag the current TimeWarrior interval according to rules.
+
+    Args:
+        timew_info: Current TimeWarrior interval info, or None if no active tracking
+        dry_run: If True, don't execute commands
+        capture_to: Optional list to capture commands to
+
+    Returns:
+        Updated timew_info, or None if no active tracking
+    """
+    if timew_info is None:
+        # No active tracking, nothing to retag
+        return None
+
     source_tags = set(timew_info['tags'])
     new_tags = retag_by_rules(source_tags)
     if new_tags != source_tags:
         timew_run(["retag"] + list(new_tags), dry_run=dry_run, capture_to=capture_to)
         if not dry_run:
             timew_info = get_timew_info()
-            assert set(timew_info['tags']) == new_tags
+            if timew_info:  # Check if still active
+                assert set(timew_info['tags']) == new_tags
         return timew_info
     return timew_info
 

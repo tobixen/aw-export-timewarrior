@@ -16,10 +16,10 @@ The command capture infrastructure allows you to:
 
 ```python
 from aw_export_timewarrior.main import Exporter
-from tests.helpers import TestDataBuilder
+from tests.helpers import FixtureDataBuilder
 
 # Create test data
-data = (TestDataBuilder()
+data = (FixtureDataBuilder()
     .add_window_event("Code", "main.py", duration=600)
     .add_afk_event("not-afk", duration=600)
     .add_window_event("Chrome", "GitHub", duration=600)
@@ -248,5 +248,5 @@ def debug_processing():
 ## See Also
 
 - `tests/test_command_capture.py` - Example tests
-- `tests/helpers.py` - TestDataBuilder for creating fixtures
+- `tests/helpers.py` - FixtureDataBuilder for creating fixtures
 - `TESTING.md` - General testing documentation

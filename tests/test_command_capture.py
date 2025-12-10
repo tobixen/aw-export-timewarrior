@@ -9,13 +9,13 @@ allowing us to verify what commands would be executed without actually running t
 import pytest
 from datetime import datetime, timezone
 from aw_export_timewarrior.main import Exporter
-from tests.helpers import TestDataBuilder
+from tests.helpers import FixtureDataBuilder
 
 
 def test_basic_command_capture() -> None:
     """Test that commands are captured in dry-run mode."""
     # Create simple test data - need at least 3 events for processing
-    data = (TestDataBuilder()
+    data = (FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
         .add_window_event("Code", "test.py - VS Code", duration=600)
@@ -55,7 +55,7 @@ def test_basic_command_capture() -> None:
 
 def test_multiple_ticks_accumulate_commands() -> None:
     """Test that multiple ticks accumulate commands."""
-    data = (TestDataBuilder()
+    data = (FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=300)
         .add_afk_event("not-afk", duration=300)
         .add_window_event("Chrome", "GitHub", duration=300)
@@ -83,7 +83,7 @@ def test_multiple_ticks_accumulate_commands() -> None:
 
 def test_clear_captured_commands() -> None:
     """Test that captured commands can be cleared."""
-    data = (TestDataBuilder()
+    data = (FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
         .add_window_event("Code", "test.py - VS Code", duration=600)
@@ -108,7 +108,7 @@ def test_commands_not_captured_in_normal_mode() -> None:
     """Test that commands are NOT captured when not in dry-run mode."""
     # Note: This test doesn't actually run timew commands because we're using test_data
     # In real use without test_data, it would try to run actual commands
-    data = (TestDataBuilder()
+    data = (FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
         .add_window_event("Code", "test.py - VS Code", duration=600)
@@ -132,7 +132,7 @@ def test_commands_not_captured_in_normal_mode() -> None:
 
 def test_command_format() -> None:
     """Test that captured commands have the expected format."""
-    data = (TestDataBuilder()
+    data = (FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
         .add_window_event("Code", "test.py - VS Code", duration=600)

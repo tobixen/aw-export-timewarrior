@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union
 
 
-class TestDataBuilder:
+class FixtureDataBuilder:
     """
     Builder class for creating test data.
 
@@ -17,7 +17,7 @@ class TestDataBuilder:
     with window events, AFK events, browser events, etc.
 
     Example:
-        >>> data = (TestDataBuilder()
+        >>> data = (FixtureDataBuilder()
         ...     .add_window_event("vscode", "main.py", duration=600)
         ...     .add_afk_event("not-afk", duration=600)
         ...     .build())
@@ -89,7 +89,7 @@ class TestDataBuilder:
         title: str,
         duration: Union[int, timedelta],
         timestamp: Optional[datetime] = None
-    ) -> 'TestDataBuilder':
+    ) -> 'FixtureDataBuilder':
         """
         Add a window event.
 
@@ -127,7 +127,7 @@ class TestDataBuilder:
         status: str,
         duration: Union[int, timedelta],
         timestamp: Optional[datetime] = None
-    ) -> 'TestDataBuilder':
+    ) -> 'FixtureDataBuilder':
         """
         Add an AFK status event.
 
@@ -163,7 +163,7 @@ class TestDataBuilder:
         title: str,
         duration: Union[int, timedelta],
         timestamp: Optional[datetime] = None
-    ) -> 'TestDataBuilder':
+    ) -> 'FixtureDataBuilder':
         """
         Add a browser event.
 
@@ -202,7 +202,7 @@ class TestDataBuilder:
         language: str = 'python',
         duration: Union[int, timedelta] = 0,
         timestamp: Optional[datetime] = None
-    ) -> 'TestDataBuilder':
+    ) -> 'FixtureDataBuilder':
         """
         Add an editor event.
 
@@ -236,7 +236,7 @@ class TestDataBuilder:
 
         return self
 
-    def set_time(self, new_time: datetime) -> 'TestDataBuilder':
+    def set_time(self, new_time: datetime) -> 'FixtureDataBuilder':
         """
         Set the current time for subsequent events.
 
@@ -249,7 +249,7 @@ class TestDataBuilder:
         self.current_time = new_time
         return self
 
-    def advance_time(self, delta: Union[int, timedelta]) -> 'TestDataBuilder':
+    def advance_time(self, delta: Union[int, timedelta]) -> 'FixtureDataBuilder':
         """
         Advance the current time by a delta.
 
@@ -293,7 +293,7 @@ def create_simple_work_session():
     Returns:
         Test data for a typical work session
     """
-    return (TestDataBuilder()
+    return (FixtureDataBuilder()
         .add_afk_event('not-afk', 600)
         .add_window_event('vscode', 'main.py - Visual Studio Code', 600)
         .add_editor_event('/home/user/project/main.py', 'project', 'python', 600)
@@ -310,7 +310,7 @@ def create_afk_transition_fixture():
     Returns:
         Test data for AFK transition scenario
     """
-    return (TestDataBuilder()
+    return (FixtureDataBuilder()
         .add_window_event('vscode', 'main.py', 300)  # 5 min work
         .add_afk_event('not-afk', 300)
         .advance_time(0)  # Reset to same time for AFK event

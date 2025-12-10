@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "export_time": "2025-12-10T07:42:53.509582+00:00",
+    "export_time": "2025-12-10T10:22:38.404394+00:00",
     "start_time": "2025-12-09T11:00:00+00:00",
     "end_time": "2025-12-09T11:15:00+00:00",
     "duration_seconds": 900.0,
@@ -96,7 +96,7 @@
           "incognito": false,
           "tabCount": 11,
           "title": "Application Window",
-          "url": "https://example.com/chat/12345"
+          "url": "https://web.telegram.org/chat"
         }
       }
     ],
@@ -107,7 +107,7 @@
         "duration": 73.093367,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -116,7 +116,7 @@
         "duration": 10.878685,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -125,7 +125,7 @@
         "duration": 0.980926,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -134,7 +134,7 @@
         "duration": 9.669257,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -143,7 +143,7 @@
         "duration": 0.003803,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -152,7 +152,7 @@
         "duration": 1.849137,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -161,7 +161,7 @@
         "duration": 9.765129,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -170,7 +170,7 @@
         "duration": 0.003121,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -179,7 +179,7 @@
         "duration": 0.480375,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -188,7 +188,7 @@
         "duration": 10.09225,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -197,7 +197,7 @@
         "duration": 0.003156,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -206,7 +206,7 @@
         "duration": 0.46992,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -215,7 +215,7 @@
         "duration": 35.505527,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -224,7 +224,7 @@
         "duration": 0.003104,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -233,7 +233,7 @@
         "duration": 8.642703,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -242,7 +242,7 @@
         "duration": 4.260749,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -251,7 +251,7 @@
         "duration": 0.002948,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -260,7 +260,7 @@
         "duration": 0.005221,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -269,7 +269,7 @@
         "duration": 7.399863,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -278,7 +278,7 @@
         "duration": 0.245273,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -296,7 +296,7 @@
         "duration": 0.440729,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -305,7 +305,7 @@
         "duration": 11.260804,
         "data": {
           "app": "Emacs",
-          "title": "file.txt - GNU Emacs at localhost"
+          "title": "main.py - GNU Emacs at localhost"
         }
       },
       {
@@ -314,7 +314,7 @@
         "duration": 13.805769,
         "data": {
           "app": "Emacs",
-          "title": "file.txt - GNU Emacs at localhost"
+          "title": "main.py - GNU Emacs at localhost"
         }
       },
       {
@@ -323,7 +323,7 @@
         "duration": 1.375722,
         "data": {
           "app": "Emacs",
-          "title": "file.txt - GNU Emacs at localhost"
+          "title": "main.py - GNU Emacs at localhost"
         }
       },
       {
@@ -332,7 +332,7 @@
         "duration": 83.538416,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -341,7 +341,7 @@
         "duration": 1.615885,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -349,8 +349,8 @@
         "timestamp": "2025-12-09T11:10:12.059000+00:00",
         "duration": 0.38085,
         "data": {
-          "app": "chromium",
-          "title": "Web Page - Chromium"
+          "app": "Code",
+          "title": "main.py - Visual Studio Code"
         }
       },
       {
@@ -359,7 +359,7 @@
         "duration": 21.42361,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -368,7 +368,7 @@
         "duration": 3.245454,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -386,7 +386,7 @@
         "duration": 0.229893,
         "data": {
           "app": "Emacs",
-          "title": "file.txt - GNU Emacs at localhost"
+          "title": "main.py - GNU Emacs at localhost"
         }
       },
       {
@@ -404,7 +404,7 @@
         "duration": 2.946919,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -422,7 +422,7 @@
         "duration": 0.363179,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -431,7 +431,7 @@
         "duration": 0.630402,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -458,7 +458,7 @@
         "duration": 17.576176,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -467,7 +467,7 @@
         "duration": 16.894389,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -476,7 +476,7 @@
         "duration": 23.957371,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -485,7 +485,7 @@
         "duration": 0.775504,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -503,7 +503,7 @@
         "duration": 0.285821,
         "data": {
           "app": "Emacs",
-          "title": "file.txt - GNU Emacs at localhost"
+          "title": "main.py - GNU Emacs at localhost"
         }
       },
       {
@@ -539,7 +539,7 @@
         "duration": 0.551597,
         "data": {
           "app": "Emacs",
-          "title": "file.txt - GNU Emacs at localhost"
+          "title": "main.py - GNU Emacs at localhost"
         }
       },
       {
@@ -557,7 +557,7 @@
         "duration": 38.227053,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -566,7 +566,7 @@
         "duration": 0.040028,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -575,7 +575,7 @@
         "duration": 2.17244,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -584,7 +584,7 @@
         "duration": 1.27337,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -593,7 +593,7 @@
         "duration": 0.917529,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -611,7 +611,7 @@
         "duration": 10.481839,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -620,7 +620,7 @@
         "duration": 0.728812,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -629,7 +629,7 @@
         "duration": 15.872794,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -638,7 +638,7 @@
         "duration": 0.194196,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -674,7 +674,7 @@
         "duration": 6.691143,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -710,7 +710,7 @@
         "duration": 1.441057,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -728,7 +728,7 @@
         "duration": 15.367083,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -755,7 +755,7 @@
         "duration": 0.273926,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -773,7 +773,7 @@
         "duration": 18.505821,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -782,7 +782,7 @@
         "duration": 18.898221,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -791,7 +791,7 @@
         "duration": 2.264191,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -800,7 +800,7 @@
         "duration": 0.556576,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -809,7 +809,7 @@
         "duration": 3.266579,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -818,7 +818,7 @@
         "duration": 0.00395,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -827,7 +827,7 @@
         "duration": 1.639744,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -836,7 +836,7 @@
         "duration": 4.028364,
         "data": {
           "app": "gcr-prompter",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -845,7 +845,7 @@
         "duration": 0.00394,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -854,7 +854,7 @@
         "duration": 0.490881,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -863,7 +863,7 @@
         "duration": 0.388812,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -872,7 +872,7 @@
         "duration": 1.376929,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -881,7 +881,7 @@
         "duration": 1.523259,
         "data": {
           "app": "gcr-prompter",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -890,7 +890,7 @@
         "duration": 0.346736,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -899,7 +899,7 @@
         "duration": 0.003007,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -908,7 +908,7 @@
         "duration": 0.004644,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -917,7 +917,7 @@
         "duration": 0.402977,
         "data": {
           "app": "foot",
-          "title": "terminal"
+          "title": "terminal - foot"
         }
       },
       {
@@ -926,7 +926,7 @@
         "duration": 1.211932,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -935,7 +935,7 @@
         "duration": 0.004158,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -944,7 +944,7 @@
         "duration": 0.003757,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -953,7 +953,7 @@
         "duration": 1.420081,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -971,7 +971,7 @@
         "duration": 0.279539,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -1007,7 +1007,7 @@
         "duration": 0.412721,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -1025,7 +1025,7 @@
         "duration": 0.367143,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -1043,7 +1043,7 @@
         "duration": 215.596135,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       },
       {
@@ -1052,7 +1052,7 @@
         "duration": 104.142295,
         "data": {
           "app": "foot",
-          "title": "Application Window"
+          "title": "terminal - foot"
         }
       }
     ],
@@ -1063,8 +1063,8 @@
         "duration": 32.0,
         "data": {
           "branch": "unknown",
-          "file": "/home/user/project/file.md",
-          "language": "markdown-mode",
+          "file": "/home/user/myproject/tests/test_app.py",
+          "language": "python-mode",
           "project": "myproject"
         }
       },
@@ -1074,7 +1074,7 @@
         "duration": 0.0,
         "data": {
           "branch": "unknown",
-          "file": "/home/user/project/file.md",
+          "file": "/home/user/myproject/README.md",
           "language": "markdown-mode",
           "project": "myproject"
         }
@@ -1085,8 +1085,8 @@
         "duration": 0.0,
         "data": {
           "branch": "unknown",
-          "file": "/home/user/project/file.md",
-          "language": "markdown-mode",
+          "file": "/home/user/myproject/src/main.py",
+          "language": "python-mode",
           "project": "myproject"
         }
       }
@@ -1101,7 +1101,7 @@
           "incognito": false,
           "tabCount": 25,
           "title": "Application Window",
-          "url": "https://chat.example.com/team/channel"
+          "url": "https://chat.company.com/team/general"
         }
       },
       {
@@ -1113,7 +1113,7 @@
           "incognito": false,
           "tabCount": 25,
           "title": "Application Window",
-          "url": "https://chat.example.com/team/channel"
+          "url": "https://chat.company.com/team/general"
         }
       },
       {
@@ -1125,7 +1125,7 @@
           "incognito": false,
           "tabCount": 25,
           "title": "Application Window",
-          "url": "https://mail.example.com"
+          "url": "https://mail.company.com/inbox"
         }
       },
       {
@@ -1137,7 +1137,7 @@
           "incognito": false,
           "tabCount": 25,
           "title": "Application Window",
-          "url": "https://mail.example.com"
+          "url": "https://mail.company.com/inbox"
         }
       },
       {
@@ -1149,7 +1149,7 @@
           "incognito": false,
           "tabCount": 25,
           "title": "Application Window",
-          "url": "https://github.com/user/repo"
+          "url": "https://github.com/user/myproject"
         }
       }
     ],

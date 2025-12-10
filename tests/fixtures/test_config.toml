@@ -1,21 +1,44 @@
-# Test configuration for simple_work_session.json
+# Test configuration for sample_15min.json
 
 [tags.coding]
 source_tags = ["python", "coding"]
 prepend = ["4work"]
 
+[tags.learning]
+source_tags = ["learning", "python"]
+prepend = ["4work"]
+
+# Editor rules - match Python files
 [rules.editor.python]
 file_regexp = "\\.py$"
 timew_tags = ["coding", "python"]
 
+# VSCode/Code app rules
 [rules.app.vscode]
 app_names = ["Code"]
 title_regexp = "\\.py"
 timew_tags = ["coding", "python"]
 
+# Emacs app rules
+[rules.app.emacs]
+app_names = ["Emacs"]
+title_regexp = "\\.py"
+timew_tags = ["coding", "python"]
+
+# Browser rules - Python documentation
 [rules.browser.python-docs]
 url_regexp = "docs\\.python\\.org"
 timew_tags = ["learning", "python"]
+
+# Browser rules - GitHub
+[rules.browser.github]
+url_regexp = "github\\.com"
+timew_tags = ["coding", "browsing"]
+
+# Terminal/foot app
+[rules.app.terminal]
+app_names = ["foot"]
+timew_tags = ["terminal", "4work"]
 
 [exclusive.main_category]
 tags = ["4work", "4break", "4chores"]

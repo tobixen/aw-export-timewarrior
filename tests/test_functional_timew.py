@@ -3,12 +3,17 @@ Functional tests using a real TimeWarrior database.
 
 These tests set up a temporary TimeWarrior database and test the actual
 integration with the timew command-line tool.
+
+When reviewed using Human Stupidity, this test was found to be too many code
+lines and not really testing what it should test, so new approach is coming
+up in `test_functional.py`.
 """
 
 import json
 import os
 import subprocess
 import tempfile
+from argparse import Namespace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List
@@ -16,8 +21,12 @@ from typing import Dict, List
 import pytest
 
 from aw_export_timewarrior.main import Exporter
+from aw_export_timewarrior.cli import run_sync, run_diff
 from aw_export_timewarrior.compare import fetch_timew_intervals, SuggestedInterval
 
+class MockNamespace(Namespace):
+    def __getattr__(self, name):
+        return None  # All unset attributes return None
 
 class TimewTestDatabase:
     """Context manager for a temporary TimeWarrior database."""
@@ -360,7 +369,7 @@ class TestApplyFix:
 
 
 class TestSyncWithRealData:
-    """Test syncing real ActivityWatch export data to TimeWarrior, AI version."""
+    """Test syncing real ActivityWatch export data to TimeWarrior, AI-version."""
 
     def test_sync_and_diff_sample_data(self, timew_db: TimewTestDatabase) -> None:
         """Test syncing sample data and verifying no differences with diff."""

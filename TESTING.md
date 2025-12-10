@@ -124,11 +124,11 @@ aw-export-timewarrior --dry-run --test-data tests/fixtures/afk_transition.json -
 #### Method 2: Use the Builder API
 
 ```python
-from tests.helpers import TestDataBuilder
+from tests.helpers import FixtureDataBuilder
 import json
 
 # Build a test scenario
-data = (TestDataBuilder()
+data = (FixtureDataBuilder()
     .add_window_event("vscode", "main.py", duration=600)
     .add_afk_event("not-afk", duration=600)
     .add_browser_event("https://github.com/user/repo", "GitHub", duration=300)
@@ -149,11 +149,11 @@ Copy an existing fixture and modify it. See `tests/fixtures/README.md` for forma
 
 ```python
 from aw_export_timewarrior.main import Exporter
-from tests.helpers import TestDataBuilder
+from tests.helpers import FixtureDataBuilder
 
 def test_work_session_tagging():
     # Create test data
-    data = (TestDataBuilder()
+    data = (FixtureDataBuilder()
         .add_window_event("vscode", "main.py", 600)
         .add_afk_event("not-afk", 600)
         .build())
@@ -337,5 +337,5 @@ Check:
 ## Further Reading
 
 - `tests/fixtures/README.md` - Detailed fixture format documentation
-- `tests/helpers.py` - TestDataBuilder API documentation
+- `tests/helpers.py` - FixtureDataBuilder API documentation
 - `src/aw_export_timewarrior/export.py` - Export functionality source

@@ -27,11 +27,11 @@ aw-export-timewarrior --dry-run --test-data tests/fixtures/simple_work_session.j
 ### In Unit Tests
 
 ```python
-from tests.helpers import TestDataBuilder
+from tests.helpers import FixtureDataBuilder
 
 def test_my_scenario():
     # Option 1: Use the builder
-    data = (TestDataBuilder()
+    data = (FixtureDataBuilder()
         .add_window_event("vscode", "main.py", 600)
         .add_afk_event("not-afk", 600)
         .build())
@@ -110,10 +110,10 @@ Then edit the file to:
 ### Method 2: Use the Builder
 
 ```python
-from tests.helpers import TestDataBuilder
+from tests.helpers import FixtureDataBuilder
 import json
 
-data = (TestDataBuilder()
+data = (FixtureDataBuilder()
     .add_window_event('vscode', 'bug.py', 300)
     .add_afk_event('not-afk', 300)
     .add_browser_event('https://stackoverflow.com/...', 'Stack Overflow', 180)

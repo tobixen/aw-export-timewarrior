@@ -75,11 +75,32 @@ class TestGetTimewInfo:
     @patch('subprocess.check_output')
     def test_get_timew_info_command(self, mock_subprocess: Mock) -> None:
         """Test that correct timewarrior command is called."""
+        import subprocess
         mock_subprocess.return_value = b'{"id": 1, "start": "20250528T140000Z", "tags": []}'
 
         get_timew_info()
 
-        mock_subprocess.assert_called_once_with(["timew", "get", "dom.active.json"])
+        mock_subprocess.assert_called_once_with(["timew", "get", "dom.active.json"], stderr=subprocess.DEVNULL)
+
+    @patch('subprocess.check_output')
+    def test_get_timew_info_no_active_tracking(self, mock_subprocess: Mock) -> None:
+        """Test that get_timew_info returns None when there's no active tracking."""
+        import subprocess
+        mock_subprocess.side_effect = subprocess.CalledProcessError(255, ['timew', 'get', 'dom.active.json'])
+
+        result = get_timew_info()
+
+        assert result is None
+
+    @patch('subprocess.check_output')
+    def test_get_timew_info_invalid_json(self, mock_subprocess: Mock) -> None:
+        """Test that get_timew_info returns None when timew returns invalid JSON."""
+        import subprocess
+        mock_subprocess.return_value = b'invalid json'
+
+        result = get_timew_info()
+
+        assert result is None
 
 
 class TestTimewRun:
