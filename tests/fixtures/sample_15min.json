@@ -1,0 +1,1183 @@
+{
+  "metadata": {
+    "export_time": "2025-12-10T07:42:53.509582+00:00",
+    "start_time": "2025-12-09T11:00:00+00:00",
+    "end_time": "2025-12-09T11:15:00+00:00",
+    "duration_seconds": 900.0,
+    "anonymized": true
+  },
+  "buckets": {
+    "aw-watcher-network_archlinux": {
+      "id": "aw-watcher-network_archlinux",
+      "name": "aw-watcher-network_archlinux",
+      "type": "ping",
+      "client": "aw-watcher-network",
+      "hostname": "archlinux",
+      "created": "2025-05-21T09:49:47.191402Z"
+    },
+    "aw-watcher-wifi_archlinux": {
+      "id": "aw-watcher-wifi_archlinux",
+      "name": "aw-watcher-wifi_archlinux",
+      "type": "wifi-status",
+      "client": "aw-watcher-network",
+      "hostname": "archlinux",
+      "created": "2025-07-12T17:51:56.593557Z"
+    },
+    "aw-watcher-web-firefox_archlinux": {
+      "id": "aw-watcher-web-firefox_archlinux",
+      "name": "aw-watcher-web-firefox_archlinux",
+      "type": "web.tab.current",
+      "client": "aw-client-web",
+      "hostname": "archlinux",
+      "created": "2025-05-10T00:51:28.572646Z"
+    },
+    "aw-watcher-window_archlinux": {
+      "id": "aw-watcher-window_archlinux",
+      "name": "aw-watcher-window_archlinux",
+      "type": "currentwindow",
+      "client": "aw-watcher-window",
+      "hostname": "archlinux",
+      "created": "2025-05-09T23:47:16.203153Z"
+    },
+    "aw-watcher-emacs_archlinux": {
+      "id": "aw-watcher-emacs_archlinux",
+      "name": "aw-watcher-emacs_archlinux",
+      "type": "app.editor.activity",
+      "client": "emacs-activity-watch",
+      "hostname": "archlinux",
+      "created": "2025-05-10T00:18:10.037492Z"
+    },
+    "aw-watcher-web-chrome_archlinux": {
+      "id": "aw-watcher-web-chrome_archlinux",
+      "name": "aw-watcher-web-chrome_archlinux",
+      "type": "web.tab.current",
+      "client": "aw-client-web",
+      "hostname": "archlinux",
+      "created": "2025-05-10T00:28:00.852397Z"
+    },
+    "aw-watcher-afk_archlinux": {
+      "id": "aw-watcher-afk_archlinux",
+      "name": "aw-watcher-afk_archlinux",
+      "type": "afkstatus",
+      "client": "aw-watcher-afk",
+      "hostname": "archlinux",
+      "created": "2025-05-09T23:47:16.176215Z"
+    }
+  },
+  "events": {
+    "aw-watcher-network_archlinux": [
+      {
+        "id": 385838,
+        "timestamp": "2025-12-09T11:00:00+00:00",
+        "duration": 900.0,
+        "data": {
+          "title": "Application Window"
+        }
+      }
+    ],
+    "aw-watcher-wifi_archlinux": [
+      {
+        "id": 385850,
+        "timestamp": "2025-12-09T11:00:00+00:00",
+        "duration": 900.0,
+        "data": {
+          "ssids": [],
+          "title": "Application Window"
+        }
+      }
+    ],
+    "aw-watcher-web-firefox_archlinux": [
+      {
+        "id": 385835,
+        "timestamp": "2025-12-09T11:00:00+00:00",
+        "duration": 900.0,
+        "data": {
+          "audible": false,
+          "incognito": false,
+          "tabCount": 11,
+          "title": "Application Window",
+          "url": "https://example.com/chat/12345"
+        }
+      }
+    ],
+    "aw-watcher-window_archlinux": [
+      {
+        "id": 386076,
+        "timestamp": "2025-12-09T11:13:46.906000+00:00",
+        "duration": 73.093367,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386075,
+        "timestamp": "2025-12-09T11:13:35.948000+00:00",
+        "duration": 10.878685,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386074,
+        "timestamp": "2025-12-09T11:13:34.880000+00:00",
+        "duration": 0.980926,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386073,
+        "timestamp": "2025-12-09T11:13:25.144000+00:00",
+        "duration": 9.669257,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386072,
+        "timestamp": "2025-12-09T11:13:25.093000+00:00",
+        "duration": 0.003803,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386071,
+        "timestamp": "2025-12-09T11:13:23.182000+00:00",
+        "duration": 1.849137,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386070,
+        "timestamp": "2025-12-09T11:13:13.348000+00:00",
+        "duration": 9.765129,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386069,
+        "timestamp": "2025-12-09T11:13:13.299000+00:00",
+        "duration": 0.003121,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386068,
+        "timestamp": "2025-12-09T11:13:12.756000+00:00",
+        "duration": 0.480375,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386067,
+        "timestamp": "2025-12-09T11:13:02.595000+00:00",
+        "duration": 10.09225,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386066,
+        "timestamp": "2025-12-09T11:13:02.544000+00:00",
+        "duration": 0.003156,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386065,
+        "timestamp": "2025-12-09T11:13:02.012000+00:00",
+        "duration": 0.46992,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386064,
+        "timestamp": "2025-12-09T11:12:26.433000+00:00",
+        "duration": 35.505527,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386063,
+        "timestamp": "2025-12-09T11:12:26.380000+00:00",
+        "duration": 0.003104,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386062,
+        "timestamp": "2025-12-09T11:12:17.675000+00:00",
+        "duration": 8.642703,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386061,
+        "timestamp": "2025-12-09T11:12:13.333000+00:00",
+        "duration": 4.260749,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386060,
+        "timestamp": "2025-12-09T11:12:13.284000+00:00",
+        "duration": 0.002948,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386059,
+        "timestamp": "2025-12-09T11:12:13.222000+00:00",
+        "duration": 0.005221,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386058,
+        "timestamp": "2025-12-09T11:12:05.773000+00:00",
+        "duration": 7.399863,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 386057,
+        "timestamp": "2025-12-09T11:12:05.376000+00:00",
+        "duration": 0.245273,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386056,
+        "timestamp": "2025-12-09T11:12:05.103000+00:00",
+        "duration": 0.194154,
+        "data": {
+          "app": "firefox",
+          "title": "Web Page \u2014 Mozilla Firefox"
+        }
+      },
+      {
+        "id": 386055,
+        "timestamp": "2025-12-09T11:12:04.553000+00:00",
+        "duration": 0.440729,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386053,
+        "timestamp": "2025-12-09T11:11:53.180000+00:00",
+        "duration": 11.260804,
+        "data": {
+          "app": "Emacs",
+          "title": "file.txt - GNU Emacs at localhost"
+        }
+      },
+      {
+        "id": 386052,
+        "timestamp": "2025-12-09T11:11:39.320000+00:00",
+        "duration": 13.805769,
+        "data": {
+          "app": "Emacs",
+          "title": "file.txt - GNU Emacs at localhost"
+        }
+      },
+      {
+        "id": 386051,
+        "timestamp": "2025-12-09T11:11:37.878000+00:00",
+        "duration": 1.375722,
+        "data": {
+          "app": "Emacs",
+          "title": "file.txt - GNU Emacs at localhost"
+        }
+      },
+      {
+        "id": 386049,
+        "timestamp": "2025-12-09T11:10:14.233000+00:00",
+        "duration": 83.538416,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386048,
+        "timestamp": "2025-12-09T11:10:12.537000+00:00",
+        "duration": 1.615885,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386047,
+        "timestamp": "2025-12-09T11:10:12.059000+00:00",
+        "duration": 0.38085,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386045,
+        "timestamp": "2025-12-09T11:09:50.545000+00:00",
+        "duration": 21.42361,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386044,
+        "timestamp": "2025-12-09T11:09:47.216000+00:00",
+        "duration": 3.245454,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386043,
+        "timestamp": "2025-12-09T11:09:46.787000+00:00",
+        "duration": 0.246467,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386042,
+        "timestamp": "2025-12-09T11:09:46.438000+00:00",
+        "duration": 0.229893,
+        "data": {
+          "app": "Emacs",
+          "title": "file.txt - GNU Emacs at localhost"
+        }
+      },
+      {
+        "id": 386041,
+        "timestamp": "2025-12-09T11:09:46.005000+00:00",
+        "duration": 0.338132,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386040,
+        "timestamp": "2025-12-09T11:09:42.991000+00:00",
+        "duration": 2.946919,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 386039,
+        "timestamp": "2025-12-09T11:09:42.619000+00:00",
+        "duration": 0.289728,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386038,
+        "timestamp": "2025-12-09T11:09:42.171000+00:00",
+        "duration": 0.363179,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 386037,
+        "timestamp": "2025-12-09T11:09:41.485000+00:00",
+        "duration": 0.630402,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386036,
+        "timestamp": "2025-12-09T11:09:40.795000+00:00",
+        "duration": 0.543792,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386035,
+        "timestamp": "2025-12-09T11:09:40.351000+00:00",
+        "duration": 0.355667,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386034,
+        "timestamp": "2025-12-09T11:09:22.671000+00:00",
+        "duration": 17.576176,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 386032,
+        "timestamp": "2025-12-09T11:09:05.712000+00:00",
+        "duration": 16.894389,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 386031,
+        "timestamp": "2025-12-09T11:08:41.676000+00:00",
+        "duration": 23.957371,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 386030,
+        "timestamp": "2025-12-09T11:08:40.832000+00:00",
+        "duration": 0.775504,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386029,
+        "timestamp": "2025-12-09T11:08:40.669000+00:00",
+        "duration": 0.093485,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386028,
+        "timestamp": "2025-12-09T11:08:40.265000+00:00",
+        "duration": 0.285821,
+        "data": {
+          "app": "Emacs",
+          "title": "file.txt - GNU Emacs at localhost"
+        }
+      },
+      {
+        "id": 386027,
+        "timestamp": "2025-12-09T11:08:38.503000+00:00",
+        "duration": 1.673679,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386026,
+        "timestamp": "2025-12-09T11:08:33.811000+00:00",
+        "duration": 4.590928,
+        "data": {
+          "app": "DeltaChat",
+          "title": "Delta Chat"
+        }
+      },
+      {
+        "id": 386025,
+        "timestamp": "2025-12-09T11:08:33.522000+00:00",
+        "duration": 0.20358,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386024,
+        "timestamp": "2025-12-09T11:08:32.830000+00:00",
+        "duration": 0.551597,
+        "data": {
+          "app": "Emacs",
+          "title": "file.txt - GNU Emacs at localhost"
+        }
+      },
+      {
+        "id": 386023,
+        "timestamp": "2025-12-09T11:08:32.287000+00:00",
+        "duration": 0.445631,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386022,
+        "timestamp": "2025-12-09T11:07:53.970000+00:00",
+        "duration": 38.227053,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386021,
+        "timestamp": "2025-12-09T11:07:53.867000+00:00",
+        "duration": 0.040028,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386020,
+        "timestamp": "2025-12-09T11:07:51.617000+00:00",
+        "duration": 2.17244,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386019,
+        "timestamp": "2025-12-09T11:07:50.262000+00:00",
+        "duration": 1.27337,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386018,
+        "timestamp": "2025-12-09T11:07:49.269000+00:00",
+        "duration": 0.917529,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386017,
+        "timestamp": "2025-12-09T11:07:40.055000+00:00",
+        "duration": 9.121759,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386016,
+        "timestamp": "2025-12-09T11:07:29.480000+00:00",
+        "duration": 10.481839,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 386015,
+        "timestamp": "2025-12-09T11:07:28.663000+00:00",
+        "duration": 0.728812,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 386014,
+        "timestamp": "2025-12-09T11:07:12.726000+00:00",
+        "duration": 15.872794,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 386013,
+        "timestamp": "2025-12-09T11:07:12.473000+00:00",
+        "duration": 0.194196,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386012,
+        "timestamp": "2025-12-09T11:07:11.831000+00:00",
+        "duration": 0.55476,
+        "data": {
+          "app": "firefox",
+          "title": "Web Page \u2014 Mozilla Firefox"
+        }
+      },
+      {
+        "id": 386010,
+        "timestamp": "2025-12-09T11:07:07.697000+00:00",
+        "duration": 4.03738,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386008,
+        "timestamp": "2025-12-09T11:07:05.017000+00:00",
+        "duration": 2.593347,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386007,
+        "timestamp": "2025-12-09T11:06:58.220000+00:00",
+        "duration": 6.691143,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386006,
+        "timestamp": "2025-12-09T11:06:57.964000+00:00",
+        "duration": 0.137964,
+        "data": {
+          "app": "firefox",
+          "title": "Web Page \u2014 Mozilla Firefox"
+        }
+      },
+      {
+        "id": 386005,
+        "timestamp": "2025-12-09T11:06:57.292000+00:00",
+        "duration": 0.558742,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386004,
+        "timestamp": "2025-12-09T11:06:51.822000+00:00",
+        "duration": 5.391173,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386003,
+        "timestamp": "2025-12-09T11:06:50.296000+00:00",
+        "duration": 1.441057,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 386002,
+        "timestamp": "2025-12-09T11:06:49.321000+00:00",
+        "duration": 0.799625,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 386001,
+        "timestamp": "2025-12-09T11:06:33.864000+00:00",
+        "duration": 15.367083,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 386000,
+        "timestamp": "2025-12-09T11:06:32.738000+00:00",
+        "duration": 1.038364,
+        "data": {
+          "app": "firefox",
+          "title": "Web Page \u2014 Mozilla Firefox"
+        }
+      },
+      {
+        "id": 385999,
+        "timestamp": "2025-12-09T11:06:32.422000+00:00",
+        "duration": 0.199161,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 385998,
+        "timestamp": "2025-12-09T11:06:32.048000+00:00",
+        "duration": 0.273926,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385997,
+        "timestamp": "2025-12-09T11:06:31.331000+00:00",
+        "duration": 0.62909,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 385996,
+        "timestamp": "2025-12-09T11:06:12.728000+00:00",
+        "duration": 18.505821,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385995,
+        "timestamp": "2025-12-09T11:05:53.762000+00:00",
+        "duration": 18.898221,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385994,
+        "timestamp": "2025-12-09T11:05:51.439000+00:00",
+        "duration": 2.264191,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385993,
+        "timestamp": "2025-12-09T11:05:50.822000+00:00",
+        "duration": 0.556576,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385992,
+        "timestamp": "2025-12-09T11:05:47.495000+00:00",
+        "duration": 3.266579,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385991,
+        "timestamp": "2025-12-09T11:05:47.437000+00:00",
+        "duration": 0.00395,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385990,
+        "timestamp": "2025-12-09T11:05:45.671000+00:00",
+        "duration": 1.639744,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385989,
+        "timestamp": "2025-12-09T11:05:41.576000+00:00",
+        "duration": 4.028364,
+        "data": {
+          "app": "gcr-prompter",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385988,
+        "timestamp": "2025-12-09T11:05:41.505000+00:00",
+        "duration": 0.00394,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385987,
+        "timestamp": "2025-12-09T11:05:40.944000+00:00",
+        "duration": 0.490881,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385986,
+        "timestamp": "2025-12-09T11:05:40.494000+00:00",
+        "duration": 0.388812,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385985,
+        "timestamp": "2025-12-09T11:05:39.034000+00:00",
+        "duration": 1.376929,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385984,
+        "timestamp": "2025-12-09T11:05:37.450000+00:00",
+        "duration": 1.523259,
+        "data": {
+          "app": "gcr-prompter",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385983,
+        "timestamp": "2025-12-09T11:05:37.040000+00:00",
+        "duration": 0.346736,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385982,
+        "timestamp": "2025-12-09T11:05:36.988000+00:00",
+        "duration": 0.003007,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385981,
+        "timestamp": "2025-12-09T11:05:36.921000+00:00",
+        "duration": 0.004644,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385980,
+        "timestamp": "2025-12-09T11:05:36.459000+00:00",
+        "duration": 0.402977,
+        "data": {
+          "app": "foot",
+          "title": "terminal"
+        }
+      },
+      {
+        "id": 385979,
+        "timestamp": "2025-12-09T11:05:35.182000+00:00",
+        "duration": 1.211932,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385978,
+        "timestamp": "2025-12-09T11:05:35.126000+00:00",
+        "duration": 0.004158,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385977,
+        "timestamp": "2025-12-09T11:05:35.054000+00:00",
+        "duration": 0.003757,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385976,
+        "timestamp": "2025-12-09T11:05:33.572000+00:00",
+        "duration": 1.420081,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385975,
+        "timestamp": "2025-12-09T11:05:33.371000+00:00",
+        "duration": 0.121666,
+        "data": {
+          "app": "firefox",
+          "title": "Web Page \u2014 Mozilla Firefox"
+        }
+      },
+      {
+        "id": 385974,
+        "timestamp": "2025-12-09T11:05:33.001000+00:00",
+        "duration": 0.279539,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385973,
+        "timestamp": "2025-12-09T11:05:25.760000+00:00",
+        "duration": 7.15978,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 385971,
+        "timestamp": "2025-12-09T11:05:25.567000+00:00",
+        "duration": 0.119858,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 385970,
+        "timestamp": "2025-12-09T11:05:23.140000+00:00",
+        "duration": 2.341468,
+        "data": {
+          "app": "chromium",
+          "title": "Web Page - Chromium"
+        }
+      },
+      {
+        "id": 385969,
+        "timestamp": "2025-12-09T11:05:22.665000+00:00",
+        "duration": 0.412721,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385968,
+        "timestamp": "2025-12-09T11:05:20.570000+00:00",
+        "duration": 2.020039,
+        "data": {
+          "app": "firefox",
+          "title": "Web Page \u2014 Mozilla Firefox"
+        }
+      },
+      {
+        "id": 385967,
+        "timestamp": "2025-12-09T11:05:20.118000+00:00",
+        "duration": 0.367143,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385966,
+        "timestamp": "2025-12-09T11:05:19.904000+00:00",
+        "duration": 0.137302,
+        "data": {
+          "app": "firefox",
+          "title": "Web Page \u2014 Mozilla Firefox"
+        }
+      },
+      {
+        "id": 385963,
+        "timestamp": "2025-12-09T11:01:44.211000+00:00",
+        "duration": 215.596135,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      },
+      {
+        "id": 385962,
+        "timestamp": "2025-12-09T11:00:00+00:00",
+        "duration": 104.142295,
+        "data": {
+          "app": "foot",
+          "title": "Application Window"
+        }
+      }
+    ],
+    "aw-watcher-emacs_archlinux": [
+      {
+        "id": 386054,
+        "timestamp": "2025-12-09T11:11:54+00:00",
+        "duration": 32.0,
+        "data": {
+          "branch": "unknown",
+          "file": "/home/user/project/file.md",
+          "language": "markdown-mode",
+          "project": "myproject"
+        }
+      },
+      {
+        "id": 386050,
+        "timestamp": "2025-12-09T11:10:16+00:00",
+        "duration": 0.0,
+        "data": {
+          "branch": "unknown",
+          "file": "/home/user/project/file.md",
+          "language": "markdown-mode",
+          "project": "myproject"
+        }
+      },
+      {
+        "id": 386033,
+        "timestamp": "2025-12-09T11:09:11+00:00",
+        "duration": 0.0,
+        "data": {
+          "branch": "unknown",
+          "file": "/home/user/project/file.md",
+          "language": "markdown-mode",
+          "project": "myproject"
+        }
+      }
+    ],
+    "aw-watcher-web-chrome_archlinux": [
+      {
+        "id": 386011,
+        "timestamp": "2025-12-09T11:10:07.460000+00:00",
+        "duration": 292.54,
+        "data": {
+          "audible": false,
+          "incognito": false,
+          "tabCount": 25,
+          "title": "Application Window",
+          "url": "https://chat.example.com/team/channel"
+        }
+      },
+      {
+        "id": 386046,
+        "timestamp": "2025-12-09T11:10:07.460000+00:00",
+        "duration": 0.0,
+        "data": {
+          "audible": false,
+          "incognito": false,
+          "tabCount": 25,
+          "title": "Application Window",
+          "url": "https://chat.example.com/team/channel"
+        }
+      },
+      {
+        "id": 385972,
+        "timestamp": "2025-12-09T11:07:06.381000+00:00",
+        "duration": 1.254,
+        "data": {
+          "audible": false,
+          "incognito": false,
+          "tabCount": 25,
+          "title": "Application Window",
+          "url": "https://mail.example.com"
+        }
+      },
+      {
+        "id": 386009,
+        "timestamp": "2025-12-09T11:07:06.381000+00:00",
+        "duration": 1.254,
+        "data": {
+          "audible": false,
+          "incognito": false,
+          "tabCount": 25,
+          "title": "Application Window",
+          "url": "https://mail.example.com"
+        }
+      },
+      {
+        "id": 385834,
+        "timestamp": "2025-12-09T11:00:00+00:00",
+        "duration": 325.504,
+        "data": {
+          "audible": false,
+          "incognito": false,
+          "tabCount": 25,
+          "title": "Application Window",
+          "url": "https://github.com/user/repo"
+        }
+      }
+    ],
+    "aw-watcher-afk_archlinux": [
+      {
+        "id": 385965,
+        "timestamp": "2025-12-09T11:03:57.145000+00:00",
+        "duration": 662.854097,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 385964,
+        "timestamp": "2025-12-09T11:03:43.044000+00:00",
+        "duration": 12.258075,
+        "data": {
+          "status": "afk"
+        }
+      },
+      {
+        "id": 385836,
+        "timestamp": "2025-12-09T11:00:00+00:00",
+        "duration": 100.316938,
+        "data": {
+          "status": "not-afk"
+        }
+      }
+    ]
+  }
+}
