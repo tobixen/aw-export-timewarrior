@@ -377,23 +377,17 @@ def format_timeline(timew_intervals: List[TimewInterval],
 
         # Format the TimeWarrior intervals
         if timew_active:
-            # Check if any interval starts exactly at this time point
-            interval_starts_here = any(iv.start == time_point for iv in timew_active)
-
             # Check if this interval started before the requested window and is continuing through
+            # We show it blank for ALL time points in the window (not just when no interval starts)
             interval_from_before_window = (in_requested_window and
                                           len(timew_active) == 1 and
                                           timew_active[0].start < start_time)
 
-            # Show continuation marker if:
-            # 1. We're in the requested window, AND
-            # 2. The interval started before the window, AND
-            # 3. No new interval starts at this time point
-            if interval_from_before_window and not interval_starts_here:
-                # Interval from before the window continuing - show blank or continuation marker
+            if interval_from_before_window:
+                # Interval from before the window continuing - show blank
                 timew_str = ""
             else:
-                # New interval or interval that started in this window - show tags
+                # Interval that started in this window - show tags
                 timew_str = ", ".join([", ".join(sorted(iv.tags)) for iv in timew_active])
                 if len(timew_str) > 38:
                     timew_str = timew_str[:35] + "..."
