@@ -7,7 +7,21 @@ and fixtures for aw-export-timewarrior.
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union
+import pytest
 
+
+sleep_counter=0
+@pytest.fixture(autouse=True)  # Applies to all tests automatically
+def no_sleep(monkeypatch):
+    global sleep_counter
+    assert sleep_counter<200
+    sleep_counter += 1
+    def fake_sleep(seconds):
+        print(f"SLEEP requested for {seconds}seconds")
+    from aw_export_timewarrior import main
+    import time
+    monkeypatch.setattr(time, 'sleep', fake_sleep)
+    monkeypatch.setattr(main, 'sleep', fake_sleep)
 
 class FixtureDataBuilder:
     """

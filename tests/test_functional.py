@@ -2,6 +2,7 @@ from argparse import Namespace
 from aw_export_timewarrior.cli import run_sync, run_diff
 from pathlib import Path
 import pytest
+from tests.helpers import no_sleep
 
 @pytest.fixture
 def test_env(tmp_path, monkeypatch):

@@ -9,8 +9,8 @@ allowing us to verify what commands would be executed without actually running t
 import pytest
 from datetime import datetime, timezone
 from aw_export_timewarrior.main import Exporter
-from tests.helpers import FixtureDataBuilder
-
+from aw_export_timewarrior import main 
+from tests.helpers import FixtureDataBuilder, no_sleep
 
 def test_basic_command_capture() -> None:
     """Test that commands are captured in dry-run mode."""

@@ -198,15 +198,10 @@ def ts2strtime(ts):
 
 def load_config(config_path):
     # Load custom config if provided
+    from . import config as config_module
     if config_path:
-        from . import config as config_module
         config_module.load_custom_config(config_path)
-        return config_module.config
-    else:
-        from .config import config as global_config
-        return global_config
-
-
+    return config_module.config
 
 ## We keep quite some statistics here, all the counters should be documented
 ## TODO: Resetting counters should be done through explicit methods in this class and
@@ -280,7 +275,7 @@ class Exporter:
     unmatched_events: list = field(default_factory=list)  # Tracks events that didn't match any rules
 
     def __post_init__(self):
-        if self.config_path and not self.config:
+        if not self.config:
             self.config = load_config(self.config_path)
         ## data fetching - skip if using test data
         if not self.test_data:
