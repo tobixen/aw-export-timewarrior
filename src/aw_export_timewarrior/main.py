@@ -188,7 +188,6 @@ SPECIAL_TAGS={'manual', 'override', 'not-afk'}
 MIN_RECORDING_INTERVAL_ADJ=MIN_RECORDING_INTERVAL*(1+STICKYNESS_FACTOR)
 MIN_TAG_RECORDING_INTERVAL_ADJ=MIN_TAG_RECORDING_INTERVAL*(1+STICKYNESS_FACTOR)
 
-
 def ts2str(ts, format="%FT%H:%M:%S"):
     return(ts.astimezone().strftime(format))
 
@@ -196,6 +195,18 @@ def ts2strtime(ts):
     if not ts:
         return "XX:XX:XX:"
     return ts2str(ts, "%H:%M:%S")
+
+def load_config(config_path):
+    # Load custom config if provided
+    if config_path:
+        from . import config as config_module
+        config_module.load_custom_config(config_path)
+        return config_module.config
+    else:
+        from .config import config as global_config
+        return global_config
+
+
 
 ## We keep quite some statistics here, all the counters should be documented
 ## TODO: Resetting counters should be done through explicit methods in this class and
@@ -260,7 +271,8 @@ class Exporter:
     show_unmatched: bool = False  # If True, show events that didn't match any rules
     show_timeline: bool = False  # If True, show side-by-side timeline view in diff mode
     enable_pdb: bool = False  # If True, drop into debugger on unexpected states
-    config_path: str = None  # Optional path to config file
+    config: dict = None  # Configuration
+    config_path: str = None  # Configuration file name
     test_data: dict = None  # Optional test data instead of querying AW
     start_time: datetime = None  # Optional start time for processing window
     end_time: datetime = None  # Optional end time for processing window
@@ -268,15 +280,8 @@ class Exporter:
     unmatched_events: list = field(default_factory=list)  # Tracks events that didn't match any rules
 
     def __post_init__(self):
-        # Load custom config if provided
-        if self.config_path:
-            from . import config as config_module
-            config_module.load_custom_config(self.config_path)
-            self.config = config_module.config
-        else:
-            from .config import config as global_config
-            self.config = global_config
-
+        if self.config_path and not self.config:
+            self.config = load_config(self.config_path)
         ## data fetching - skip if using test data
         if not self.test_data:
             if self.dry_run:

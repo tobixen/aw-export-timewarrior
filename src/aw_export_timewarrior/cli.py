@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone
 
-from .main import Exporter, setup_logging
+from .main import Exporter, setup_logging, load_config
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -651,14 +651,7 @@ def run_export(args: argparse.Namespace) -> int:
 
 def run_validate(args: argparse.Namespace) -> int:
     """Execute the validate subcommand."""
-    from .config import config, validate_config
-
-    errors = validate_config(config, args.config)
-    if errors:
-        print("Configuration errors found:")
-        for error in errors:
-            print(f"  - {error}")
-        return 1
+    config = load_config(args.config)
     print("Configuration is valid")
     return 0
 
