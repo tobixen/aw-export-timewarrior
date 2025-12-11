@@ -250,11 +250,14 @@ def generate_fix_commands(comparison: Dict[str, List]) -> List[str]:
     Uses 'timew track' for missing intervals and 'timew retag' for intervals
     with different tags.
 
+    Commands for manually-entered events (those without ~aw tag) are commented out
+    to prevent accidental overwriting.
+
     Args:
         comparison: Result from compare_intervals
 
     Returns:
-        List of timew command strings
+        List of timew command strings (may include commented lines)
     """
     commands = []
 
@@ -273,7 +276,25 @@ def generate_fix_commands(comparison: Dict[str, List]) -> List[str]:
         # First, remove all existing tags, then add the suggested ones
         # This is done by specifying all new tags - timew retag replaces all tags
         tags = ' '.join(sorted(suggested.tags))
-        commands.append(f"timew retag @{timew_int.id} {tags}")
+
+        # Format timestamp for comment
+        timestamp_str = timew_int.start.astimezone().strftime('%Y-%m-%d %H:%M')
+
+        # Format old tags for comment
+        old_tags_str = ' '.join(sorted(timew_int.tags))
+
+        # Check if this is a manually-entered event (no ~aw tag)
+        is_manual = '~aw' not in timew_int.tags
+
+        # Build the command with comment
+        base_cmd = f"timew retag @{timew_int.id} {tags}"
+        comment = f"  # {timestamp_str} - old tags: {old_tags_str}"
+
+        # Comment out the entire command if it's a manually-entered event
+        if is_manual:
+            commands.append(f"# {base_cmd}{comment}")
+        else:
+            commands.append(f"{base_cmd}{comment}")
 
     return commands
 
