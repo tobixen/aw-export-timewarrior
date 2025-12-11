@@ -11,9 +11,6 @@ import re
 import os
 import sys
 
-## We have lots of breakpoints in the code.  Remove this line while debugging/developing ...
-breakpoint = lambda: None
-
 from .config import config
 
 # Configure structured logging
@@ -310,6 +307,10 @@ class Exporter:
                 assert bucketclient in self.bucket_by_client
                 for b in self.bucket_by_client[bucketclient]:
                     check_bucket_updated(self.buckets[b])
+
+    def breakpoint(self):
+        if self.enable_pdb:
+            breakpoint()
 
     def load_test_data(self, file_path):
         """Load test data from a JSON/YAML file."""
@@ -614,18 +615,18 @@ class Exporter:
         ## time we're supposed to track, something is also probably
         ## wrong and should be investigated
         if tags != { 'afk' } and not self.afk and not self.manual_tracking and last_activity_run_time.total_seconds() < MIN_RECORDING_INTERVAL-3:
-            breakpoint()
+            self.breakpoint()
 
         ## If the tracked time is less than the known events time we've counted
         ## then something is a little bit wrong.
         if tags != { 'afk' } and tracked_gap < self.total_time_known_events:
-            breakpoint()
+            self.breakpoint()
 
         ## If he time tracked is way longer than the
         ## self.total_time_known_events, something is probably wrong
         ## and should be investigated
         if tags != { 'afk' } and tracked_gap.total_seconds()>MAX_MIXED_INTERVAL and self.total_time_known_events/tracked_gap < 0.3 and not self.manual_tracking:
-            breakpoint()
+            self.breakpoint()
 
         if 'afk' in tags:
             self.afk = True
@@ -994,7 +995,7 @@ class Exporter:
             return False
         if 'afk' in tags and 'not-afk' in tags:
             ## Those are exclusive, should not happen!
-            breakpoint()
+            self.breakpoint()
         if self.afk is None:
             ## Program has just been started, and we don't know if we're afk or not
             if 'afk' in tags:
@@ -1010,13 +1011,13 @@ class Exporter:
                 ## This should probably be checked up ... we're already afk, but now
                 ## we got a new afk tag?
                 ## (possible reason: we had some few tags in between the afk runs, but without any tags)
-                breakpoint()
+                self.breakpoint()
                 self._afk_change_stats('afk', tags, event)
                 return True
             if not 'afk' in self.timew_info['tags']:
                 ## I'm apparently afk, but we're not tracking it in timew?
                 ## Something must have gone wrong somewhere?
-                breakpoint()
+                self.breakpoint()
             if 'not-afk' in tags:
                 self._afk_change_stats('not-afk', tags, event)
                 self.log(f"You have returned to the keyboard after {(event['timestamp']-self.last_start_time).total_seconds()}s absence", event=event)
@@ -1047,7 +1048,7 @@ class Exporter:
             elif 'afk' in tags:
                 ## We've gone afk ... in some weird way?
                 self._afk_change_stats('afk', tags, event)
-                breakpoint()
+                self.breakpoint()
                 return False
             else:
                 ## We're not afk and we've not gone afk
@@ -1163,7 +1164,7 @@ class Exporter:
                 num_skipped_events += 1
                 total_time_skipped_events += event['duration']
                 if total_time_skipped_events.total_seconds()>MIN_RECORDING_INTERVAL:
-                    breakpoint()
+                    self.breakpoint()
                 continue
             
             if tags is False:
@@ -1194,7 +1195,7 @@ class Exporter:
             interval_since_last_known_tick = event['timestamp'] + event['duration'] - self.last_known_tick
             if (interval_since_last_known_tick < timedelta(0)):
                 ## Something is very wrong here, it needs investigation.
-                breakpoint()
+                self.breakpoint()
             assert(interval_since_last_known_tick >= timedelta(0))
 
             ## Track things in internal accumulator if the focus between windows changes often
