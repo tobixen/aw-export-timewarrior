@@ -377,20 +377,17 @@ def format_timeline(timew_intervals: List[TimewInterval],
 
         # Format the TimeWarrior intervals
         if timew_active:
-            # Check if this interval started before the requested window and is continuing through
-            # We show it blank for ALL time points in the window (not just when no interval starts)
-            interval_from_before_window = (in_requested_window and
-                                          len(timew_active) == 1 and
-                                          timew_active[0].start < start_time)
+            # Check if any interval starts exactly at this time point
+            any_interval_starts_here = any(iv.start == time_point for iv in timew_active)
 
-            if interval_from_before_window:
-                # Interval from before the window continuing - show blank
-                timew_str = ""
-            else:
-                # Interval that started in this window - show tags
+            if any_interval_starts_here:
+                # Show tags when interval(s) start here
                 timew_str = ", ".join([", ".join(sorted(iv.tags)) for iv in timew_active])
                 if len(timew_str) > 38:
                     timew_str = timew_str[:35] + "..."
+            else:
+                # Continuing from previous time point - show blank
+                timew_str = ""
         else:
             timew_str = colored("(no tracking)", "red")
 
@@ -401,22 +398,25 @@ def format_timeline(timew_intervals: List[TimewInterval],
             # Outside requested window - mark as N/A
             suggested_str = "(N/A - outside window)"
         elif suggested_active:
-            suggested_str = ", ".join([", ".join(sorted(iv.tags)) for iv in suggested_active])
-            if len(suggested_str) > 38:
-                suggested_str = suggested_str[:35] + "..."
+            # Check if any interval starts exactly at this time point
+            any_aw_starts_here = any(iv.start == time_point for iv in suggested_active)
+
+            if any_aw_starts_here:
+                # Show tags when interval(s) start here
+                suggested_str = ", ".join([", ".join(sorted(iv.tags)) for iv in suggested_active])
+                if len(suggested_str) > 38:
+                    suggested_str = suggested_str[:35] + "..."
+            else:
+                # Continuing from previous time point - show blank
+                suggested_str = ""
         else:
             suggested_str = colored("(no activity)", "yellow")
 
         # Color code based on match status (only for time slices within requested window)
-        if in_requested_window:
-            # Check if timew interval is from before the window (blank display)
-            timew_from_before = (timew_active and
-                               len(timew_active) == 1 and
-                               timew_active[0].start < start_time and
-                               timew_str == "")
-
-            if timew_active and suggested_active and not timew_from_before:
-                # Both have something in the window - check if tags match
+        # Only color when we have actual text to display (not blank continuation lines)
+        if in_requested_window and timew_str and suggested_str:
+            if timew_active and suggested_active:
+                # Both have something - check if tags match
                 timew_tags = set().union(*[iv.tags for iv in timew_active])
                 suggested_tags = set().union(*[iv.tags for iv in suggested_active])
                 if timew_tags == suggested_tags:
@@ -427,9 +427,10 @@ def format_timeline(timew_intervals: List[TimewInterval],
                     # Different tags
                     timew_str = colored(timew_str, "yellow")
                     suggested_str = colored(suggested_str, "yellow")
-            elif (not timew_active or timew_from_before) and suggested_active:
-                # Missing from TimeWarrior (or timew interval is from before window) - mark as red
-                suggested_str = colored(suggested_str, "red")
+
+        # Color suggested intervals red when missing from timew (only when we display tags, not blanks)
+        if in_requested_window and not timew_active and suggested_active and suggested_str:
+            suggested_str = colored(suggested_str, "red")
 
         lines.append(f"{time_str:<20} {timew_str:<50} {suggested_str:<50}")
 
