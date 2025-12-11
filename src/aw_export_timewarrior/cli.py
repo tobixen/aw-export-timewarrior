@@ -26,6 +26,7 @@ Subcommands:
   diff      Compare TimeWarrior with ActivityWatch and optionally fix
   analyze   Analyze events and show unmatched activities
   export    Export ActivityWatch data to file
+  report    Generate detailed activity report
   validate  Validate configuration file
 
 Examples:
@@ -66,8 +67,8 @@ Examples:
     parser.add_argument(
         '--log-level',
         choices=['NONE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-        default='DEBUG',
-        help='Set logging level (default: DEBUG)'
+        default='WARNING',
+        help='Set logging level (default: WARNING)'
     )
     parser.add_argument(
         '--console-log-level',
@@ -339,6 +340,55 @@ Examples:
         help='Output file path (default: stdout). Use "-" for stdout or specify a file path'
     )
 
+    # ===== REPORT subcommand =====
+    report_parser = subparsers.add_parser(
+        'report',
+        help='Generate detailed activity report',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Report for today
+  %(prog)s --from today
+
+  # Report for a specific time range
+  %(prog)s --from "2025-12-10 09:00" --to "2025-12-10 17:00"
+
+  # Report with all columns
+  %(prog)s --from yesterday --all-columns
+
+  # Export report as CSV
+  %(prog)s --from yesterday --format csv > report.csv
+        """
+    )
+    report_parser.add_argument(
+        '--from', '--start',
+        dest='start',
+        metavar='TIME',
+        help='Start time (e.g., "yesterday", "2025-12-10", "2025-12-10 09:00")'
+    )
+    report_parser.add_argument(
+        '--to', '--end',
+        dest='end',
+        metavar='TIME',
+        help='End time (default: now)'
+    )
+    report_parser.add_argument(
+        '--all-columns',
+        action='store_true',
+        help='Show all available columns (default shows main columns only)'
+    )
+    report_parser.add_argument(
+        '--format',
+        choices=['table', 'csv', 'tsv'],
+        default='table',
+        help='Output format (default: table)'
+    )
+    report_parser.add_argument(
+        '--no-truncate',
+        action='store_true',
+        help='Do not truncate long values in table mode'
+    )
+
     # ===== VALIDATE subcommand =====
     validate_parser = subparsers.add_parser(
         'validate',
@@ -460,6 +510,12 @@ def validate_export_args(args: argparse.Namespace) -> Optional[str]:
     """Validate arguments for export subcommand."""
     # Export requires output file (enforced by required=True in argparse)
     # End without start doesn't make sense
+    return None
+
+
+def validate_report_args(args: argparse.Namespace) -> Optional[str]:
+    """Validate arguments for report subcommand."""
+    # No special validation needed
     return None
 
 
@@ -649,6 +705,31 @@ def run_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_report(args: argparse.Namespace) -> int:
+    """Execute the report subcommand."""
+    from .export import parse_datetime
+    from .report import generate_activity_report
+
+    # Parse start/end times with defaults
+    start_time = parse_datetime(args.start) if args.start else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_time = parse_datetime(args.end) if args.end else datetime.now(timezone.utc)
+
+    print(f"Generating report for: {start_time} to {end_time}", file=sys.stderr)
+
+    # Generate report
+    generate_activity_report(
+        start_time=start_time,
+        end_time=end_time,
+        config_path=args.config,
+        all_columns=args.all_columns,
+        format=args.format,
+        truncate=not args.no_truncate,
+        enable_pdb=args.pdb
+    )
+
+    return 0
+
+
 def run_validate(args: argparse.Namespace) -> int:
     """Execute the validate subcommand."""
     config = load_config(args.config)
@@ -714,6 +795,13 @@ def main(argv=None) -> int:
                 print(error, file=sys.stderr)
                 return 1
             return run_export(args)
+
+        elif subcommand == 'report':
+            error = validate_report_args(args)
+            if error:
+                print(error, file=sys.stderr)
+                return 1
+            return run_report(args)
 
         elif subcommand == 'validate':
             error = validate_validate_args(args)
