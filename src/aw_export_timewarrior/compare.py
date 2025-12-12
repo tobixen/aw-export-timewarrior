@@ -4,9 +4,7 @@ Comparison module for comparing TimeWarrior database with ActivityWatch suggesti
 
 import json
 import subprocess
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Set, Tuple, Optional
-from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 
 from termcolor import colored
 
@@ -14,7 +12,7 @@ from termcolor import colored
 class TimewInterval:
     """Represents a time interval in TimeWarrior."""
 
-    def __init__(self, id: int, start: datetime, end: Optional[datetime], tags: Set[str]):
+    def __init__(self, id: int, start: datetime, end: datetime | None, tags: set[str]):
         self.id = id
         self.start = start
         self.end = end
@@ -40,7 +38,7 @@ class TimewInterval:
 class SuggestedInterval:
     """Represents a suggested interval from ActivityWatch."""
 
-    def __init__(self, start: datetime, end: datetime, tags: Set[str]):
+    def __init__(self, start: datetime, end: datetime, tags: set[str]):
         self.start = start
         self.end = end
         self.tags = tags
@@ -53,7 +51,7 @@ class SuggestedInterval:
         return self.end - self.start
 
 
-def fetch_timew_intervals(start_time: datetime, end_time: datetime) -> List[TimewInterval]:
+def fetch_timew_intervals(start_time: datetime, end_time: datetime) -> list[TimewInterval]:
     """
     Fetch intervals from TimeWarrior using `timew export`.
 
@@ -82,13 +80,13 @@ def fetch_timew_intervals(start_time: datetime, end_time: datetime) -> List[Time
         for entry in data:
             # Parse start time
             start = datetime.strptime(entry['start'], '%Y%m%dT%H%M%SZ')
-            start = start.replace(tzinfo=timezone.utc)
+            start = start.replace(tzinfo=UTC)
 
             # Parse end time (may not exist for ongoing intervals)
             end = None
             if 'end' in entry:
                 end = datetime.strptime(entry['end'], '%Y%m%dT%H%M%SZ')
-                end = end.replace(tzinfo=timezone.utc)
+                end = end.replace(tzinfo=UTC)
 
             # Parse tags
             tags = set(entry.get('tags', []))
@@ -108,8 +106,8 @@ def fetch_timew_intervals(start_time: datetime, end_time: datetime) -> List[Time
         raise Exception(f"Failed to parse timew export output: {e}")
 
 
-def compare_intervals(timew_intervals: List[TimewInterval],
-                     suggested_intervals: List[SuggestedInterval]) -> Dict[str, List]:
+def compare_intervals(timew_intervals: list[TimewInterval],
+                     suggested_intervals: list[SuggestedInterval]) -> dict[str, list]:
     """
     Compare TimeWarrior intervals with suggested intervals.
 
@@ -154,7 +152,7 @@ def compare_intervals(timew_intervals: List[TimewInterval],
     return result
 
 
-def format_diff_output(comparison: Dict[str, List], verbose: bool = False) -> str:
+def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> str:
     """
     Format the comparison results for display.
 
@@ -243,7 +241,7 @@ def format_diff_output(comparison: Dict[str, List], verbose: bool = False) -> st
     return "\n".join(lines)
 
 
-def generate_fix_commands(comparison: Dict[str, List]) -> List[str]:
+def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     """
     Generate timew commands to fix differences.
 
@@ -321,8 +319,8 @@ def generate_fix_commands(comparison: Dict[str, List]) -> List[str]:
     return commands
 
 
-def format_timeline(timew_intervals: List[TimewInterval],
-                   suggested_intervals: List[SuggestedInterval],
+def format_timeline(timew_intervals: list[TimewInterval],
+                   suggested_intervals: list[SuggestedInterval],
                    start_time: datetime,
                    end_time: datetime) -> str:
     """
@@ -356,7 +354,7 @@ def format_timeline(timew_intervals: List[TimewInterval],
 
     # Add all timew interval boundaries that overlap with or extend into the display window
     for interval in timew_intervals:
-        interval_end = interval.end if interval.end else datetime.max.replace(tzinfo=timezone.utc)
+        interval_end = interval.end if interval.end else datetime.max.replace(tzinfo=UTC)
         # Skip intervals that end before the window starts
         if interval_end <= start_time:
             continue
@@ -408,7 +406,7 @@ def format_timeline(timew_intervals: List[TimewInterval],
         timew_active = []
         for interval in timew_intervals:
             # Check if interval overlaps with [time_point, next_point)
-            interval_end = interval.end if interval.end else datetime.max.replace(tzinfo=timezone.utc)
+            interval_end = interval.end if interval.end else datetime.max.replace(tzinfo=UTC)
             if interval.start < next_point and interval_end > time_point:
                 timew_active.append(interval)
 

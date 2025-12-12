@@ -6,11 +6,11 @@ This tests that timew commands are properly captured in dry-run mode,
 allowing us to verify what commands would be executed without actually running them.
 """
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from aw_export_timewarrior.main import Exporter
-from aw_export_timewarrior import main 
-from tests.helpers import FixtureDataBuilder, no_sleep
+from tests.helpers import FixtureDataBuilder
+
 
 def test_basic_command_capture() -> None:
     """Test that commands are captured in dry-run mode."""
@@ -27,7 +27,7 @@ def test_basic_command_capture() -> None:
         test_data=data,
         dry_run=True,
         config_path='tests/fixtures/test_config.toml',
-        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
     )
 
     # Process events
@@ -66,7 +66,7 @@ def test_multiple_ticks_accumulate_commands() -> None:
         test_data=data,
         dry_run=True,
         config_path='tests/fixtures/test_config.toml',
-        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
     )
 
     # First tick
@@ -94,7 +94,7 @@ def test_clear_captured_commands() -> None:
         test_data=data,
         dry_run=True,
         config_path='tests/fixtures/test_config.toml',
-        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
     )
 
     exporter.tick()
@@ -119,7 +119,7 @@ def test_commands_not_captured_in_normal_mode() -> None:
         test_data=data,
         dry_run=False,  # Not in dry-run mode
         config_path='tests/fixtures/test_config.toml',
-        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
     )
 
     # In normal mode with test_data, it still won't run real commands
@@ -143,7 +143,7 @@ def test_command_format() -> None:
         test_data=data,
         dry_run=True,
         config_path='tests/fixtures/test_config.toml',
-        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
     )
 
     exporter.tick()

@@ -6,9 +6,9 @@ for use in tests and debugging.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import aw_client
 from dateutil import parser as date_parser
@@ -35,15 +35,15 @@ def parse_datetime(dt_string: str) -> datetime:
     # Ensure timezone aware
     if dt.tzinfo is None:
         # Treat naive datetime as local time, then convert to UTC
-        dt = dt.astimezone(timezone.utc)
-    elif dt.tzinfo != timezone.utc:
+        dt = dt.astimezone(UTC)
+    elif dt.tzinfo != UTC:
         # Convert to UTC if it's in a different timezone
-        dt = dt.astimezone(timezone.utc)
+        dt = dt.astimezone(UTC)
 
     return dt
 
 
-def serialize_event(event: Any) -> Dict[str, Any]:
+def serialize_event(event: Any) -> dict[str, Any]:
     """
     Convert an ActivityWatch event object to a JSON-serializable dict.
 
@@ -62,9 +62,9 @@ def serialize_event(event: Any) -> Dict[str, Any]:
 
 
 def export_aw_data(
-    start: Union[str, datetime],
-    end: Union[str, datetime],
-    output_file: Union[str, Path],
+    start: str | datetime,
+    end: str | datetime,
+    output_file: str | Path,
     format: str = 'json',
     anonymize: bool = False
 ) -> None:
@@ -97,7 +97,7 @@ def export_aw_data(
     # Collect data from all relevant buckets
     data = {
         'metadata': {
-            'export_time': datetime.now(timezone.utc).isoformat(),
+            'export_time': datetime.now(UTC).isoformat(),
             'start_time': start.isoformat(),
             'end_time': end.isoformat(),
             'duration_seconds': (end - start).total_seconds(),
@@ -182,7 +182,7 @@ def export_aw_data(
     print(f"\nExported {sum(len(e) if isinstance(e, list) else 0 for e in data['events'].values())} total events", file=summary_output)
 
 
-def anonymize_event(event: Dict[str, Any]) -> Dict[str, Any]:
+def anonymize_event(event: dict[str, Any]) -> dict[str, Any]:
     """
     Anonymize sensitive data in an event.
 
@@ -230,7 +230,7 @@ def anonymize_event(event: Dict[str, Any]) -> Dict[str, Any]:
     return anon_event
 
 
-def load_test_data(file_path: Union[str, Path]) -> Dict[str, Any]:
+def load_test_data(file_path: str | Path) -> dict[str, Any]:
     """
     Load test data from a JSON or YAML file.
 
@@ -252,10 +252,10 @@ def load_test_data(file_path: Union[str, Path]) -> Dict[str, Any]:
 
 
 def create_minimal_fixture(
-    events: List[Dict[str, Any]],
+    events: list[dict[str, Any]],
     description: str,
-    expected_output: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+    expected_output: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """
     Create a minimal test fixture from events.
 

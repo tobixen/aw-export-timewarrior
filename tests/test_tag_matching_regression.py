@@ -5,8 +5,9 @@ This test would have caught the bug where `rule` was out of scope
 in the original refactoring attempt (line 549).
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
+
 import pytest
 
 from aw_export_timewarrior.main import Exporter
@@ -28,7 +29,7 @@ def mock_aw_client():
     with patch('aw_export_timewarrior.main.aw_client.ActivityWatchClient') as mock:
         mock_instance = Mock()
         mock.return_value = mock_instance
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         mock_instance.get_buckets.return_value = {
             'aw-watcher-window_test': {
                 'id': 'aw-watcher-window_test',
@@ -98,7 +99,7 @@ class TestRegexpMatchingBugRegression:
 
         # Mock browser event
         browser_event = create_aw_event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration=timedelta(minutes=5),
             data={
                 'url': 'https://github.com/python-caldav/caldav',
@@ -109,7 +110,7 @@ class TestRegexpMatchingBugRegression:
         mock_aw_client.return_value.get_events.return_value = [browser_event]
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {
                 'app': 'chrome',
@@ -155,7 +156,7 @@ class TestRegexpMatchingBugRegression:
 
         # Mock editor event
         editor_event = create_aw_event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration=timedelta(minutes=10),
             data={
                 'project': 'dotfiles',
@@ -167,7 +168,7 @@ class TestRegexpMatchingBugRegression:
         mock_aw_client.return_value.get_events.return_value = [editor_event]
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=10),
             'data': {
                 'app': 'vim',
@@ -204,7 +205,7 @@ class TestRegexpMatchingBugRegression:
         }
 
         browser_event = create_aw_event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration=timedelta(minutes=5),
             data={
                 'url': 'https://github.com/python-caldav/caldav/issues',
@@ -215,7 +216,7 @@ class TestRegexpMatchingBugRegression:
         mock_aw_client.return_value.get_events.return_value = [browser_event]
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {
                 'app': 'chrome',
@@ -286,7 +287,7 @@ class TestBuildTagsEdgeCases:
         }
 
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {
                 'app': 'Signal',

@@ -5,13 +5,14 @@ for the Exporter, including AFK state transitions, time boundaries, and
 counter management.
 """
 
-import pytest
-from datetime import datetime, timedelta, timezone
 from collections import defaultdict
+from datetime import UTC, datetime, timedelta
+
+import pytest
 
 # Import will fail until we create the module, but that's okay for now
 try:
-    from src.aw_export_timewarrior.state import StateManager, AfkState, TimeStats
+    from src.aw_export_timewarrior.state import AfkState, StateManager, TimeStats
 except ImportError:
     # Module doesn't exist yet - tests will be skipped
     pytest.skip("StateManager module not yet implemented", allow_module_level=True)
@@ -165,7 +166,7 @@ class TestStateManagerInitialization:
 
     def test_custom_initialization(self) -> None:
         """Test StateManager with custom initial values."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stats = TimeStats()
         stats.add_tag_time("work", timedelta(minutes=5))
 
@@ -278,7 +279,7 @@ class TestTimeBounds:
     def test_update_single_time_bound(self) -> None:
         """Test updating a single time boundary."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         sm.update_time_bounds(last_tick=now)
 
@@ -289,7 +290,7 @@ class TestTimeBounds:
     def test_update_multiple_time_bounds(self) -> None:
         """Test updating multiple time boundaries at once."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         sm.update_time_bounds(
             last_tick=now,
@@ -304,7 +305,7 @@ class TestTimeBounds:
     def test_time_bounds_validation_start_before_known(self) -> None:
         """Test that last_start_time must be <= last_known_tick."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         with pytest.raises(ValueError, match="last_start_time.*last_known_tick"):
             sm.update_time_bounds(
@@ -315,7 +316,7 @@ class TestTimeBounds:
     def test_time_bounds_validation_known_before_tick(self) -> None:
         """Test that last_known_tick must be <= last_tick."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         with pytest.raises(ValueError, match="last_known_tick.*last_tick"):
             sm.update_time_bounds(
@@ -326,7 +327,7 @@ class TestTimeBounds:
     def test_time_bounds_validation_all_in_order(self) -> None:
         """Test validation of complete time ordering."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         with pytest.raises(ValueError):
             sm.update_time_bounds(
@@ -338,7 +339,7 @@ class TestTimeBounds:
     def test_valid_time_bounds_accepted(self) -> None:
         """Test that valid time bounds are accepted."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Should not raise
         sm.update_time_bounds(
@@ -354,7 +355,7 @@ class TestTimeBounds:
     def test_update_time_bounds_with_validation_disabled(self) -> None:
         """Test that time bounds validation can be disabled."""
         sm = StateManager(enable_validation=False)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # This would normally raise, but validation is disabled
         sm.update_time_bounds(
@@ -377,7 +378,7 @@ class TestTimeQueries:
     def test_time_since_last_export_none_when_partially_set(self) -> None:
         """Test that time_since_last_export returns None if either value missing."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         sm.update_time_bounds(last_tick=now)
         assert sm.time_since_last_export() is None
@@ -389,7 +390,7 @@ class TestTimeQueries:
     def test_time_since_last_export_calculated(self) -> None:
         """Test time_since_last_export calculation."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         sm.update_time_bounds(
             last_known_tick=now - timedelta(minutes=10),
@@ -406,7 +407,7 @@ class TestTimeQueries:
     def test_time_since_last_start_calculated(self) -> None:
         """Test time_since_last_start calculation."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         sm.update_time_bounds(
             last_start_time=now - timedelta(minutes=15),
@@ -474,7 +475,7 @@ class TestRecordExport:
     def test_record_export_updates_time_bounds(self) -> None:
         """Test that record_export updates time boundaries."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(minutes=10)
         end = now
 
@@ -487,7 +488,7 @@ class TestRecordExport:
     def test_record_export_resets_stats_by_default(self) -> None:
         """Test that record_export resets statistics by default."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Add some stats
         sm.stats.add_tag_time("work", timedelta(minutes=5))
@@ -505,7 +506,7 @@ class TestRecordExport:
     def test_record_export_can_skip_stats_reset(self) -> None:
         """Test that record_export can skip statistics reset."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Add some stats
         sm.stats.add_tag_time("work", timedelta(minutes=5))
@@ -524,7 +525,7 @@ class TestRecordExport:
     def test_record_export_retains_specified_tags(self) -> None:
         """Test that record_export can retain specific tags."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Add some stats
         sm.stats.add_tag_time("work", timedelta(minutes=10))
@@ -549,7 +550,7 @@ class TestRecordExport:
     def test_record_export_sets_manual_tracking(self) -> None:
         """Test that record_export sets manual_tracking flag."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Default is True
         assert sm.manual_tracking is True
@@ -579,7 +580,7 @@ class TestHandleAfkTransition:
     def test_handle_afk_transition_sets_state(self) -> None:
         """Test that handle_afk_transition sets the AFK state."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         sm.handle_afk_transition(AfkState.AFK, now, reason="User idle")
 
@@ -588,7 +589,7 @@ class TestHandleAfkTransition:
     def test_handle_afk_transition_resets_stats(self) -> None:
         """Test that handle_afk_transition resets statistics."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Add some stats
         sm.stats.add_tag_time("work", timedelta(minutes=5))
@@ -604,7 +605,7 @@ class TestHandleAfkTransition:
     def test_going_afk_updates_last_known_tick(self) -> None:
         """Test that going AFK marks activity as known."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         sm.handle_afk_transition(AfkState.AFK, now, reason="User idle")
 
@@ -615,7 +616,7 @@ class TestHandleAfkTransition:
     def test_returning_from_afk_sets_last_not_afk(self) -> None:
         """Test that returning from AFK sets last_not_afk."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Go AFK then return
         sm.handle_afk_transition(AfkState.AFK, now - timedelta(minutes=10))
@@ -627,7 +628,7 @@ class TestHandleAfkTransition:
     def test_handle_afk_transition_from_unknown(self) -> None:
         """Test AFK transition from UNKNOWN state."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         assert sm.is_afk() is None
 
@@ -639,7 +640,7 @@ class TestHandleAfkTransition:
     def test_handle_afk_transition_cannot_go_to_unknown(self) -> None:
         """Test that handle_afk_transition rejects UNKNOWN state."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         with pytest.raises(ValueError, match="Cannot transition to UNKNOWN"):
             sm.handle_afk_transition(AfkState.UNKNOWN, now)
@@ -647,7 +648,7 @@ class TestHandleAfkTransition:
     def test_multiple_afk_transitions(self) -> None:
         """Test multiple AFK transitions in sequence."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Start active
         sm.handle_afk_transition(AfkState.ACTIVE, now)
@@ -690,7 +691,7 @@ class TestStateSummary:
     def test_get_state_summary_with_data(self) -> None:
         """Test state summary with actual data."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         sm.set_afk_state(AfkState.ACTIVE)
         sm.update_time_bounds(
@@ -716,7 +717,7 @@ class TestStateSummary:
     def test_get_state_summary_iso_format(self) -> None:
         """Test that summary contains ISO-formatted timestamps."""
         sm = StateManager()
-        now = datetime(2025, 12, 10, 15, 30, 0, tzinfo=timezone.utc)
+        now = datetime(2025, 12, 10, 15, 30, 0, tzinfo=UTC)
 
         sm.update_time_bounds(last_tick=now)
 
@@ -740,7 +741,7 @@ class TestEdgeCases:
     def test_very_large_time_values(self) -> None:
         """Test handling of very large time values."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Record export with very long interval (30 days)
         sm.record_export(
@@ -754,7 +755,7 @@ class TestEdgeCases:
     def test_empty_tags_set(self) -> None:
         """Test record_export with empty tags set."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Should not raise
         sm.record_export(now - timedelta(minutes=10), now, set())
@@ -764,7 +765,7 @@ class TestEdgeCases:
     def test_concurrent_modifications(self) -> None:
         """Test that state remains consistent with multiple modifications."""
         sm = StateManager()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Simulate multiple updates in quick succession
         sm.update_time_bounds(last_tick=now)

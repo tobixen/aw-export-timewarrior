@@ -1,22 +1,23 @@
 """Tests for the report generation functionality."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from src.aw_export_timewarrior.report import (
-    extract_specialized_data,
-    collect_report_data,
-    format_duration,
-    truncate_string
-)
+import pytest
+
 from src.aw_export_timewarrior.main import Exporter
+from src.aw_export_timewarrior.report import (
+    collect_report_data,
+    extract_specialized_data,
+    format_duration,
+    truncate_string,
+)
 
 
 @pytest.fixture
 def test_data_path() -> Path:
     """Path to the anonymized test data file."""
-    return Path(__file__).parent / "data" / "report_test_data.json"
+    return Path(__file__).parent / "fixtures" / "report_test_data.json"
 
 
 @pytest.fixture
@@ -53,7 +54,7 @@ def test_extract_specialized_data_browser(exporter_with_test_data: Exporter) -> 
     """Test extraction of browser URL data."""
     # Create a test window event with chromium
     window_event = {
-        'timestamp': datetime(2025, 12, 11, 9, 4, 43, tzinfo=timezone.utc),
+        'timestamp': datetime(2025, 12, 11, 9, 4, 43, tzinfo=UTC),
         'duration': pytest.approx(0.0),
         'data': {
             'app': 'chromium',
@@ -74,7 +75,7 @@ def test_extract_specialized_data_browser(exporter_with_test_data: Exporter) -> 
 def test_extract_specialized_data_non_browser(exporter_with_test_data: Exporter) -> None:
     """Test that non-browser/editor apps return no specialized data."""
     window_event = {
-        'timestamp': datetime(2025, 12, 11, 9, 0, 1, tzinfo=timezone.utc),
+        'timestamp': datetime(2025, 12, 11, 9, 0, 1, tzinfo=UTC),
         'duration': pytest.approx(0.0),
         'data': {
             'app': 'foot',
@@ -91,8 +92,8 @@ def test_extract_specialized_data_non_browser(exporter_with_test_data: Exporter)
 
 def test_collect_report_data(exporter_with_test_data: Exporter) -> None:
     """Test collecting report data from test dataset."""
-    start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=timezone.utc)
-    end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=timezone.utc)
+    start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
+    end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
     data = collect_report_data(exporter_with_test_data, start_time, end_time)
 
@@ -122,8 +123,8 @@ def test_collect_report_data(exporter_with_test_data: Exporter) -> None:
 
 def test_report_data_sorted_by_timestamp(exporter_with_test_data: Exporter) -> None:
     """Test that report data is sorted by timestamp."""
-    start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=timezone.utc)
-    end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=timezone.utc)
+    start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
+    end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
     data = collect_report_data(exporter_with_test_data, start_time, end_time)
 
@@ -134,8 +135,8 @@ def test_report_data_sorted_by_timestamp(exporter_with_test_data: Exporter) -> N
 
 def test_report_includes_afk_status(exporter_with_test_data: Exporter) -> None:
     """Test that AFK status is included in report data."""
-    start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=timezone.utc)
-    end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=timezone.utc)
+    start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
+    end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
     data = collect_report_data(exporter_with_test_data, start_time, end_time)
 
@@ -148,8 +149,8 @@ def test_report_includes_afk_status(exporter_with_test_data: Exporter) -> None:
 
 def test_report_includes_tags(exporter_with_test_data: Exporter) -> None:
     """Test that tags are determined for events."""
-    start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=timezone.utc)
-    end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=timezone.utc)
+    start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
+    end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
     data = collect_report_data(exporter_with_test_data, start_time, end_time)
 

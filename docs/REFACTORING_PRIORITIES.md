@@ -4,27 +4,7 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
 
 ## Priority List: Refactorings & Improvements
 
-### 🔴 **CRITICAL (Fix Immediately)**
-
-1. **Fix missing `validate_config()` function**
-   - Location: `src/aw_export_timewarrior/config.py`
-   - Issue: The `validate` subcommand is broken - imports non-existent function
-   - Impact: Feature doesn't work at all
-   - Effort: Low (1-2 hours)
-
-2. **Remove disabled breakpoints in production**
-   - Location: `src/aw_export_timewarrior/main.py:15` - Remove `breakpoint = lambda: None`
-   - Issue: 11 `breakpoint()` calls throughout code
-   - Action: Replace with proper error handling using `enable_pdb` flag
-   - Impact: Debugging statements in production code
-   - Effort: Low (2-3 hours)
-
-3. **Fix unsafe counter/state management**
-   - Location: `src/aw_export_timewarrior/main.py` - Counters reset in multiple places
-   - Issue: `tags_accumulated_time`, `total_time_known_events`, etc. modified without clear ownership
-   - Action: Create explicit `StateManager` class with clear ownership
-   - Impact: Hard-to-track bugs, race conditions
-   - Effort: Medium (1-2 days)
+(all "critical" stuff has been fixed)
 
 ### 🟠 **HIGH PRIORITY (Schedule Soon)**
 
@@ -205,11 +185,7 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
 
 ### 🔧 **QUICK WINS (Do First for Momentum)**
 
-21. **Remove backup files**
-    - Files: `cli_old.py`, `cli.py.backup`, `retag.py~`
-    - Action: Delete and add to `.gitignore`
-    - Impact: Cleaner repository
-    - Effort: Trivial (5 minutes)
+21. ~~Remove backup files~~ - done
 
 22. **Complete terminal app list**
     - Location: `main.py:1235` - List has `...` ellipsis
@@ -271,48 +247,7 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
 
 ## Ruff Configuration
 
-When introducing Ruff (#4), add to `pyproject.toml`:
-
-```toml
-[tool.ruff]
-line-length = 100
-target-version = "py313"
-
-[tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "N",   # pep8-naming
-    "UP",  # pyupgrade
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "SIM", # flake8-simplify
-]
-ignore = [
-    "E501", # line too long (handled by formatter)
-]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-
-[tool.ruff.lint.per-file-ignores]
-"tests/*" = ["E501"]  # Allow longer lines in tests
-```
-
-Usage:
-```bash
-# Check for issues
-ruff check .
-
-# Auto-fix issues
-ruff check --fix .
-
-# Format code
-ruff format .
-```
+Handled.
 
 ---
 

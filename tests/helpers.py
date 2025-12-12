@@ -5,10 +5,10 @@ This module provides a builder pattern for creating test scenarios
 and fixtures for aw-export-timewarrior.
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Union
-import pytest
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
+import pytest
 
 sleep_counter=0
 @pytest.fixture(autouse=True)  # Applies to all tests automatically
@@ -18,8 +18,9 @@ def no_sleep(monkeypatch):
     sleep_counter += 1
     def fake_sleep(seconds):
         print(f"SLEEP requested for {seconds}seconds")
-    from aw_export_timewarrior import main
     import time
+
+    from aw_export_timewarrior import main
     monkeypatch.setattr(time, 'sleep', fake_sleep)
     monkeypatch.setattr(main, 'sleep', fake_sleep)
 
@@ -37,14 +38,14 @@ class FixtureDataBuilder:
         ...     .build())
     """
 
-    def __init__(self, start_time: Optional[datetime] = None):
+    def __init__(self, start_time: datetime | None = None):
         """
         Initialize the test data builder.
 
         Args:
             start_time: Starting time for events (defaults to a fixed test time)
         """
-        self.start_time = start_time or datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+        self.start_time = start_time or datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
         self.current_time = self.start_time
         self.buckets = {}
         self.events = {}
@@ -101,8 +102,8 @@ class FixtureDataBuilder:
         self,
         app: str,
         title: str,
-        duration: Union[int, timedelta],
-        timestamp: Optional[datetime] = None
+        duration: int | timedelta,
+        timestamp: datetime | None = None
     ) -> 'FixtureDataBuilder':
         """
         Add a window event.
@@ -139,8 +140,8 @@ class FixtureDataBuilder:
     def add_afk_event(
         self,
         status: str,
-        duration: Union[int, timedelta],
-        timestamp: Optional[datetime] = None
+        duration: int | timedelta,
+        timestamp: datetime | None = None
     ) -> 'FixtureDataBuilder':
         """
         Add an AFK status event.
@@ -175,8 +176,8 @@ class FixtureDataBuilder:
         self,
         url: str,
         title: str,
-        duration: Union[int, timedelta],
-        timestamp: Optional[datetime] = None
+        duration: int | timedelta,
+        timestamp: datetime | None = None
     ) -> 'FixtureDataBuilder':
         """
         Add a browser event.
@@ -214,8 +215,8 @@ class FixtureDataBuilder:
         file_path: str,
         project: str,
         language: str = 'python',
-        duration: Union[int, timedelta] = 0,
-        timestamp: Optional[datetime] = None
+        duration: int | timedelta = 0,
+        timestamp: datetime | None = None
     ) -> 'FixtureDataBuilder':
         """
         Add an editor event.
@@ -263,7 +264,7 @@ class FixtureDataBuilder:
         self.current_time = new_time
         return self
 
-    def advance_time(self, delta: Union[int, timedelta]) -> 'FixtureDataBuilder':
+    def advance_time(self, delta: int | timedelta) -> 'FixtureDataBuilder':
         """
         Advance the current time by a delta.
 
@@ -279,7 +280,7 @@ class FixtureDataBuilder:
         self.current_time += delta
         return self
 
-    def build(self) -> Dict[str, Any]:
+    def build(self) -> dict[str, Any]:
         """
         Build and return the test data dictionary.
 
@@ -288,7 +289,7 @@ class FixtureDataBuilder:
         """
         return {
             'metadata': {
-                'export_time': datetime.now(timezone.utc).isoformat(),
+                'export_time': datetime.now(UTC).isoformat(),
                 'start_time': self.start_time.isoformat(),
                 'end_time': self.current_time.isoformat(),
                 'duration_seconds': (self.current_time - self.start_time).total_seconds(),

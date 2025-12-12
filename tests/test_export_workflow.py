@@ -1,17 +1,17 @@
 """Integration tests for the export workflow and timewarrior interaction."""
 
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, Mock, patch, call
-import subprocess
 import logging
+import subprocess
+from datetime import UTC, datetime, timedelta
+from unittest.mock import Mock, patch
 
 import pytest
 
 from aw_export_timewarrior.main import (
     Exporter,
     get_timew_info,
-    timew_run,
     timew_retag,
+    timew_run,
 )
 from aw_export_timewarrior.state import AfkState
 
@@ -34,7 +34,7 @@ def mock_aw_client():
         mock_client = Mock()
 
         # Get current time for last_updated
-        current_time = datetime.now(timezone.utc).isoformat()
+        current_time = datetime.now(UTC).isoformat()
 
         mock_client.get_buckets.return_value = {
             'aw-watcher-window_test': {
@@ -71,12 +71,11 @@ class TestGetTimewInfo:
         assert result['tags'] == {'4work', 'programming', 'python'}
         assert 'start_dt' in result
         assert isinstance(result['start_dt'], datetime)
-        assert result['start_dt'].tzinfo == timezone.utc
+        assert result['start_dt'].tzinfo == UTC
 
     @patch('subprocess.check_output')
     def test_get_timew_info_command(self, mock_subprocess: Mock) -> None:
         """Test that correct timewarrior command is called."""
-        import subprocess
         mock_subprocess.return_value = b'{"id": 1, "start": "20250528T140000Z", "tags": []}'
 
         get_timew_info()
@@ -86,7 +85,6 @@ class TestGetTimewInfo:
     @patch('subprocess.check_output')
     def test_get_timew_info_no_active_tracking(self, mock_subprocess: Mock) -> None:
         """Test that get_timew_info returns None when there's no active tracking."""
-        import subprocess
         mock_subprocess.side_effect = subprocess.CalledProcessError(255, ['timew', 'get', 'dom.active.json'])
 
         result = get_timew_info()
@@ -96,7 +94,6 @@ class TestGetTimewInfo:
     @patch('subprocess.check_output')
     def test_get_timew_info_invalid_json(self, mock_subprocess: Mock) -> None:
         """Test that get_timew_info returns None when timew returns invalid JSON."""
-        import subprocess
         mock_subprocess.return_value = b'invalid json'
 
         result = get_timew_info()
@@ -151,14 +148,14 @@ class TestTimewRetag:
         initial_info = {
             'id': 1,
             'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc),
+            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             'tags': {'programming'}
         }
 
         retagged_info = {
             'id': 1,
             'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc),
+            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             'tags': {'programming', '4work'}
         }
 
@@ -183,7 +180,7 @@ class TestTimewRetag:
         timew_info = {
             'id': 1,
             'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc),
+            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             'tags': {'4work', 'programming'}
         }
 
@@ -213,22 +210,22 @@ class TestEnsureTagExported:
     ) -> None:
         """Test that ensure_tag_exported starts new timewarrior tracking."""
         exporter = Exporter()
-        exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
-        exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
+        exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
         exporter.state.set_afk_state(AfkState.ACTIVE)
         exporter.state.manual_tracking = False
 
         mock_timew_info = {
             'id': 1,
             'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc),
+            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             'tags': {'old', 'tags'}
         }
         mock_retag.return_value = mock_timew_info
         mock_get_info.return_value = mock_timew_info
 
         event = {
-            'timestamp': datetime(2025, 5, 28, 14, 2, 0, tzinfo=timezone.utc),
+            'timestamp': datetime(2025, 5, 28, 14, 2, 0, tzinfo=UTC),
             'duration': timedelta(minutes=5)
         }
 
@@ -258,20 +255,20 @@ class TestEnsureTagExported:
     ) -> None:
         """Test that ensure_tag_exported skips when 'override' tag is present."""
         exporter = Exporter()
-        exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
-        exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
+        exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
         exporter.state.set_afk_state(AfkState.ACTIVE)
 
         mock_timew_info = {
             'id': 1,
             'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc),
+            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             'tags': {'4work', 'override'}  # Has override tag
         }
         mock_retag.return_value = mock_timew_info
 
         event = {
-            'timestamp': datetime(2025, 5, 28, 14, 2, 0, tzinfo=timezone.utc),
+            'timestamp': datetime(2025, 5, 28, 14, 2, 0, tzinfo=UTC),
             'duration': timedelta(minutes=5)
         }
 
@@ -297,20 +294,20 @@ class TestEnsureTagExported:
     ) -> None:
         """Test that ensure_tag_exported skips when tags are already tracked."""
         exporter = Exporter()
-        exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
-        exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
+        exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
         exporter.state.set_afk_state(AfkState.ACTIVE)
 
         mock_timew_info = {
             'id': 1,
             'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc),
+            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             'tags': {'4work', 'programming', 'python'}
         }
         mock_retag.return_value = mock_timew_info
 
         event = {
-            'timestamp': datetime(2025, 5, 28, 14, 2, 0, tzinfo=timezone.utc),
+            'timestamp': datetime(2025, 5, 28, 14, 2, 0, tzinfo=UTC),
             'duration': timedelta(minutes=5)
         }
 
@@ -342,7 +339,7 @@ class TestExporterTick:
         timew_info = {
             'id': 1,
             'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc),
+            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             'tags': {'4work'}
         }
         mock_retag.return_value = timew_info
@@ -369,12 +366,12 @@ class TestExporterTick:
     ) -> None:
         """Test that tick sleeps when no events are found."""
         exporter = Exporter()
-        exporter.state.last_tick = datetime.now(timezone.utc)
+        exporter.state.last_tick = datetime.now(UTC)
 
         timew_info = {
             'id': 1,
             'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc),
+            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             'tags': {'4work'}
         }
         mock_retag.return_value = timew_info
@@ -395,10 +392,10 @@ class TestExporterLog:
     def test_log_with_event(self, mock_logger: Mock, mock_aw_client: Mock) -> None:
         """Test logging with an event."""
         exporter = Exporter()
-        exporter.state.last_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.last_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
 
         event = {
-            'timestamp': datetime(2025, 5, 28, 14, 5, 0, tzinfo=timezone.utc),
+            'timestamp': datetime(2025, 5, 28, 14, 5, 0, tzinfo=UTC),
             'duration': timedelta(minutes=5)
         }
 

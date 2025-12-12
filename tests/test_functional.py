@@ -1,8 +1,10 @@
 from argparse import Namespace
-from aw_export_timewarrior.cli import run_sync, run_diff
 from pathlib import Path
+
 import pytest
-from tests.helpers import no_sleep
+
+from aw_export_timewarrior.cli import run_diff, run_sync
+
 
 @pytest.fixture
 def test_env(tmp_path, monkeypatch):
@@ -32,10 +34,10 @@ class TestSyncWithRealDataHS:
     def test_sync_and_diff_sample_data(self, test_env) -> None:
         """Test syncing sample data and verifying no differences with diff."""
         # Load sample data
-        import json
         from pathlib import Path
-        from aw_export_timewarrior.main import Exporter
+
         from aw_export_timewarrior.export import load_test_data, parse_datetime
+        from aw_export_timewarrior.main import Exporter
 
         sample_file = Path(__file__).parent / 'fixtures' / 'sample_15min.json'
         config_file = Path(__file__).parent / 'fixtures' / 'test_config.toml'
@@ -62,9 +64,9 @@ class TestSyncWithRealDataHS:
 
         ## Now run diff
         run_diff(args)
-        
+
         ## ... but we have no way to do asserts on the output.
-        
+
         ## I think it would be good to have the diff results
         ## returned from run_diff - TODO - but as for now,
         ## Claude has copied the logic into the test:
@@ -95,7 +97,7 @@ class TestSyncWithRealDataHS:
         assert comparison is not None, "Comparison should return results"
 
         # Print summary for debugging
-        print(f"\nSync+Diff Results:")
+        print("\nSync+Diff Results:")
         print(f"  Matching: {len(comparison['matching'])}")
         print(f"  Different tags: {len(comparison['different_tags'])}")
         print(f"  Missing: {len(comparison['missing'])}")

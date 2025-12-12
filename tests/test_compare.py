@@ -1,11 +1,10 @@
 """Tests for compare mode functionality."""
 
-from datetime import datetime, timedelta, timezone
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from aw_export_timewarrior.compare import (
-    TimewInterval,
     SuggestedInterval,
+    TimewInterval,
     compare_intervals,
     format_diff_output,
     generate_fix_commands,
@@ -19,14 +18,14 @@ class TestTimewInterval:
         """Test that overlapping intervals are detected."""
         int1 = TimewInterval(
             id=1,
-            start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-            end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+            start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+            end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
             tags={'tag1'}
         )
         int2 = TimewInterval(
             id=2,
-            start=datetime(2025, 1, 1, 10, 30, 0, tzinfo=timezone.utc),
-            end=datetime(2025, 1, 1, 11, 30, 0, tzinfo=timezone.utc),
+            start=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
+            end=datetime(2025, 1, 1, 11, 30, 0, tzinfo=UTC),
             tags={'tag2'}
         )
         assert int1.overlaps(int2)
@@ -36,14 +35,14 @@ class TestTimewInterval:
         """Test that non-overlapping intervals are detected."""
         int1 = TimewInterval(
             id=1,
-            start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-            end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+            start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+            end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
             tags={'tag1'}
         )
         int2 = TimewInterval(
             id=2,
-            start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
-            end=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+            end=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
             tags={'tag2'}
         )
         assert not int1.overlaps(int2)
@@ -53,8 +52,8 @@ class TestTimewInterval:
         """Test duration calculation."""
         interval = TimewInterval(
             id=1,
-            start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-            end=datetime(2025, 1, 1, 11, 30, 0, tzinfo=timezone.utc),
+            start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+            end=datetime(2025, 1, 1, 11, 30, 0, tzinfo=UTC),
             tags={'tag1'}
         )
         assert interval.duration() == timedelta(hours=1, minutes=30)
@@ -68,15 +67,15 @@ class TestCompareIntervals:
         timew_intervals = [
             TimewInterval(
                 id=1,
-                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 tags={'4work', 'python', 'not-afk'}
             )
         ]
         suggested_intervals = [
             SuggestedInterval(
-                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 tags={'4work', 'python', 'not-afk'}
             )
         ]
@@ -93,15 +92,15 @@ class TestCompareIntervals:
         timew_intervals = [
             TimewInterval(
                 id=1,
-                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 tags={'4work', 'python'}
             )
         ]
         suggested_intervals = [
             SuggestedInterval(
-                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 tags={'4work', 'javascript'}  # Different tag
             )
         ]
@@ -118,8 +117,8 @@ class TestCompareIntervals:
         timew_intervals = []
         suggested_intervals = [
             SuggestedInterval(
-                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 tags={'4work', 'python'}
             )
         ]
@@ -136,8 +135,8 @@ class TestCompareIntervals:
         timew_intervals = [
             TimewInterval(
                 id=1,
-                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 tags={'4work', 'python'}
             )
         ]
@@ -156,22 +155,22 @@ class TestCompareIntervals:
             # This one matches
             TimewInterval(
                 id=1,
-                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 tags={'4work', 'python'}
             ),
             # This one has different tags
             TimewInterval(
                 id=2,
-                start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                 tags={'4work', 'java'}
             ),
             # This one is extra
             TimewInterval(
                 id=3,
-                start=datetime(2025, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 14, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 14, 0, 0, tzinfo=UTC),
                 tags={'manual-entry'}
             ),
         ]
@@ -179,20 +178,20 @@ class TestCompareIntervals:
         suggested_intervals = [
             # Matches first timew interval
             SuggestedInterval(
-                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 tags={'4work', 'python'}
             ),
             # Different tags from second timew interval
             SuggestedInterval(
-                start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                 tags={'4work', 'python'}  # Different from timew
             ),
             # Missing from timew
             SuggestedInterval(
-                start=datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
-                end=datetime(2025, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+                start=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC),
                 tags={'4me', 'browsing'}
             ),
         ]
@@ -229,20 +228,20 @@ class TestFormatDiffOutput:
 
     def test_format_with_differences(self) -> None:
         """Test formatting with differences."""
-        missing_start = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        missing_end = datetime(2025, 1, 1, 13, 0, 0, tzinfo=timezone.utc)
+        missing_start = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+        missing_end = datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC)
 
         comparison = {
             'matching': [(
                 TimewInterval(
                     id=1,
-                    start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-                    end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+                    start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                    end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                     tags={'4work'}
                 ),
                 SuggestedInterval(
-                    start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-                    end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+                    start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                    end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                     tags={'4work'}
                 )
             )],
@@ -276,8 +275,8 @@ class TestGenerateFixCommands:
             'different_tags': [],
             'missing': [
                 SuggestedInterval(
-                    start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc),
-                    end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
+                    start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
+                    end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
                     tags={'4work', 'python', '~aw'}
                 )
             ],
@@ -301,13 +300,13 @@ class TestGenerateFixCommands:
                 (
                     TimewInterval(
                         id=42,
-                        start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc),
-                        end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
+                        start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
                         tags={'4work', 'java', '~aw'}  # Has ~aw tag (auto-generated)
                     ),
                     SuggestedInterval(
-                        start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc),
-                        end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
+                        start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
                         tags={'4work', 'python', '~aw'}
                     )
                 )
@@ -337,13 +336,13 @@ class TestGenerateFixCommands:
                 (
                     TimewInterval(
                         id=99,
-                        start=datetime(2025, 12, 10, 14, 30, 0, tzinfo=timezone.utc),
-                        end=datetime(2025, 12, 10, 15, 0, 0, tzinfo=timezone.utc),
+                        start=datetime(2025, 12, 10, 14, 30, 0, tzinfo=UTC),
+                        end=datetime(2025, 12, 10, 15, 0, 0, tzinfo=UTC),
                         tags={'manual', 'meeting'}  # NO ~aw tag (manually entered)
                     ),
                     SuggestedInterval(
-                        start=datetime(2025, 12, 10, 14, 30, 0, tzinfo=timezone.utc),
-                        end=datetime(2025, 12, 10, 15, 0, 0, tzinfo=timezone.utc),
+                        start=datetime(2025, 12, 10, 14, 30, 0, tzinfo=UTC),
+                        end=datetime(2025, 12, 10, 15, 0, 0, tzinfo=UTC),
                         tags={'4work', 'meeting', '~aw'}
                     )
                 )
@@ -373,13 +372,13 @@ class TestGenerateFixCommands:
                 (
                     TimewInterval(
                         id=1,
-                        start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc),
-                        end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
+                        start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
                         tags={'old-tag', '~aw'}
                     ),
                     SuggestedInterval(
-                        start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc),
-                        end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
+                        start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
                         tags={'new-tag', '~aw'}
                     )
                 ),
@@ -387,21 +386,21 @@ class TestGenerateFixCommands:
                 (
                     TimewInterval(
                         id=2,
-                        start=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
-                        end=datetime(2025, 12, 10, 12, 0, 0, tzinfo=timezone.utc),
+                        start=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 12, 10, 12, 0, 0, tzinfo=UTC),
                         tags={'manual'}
                     ),
                     SuggestedInterval(
-                        start=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
-                        end=datetime(2025, 12, 10, 12, 0, 0, tzinfo=timezone.utc),
+                        start=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 12, 10, 12, 0, 0, tzinfo=UTC),
                         tags={'auto', '~aw'}
                     )
                 ),
             ],
             'missing': [
                 SuggestedInterval(
-                    start=datetime(2025, 12, 10, 12, 0, 0, tzinfo=timezone.utc),
-                    end=datetime(2025, 12, 10, 13, 0, 0, tzinfo=timezone.utc),
+                    start=datetime(2025, 12, 10, 12, 0, 0, tzinfo=UTC),
+                    end=datetime(2025, 12, 10, 13, 0, 0, tzinfo=UTC),
                     tags={'missing', '~aw'}
                 )
             ],
@@ -428,8 +427,8 @@ class TestGenerateFixCommands:
             'extra': [
                 TimewInterval(
                     id=42,
-                    start=datetime(2025, 12, 10, 14, 0, 0, tzinfo=timezone.utc),
-                    end=datetime(2025, 12, 10, 15, 0, 0, tzinfo=timezone.utc),
+                    start=datetime(2025, 12, 10, 14, 0, 0, tzinfo=UTC),
+                    end=datetime(2025, 12, 10, 15, 0, 0, tzinfo=UTC),
                     tags={'UNKNOWN', 'not-afk', '~aw'}
                 )
             ],
@@ -453,8 +452,8 @@ class TestGenerateFixCommands:
             'extra': [
                 TimewInterval(
                     id=99,
-                    start=datetime(2025, 12, 10, 16, 0, 0, tzinfo=timezone.utc),
-                    end=datetime(2025, 12, 10, 17, 0, 0, tzinfo=timezone.utc),
+                    start=datetime(2025, 12, 10, 16, 0, 0, tzinfo=UTC),
+                    end=datetime(2025, 12, 10, 17, 0, 0, tzinfo=UTC),
                     tags={'manual-work', 'meeting'}  # No ~aw tag
                 )
             ],
@@ -478,15 +477,15 @@ class TestGenerateFixCommands:
                 # Auto-generated
                 TimewInterval(
                     id=1,
-                    start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc),
-                    end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
+                    start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
+                    end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
                     tags={'auto', '~aw'}
                 ),
                 # Manual
                 TimewInterval(
                     id=2,
-                    start=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
-                    end=datetime(2025, 12, 10, 12, 0, 0, tzinfo=timezone.utc),
+                    start=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
+                    end=datetime(2025, 12, 10, 12, 0, 0, tzinfo=UTC),
                     tags={'manual'}
                 ),
             ],

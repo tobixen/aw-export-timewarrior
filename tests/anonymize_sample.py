@@ -1,8 +1,6 @@
 """Anonymize sample ActivityWatch data for testing."""
 import json
-import sys
 from pathlib import Path
-
 
 # Counter for varying file names
 _file_counter = {'count': 0}
@@ -68,11 +66,11 @@ def anonymize_event(event: dict) -> dict:
     if 'file' in event_data:
         # Vary between .py and .md files
         if _file_counter['count'] % 3 == 0:
-            event_data['file'] = f'/home/user/myproject/src/main.py'
+            event_data['file'] = '/home/user/myproject/src/main.py'
         elif _file_counter['count'] % 3 == 1:
-            event_data['file'] = f'/home/user/myproject/tests/test_app.py'
+            event_data['file'] = '/home/user/myproject/tests/test_app.py'
         else:
-            event_data['file'] = f'/home/user/myproject/README.md'
+            event_data['file'] = '/home/user/myproject/README.md'
         _file_counter['count'] += 1
 
     if 'project' in event_data:
@@ -117,7 +115,7 @@ def main() -> None:
     output_file = repo_root / 'tests' / 'fixtures' / 'sample_15min.json'
 
     # Read the raw data
-    with open(input_file, 'r') as f:
+    with open(input_file) as f:
         data = json.load(f)
 
     # Anonymize all events

@@ -1,4 +1,3 @@
-from aw_export_timewarrior.main import Exporter
 from datetime import datetime
 
 ## TODO: work in progress

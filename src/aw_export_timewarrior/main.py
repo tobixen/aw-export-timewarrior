@@ -1,18 +1,19 @@
-import aw_client
-import subprocess
 import json
 import logging
-from time import time, sleep
-from datetime import datetime, timezone, timedelta
-from dataclasses import dataclass, field
-from collections import defaultdict
-from termcolor import cprint
-import re
 import os
+import re
+import subprocess
 import sys
+from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from time import sleep, time
+
+import aw_client
+from termcolor import cprint
 
 from .config import config
-from .state import StateManager, AfkState
+from .state import AfkState, StateManager
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ class StructuredFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         # Build structured log data
         log_data = {
-            'timestamp': datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            'timestamp': datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             'level': record.levelname,
             'message': record.getMessage(),
             'module': record.module,
@@ -259,7 +260,7 @@ class Exporter:
             client = self.buckets[x]['client']
             self.bucket_by_client[client].append(x)
             bucket_short = x[:x.find('_')]
-            assert not bucket_short in self.bucket_short
+            assert bucket_short not in self.bucket_short
             self.bucket_short[bucket_short] = self.buckets[x]
         # Only check bucket freshness when using real ActivityWatch data
         if not self.test_data:
@@ -327,7 +328,7 @@ class Exporter:
                 start = datetime.fromisoformat(timestamp_str.replace('T', ' ', 1).rstrip('Z'))
                 if start.tzinfo is None:
                     # Assume local timezone, then convert to UTC
-                    start = start.astimezone(timezone.utc)
+                    start = start.astimezone(UTC)
 
                 # If there was a previous interval, close it
                 if current_start:
@@ -348,9 +349,9 @@ class Exporter:
                     end = datetime.fromisoformat(cmd[-1].replace('T', ' ', 1).rstrip('Z'))
                     if end.tzinfo is None:
                         # Assume local timezone, then convert to UTC
-                        end = end.astimezone(timezone.utc)
+                        end = end.astimezone(UTC)
                 else:
-                    end = datetime.now(timezone.utc)
+                    end = datetime.now(UTC)
 
                 intervals.append(SuggestedInterval(
                     start=current_start,
@@ -372,7 +373,13 @@ class Exporter:
         Returns:
             Comparison dictionary with keys: 'matching', 'different_tags', 'missing', 'extra'
         """
-        from .compare import fetch_timew_intervals, compare_intervals, format_diff_output, generate_fix_commands, format_timeline
+        from .compare import (
+            compare_intervals,
+            fetch_timew_intervals,
+            format_diff_output,
+            format_timeline,
+            generate_fix_commands,
+        )
 
         if not self.show_diff:
             return {}
@@ -595,7 +602,7 @@ class Exporter:
                 # If tag wasn't in accumulator before (so it has 0 time after reset),
                 # initialize it with STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL
                 if self.state.stats.tags_accumulated_time[tag] == timedelta(0):
-                    self.state.stats.tags_accumulated_time[tag] = timedelta(seconds=STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL)                
+                    self.state.stats.tags_accumulated_time[tag] = timedelta(seconds=STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL)
 
 
     ## TODO: move all dealings with statistics to explicit statistics-handling methods
@@ -900,7 +907,7 @@ class Exporter:
                 sleep(SLEEP_INTERVAL*3/retry+0.2)
                 retry -= 1
                 return self.get_corresponding_event(window_event, event_type_id, ignorable, retry)
-        
+
         if not ret and not ignorable:
             ret = self.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=15), end=window_event['timestamp']+window_event['duration']+timedelta(seconds=15))
         if not ret:
@@ -1012,7 +1019,7 @@ class Exporter:
                 self.breakpoint()
                 self._afk_change_stats('afk', tags, event)
                 return True
-            if not 'afk' in self.timew_info['tags']:
+            if 'afk' not in self.timew_info['tags']:
                 ## I'm apparently afk, but we're not tracking it in timew?
                 ## Something must have gone wrong somewhere?
                 self.breakpoint()
@@ -1068,7 +1075,7 @@ class Exporter:
             if tags is not False:
                 break
         return tags
-    
+
     def _process_current_event_incrementally(self, event):
         """
         Process the current ongoing event in an idempotent way.
@@ -1157,8 +1164,8 @@ class Exporter:
         window_id = self.bucket_by_client['aw-watcher-window'][0]
 
         ## TODO: move all statistics from internal counters and up to the object
-        
-        
+
+
         ## Skipped events are events that takes so little time that we ignore it completely.
         ## The counter is nulled out when some non-skipped event comes in.
         ## Used only for debug logging.
@@ -1250,7 +1257,7 @@ class Exporter:
                 if total_time_skipped_events.total_seconds()>MIN_RECORDING_INTERVAL:
                     self.breakpoint()
                 continue
-            
+
             if tags is False:
                 num_unknown_events += 1
                 self.state.stats.unknown_events_time += event['duration']
@@ -1316,7 +1323,7 @@ class Exporter:
 
             if tags is not False:
                 pass
-            
+
             elif event['data'].get('app', '').lower() in ('foot', 'xterm', ...): ## TODO: complete the list
                 self.log(f"Unknown terminal event {event['data']['title']}", event=event, level=logging.WARNING)
             else:
@@ -1365,7 +1372,7 @@ class Exporter:
         if self.dry_run and self.start_time:
             # Create mock timew_info for test/dry-run mode
             if not self.timew_info:
-                mock_start = self.start_time or datetime.now(timezone.utc)
+                mock_start = self.start_time or datetime.now(UTC)
                 self.timew_info = {
                     'start': mock_start.strftime('%Y%m%dT%H%M%SZ'),
                     'start_dt': mock_start,
@@ -1375,10 +1382,10 @@ class Exporter:
             # Normal mode or dry-run without start_time - get current timew tracking state
             try:
                 self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run, capture_to=self.captured_commands))
-            except Exception as e:
+            except Exception:
                 # No active tracking - create mock info
                 if self.dry_run:
-                    mock_start = self.start_time or datetime.now(timezone.utc)
+                    mock_start = self.start_time or datetime.now(UTC)
                     self.timew_info = {
                         'start': mock_start.strftime('%Y%m%dT%H%M%SZ'),
                         'start_dt': mock_start,
@@ -1460,7 +1467,7 @@ def get_timew_info():
             stderr=subprocess.DEVNULL
         ))
         dt = datetime.strptime(current_timew['start'], "%Y%m%dT%H%M%SZ")
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
         current_timew['start_dt'] = dt
         current_timew['tags'] = set(current_timew['tags'])
         return current_timew
@@ -1518,7 +1525,7 @@ def retag_by_rules(source_tags, cfg=None):
                     for source_tag in intersection:
                         new_tags_.add(tag.replace("$source_tag", source_tag))
                 else:
-                    new_tags_.add(tag)    
+                    new_tags_.add(tag)
             new_tags_ = new_tags.union(new_tags_)
             if exclusive_overlapping(new_tags_):
                 logger.warning(f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts")

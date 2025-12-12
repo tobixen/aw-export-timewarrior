@@ -8,11 +8,10 @@ Provides subcommands for different operational modes: sync, diff, analyze, expor
 import argparse
 import logging
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
-from datetime import datetime, timezone
 
-from .main import Exporter, setup_logging, load_config
+from .main import Exporter, load_config, setup_logging
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -475,7 +474,7 @@ def configure_logging(args: argparse.Namespace, subcommand: str) -> None:
     )
 
 
-def validate_sync_args(args: argparse.Namespace) -> Optional[str]:
+def validate_sync_args(args: argparse.Namespace) -> str | None:
     """Validate arguments for sync subcommand."""
     if args.test_data:
         if not args.test_data.exists():
@@ -495,31 +494,31 @@ def validate_sync_args(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
-def validate_diff_args(args: argparse.Namespace) -> Optional[str]:
+def validate_diff_args(args: argparse.Namespace) -> str | None:
     """Validate arguments for diff subcommand."""
     return None
 
 
-def validate_analyze_args(args: argparse.Namespace) -> Optional[str]:
+def validate_analyze_args(args: argparse.Namespace) -> str | None:
     """Validate arguments for analyze subcommand."""
     # End without start doesn't make sense
     return None
 
 
-def validate_export_args(args: argparse.Namespace) -> Optional[str]:
+def validate_export_args(args: argparse.Namespace) -> str | None:
     """Validate arguments for export subcommand."""
     # Export requires output file (enforced by required=True in argparse)
     # End without start doesn't make sense
     return None
 
 
-def validate_report_args(args: argparse.Namespace) -> Optional[str]:
+def validate_report_args(args: argparse.Namespace) -> str | None:
     """Validate arguments for report subcommand."""
     # No special validation needed
     return None
 
 
-def validate_validate_args(args: argparse.Namespace) -> Optional[str]:
+def validate_validate_args(args: argparse.Namespace) -> str | None:
     """Validate arguments for validate subcommand."""
     # No special validation needed
     return None
@@ -527,7 +526,7 @@ def validate_validate_args(args: argparse.Namespace) -> Optional[str]:
 
 def run_sync(args: argparse.Namespace) -> int:
     """Execute the sync subcommand."""
-    from .export import parse_datetime, load_test_data
+    from .export import load_test_data, parse_datetime
 
     # Parse start/end times if provided
     start_time = None
@@ -538,7 +537,7 @@ def run_sync(args: argparse.Namespace) -> int:
         if args.end:
             end_time = parse_datetime(args.end)
         else:
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
         print(f"Processing time range: {start_time} to {end_time}")
 
     # Load test data if specified
@@ -598,7 +597,7 @@ def run_sync(args: argparse.Namespace) -> int:
 
 def run_diff(args: argparse.Namespace) -> int:
     """Execute the diff subcommand."""
-    from .export import parse_datetime, load_test_data
+    from .export import load_test_data, parse_datetime
 
     # Load test data if specified
     test_data = None
@@ -621,9 +620,9 @@ def run_diff(args: argparse.Namespace) -> int:
 
     # Apply defaults if still not set
     if not start_time:
-        start_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        start_time = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     if not end_time:
-        end_time = datetime.now(timezone.utc)
+        end_time = datetime.now(UTC)
 
     print(f"Comparing time range: {start_time} to {end_time}")
 
@@ -657,8 +656,8 @@ def run_analyze(args: argparse.Namespace) -> int:
     from .export import parse_datetime
 
     # Parse start/end times with defaults
-    start_time = parse_datetime(args.start) if args.start else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    end_time = parse_datetime(args.end) if args.end else datetime.now(timezone.utc)
+    start_time = parse_datetime(args.start) if args.start else datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_time = parse_datetime(args.end) if args.end else datetime.now(UTC)
 
     print(f"Analyzing time range: {start_time} to {end_time}")
 
@@ -684,12 +683,13 @@ def run_analyze(args: argparse.Namespace) -> int:
 
 def run_export(args: argparse.Namespace) -> int:
     """Execute the export subcommand."""
-    from .export import export_aw_data, parse_datetime
     import sys
 
+    from .export import export_aw_data, parse_datetime
+
     # Parse start/end times with defaults
-    start_time = parse_datetime(args.start) if args.start else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    end_time = parse_datetime(args.end) if args.end else datetime.now(timezone.utc)
+    start_time = parse_datetime(args.start) if args.start else datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_time = parse_datetime(args.end) if args.end else datetime.now(UTC)
 
     # Direct progress messages to stderr if outputting to stdout
     use_stdout = str(args.output) == '-'
@@ -711,8 +711,8 @@ def run_report(args: argparse.Namespace) -> int:
     from .report import generate_activity_report
 
     # Parse start/end times with defaults
-    start_time = parse_datetime(args.start) if args.start else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    end_time = parse_datetime(args.end) if args.end else datetime.now(timezone.utc)
+    start_time = parse_datetime(args.start) if args.start else datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_time = parse_datetime(args.end) if args.end else datetime.now(UTC)
 
     print(f"Generating report for: {start_time} to {end_time}", file=sys.stderr)
 

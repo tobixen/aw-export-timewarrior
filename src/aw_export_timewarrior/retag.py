@@ -1,8 +1,8 @@
-from aw_export_timewarrior.main import retag_by_rules, timew_run
-from time import sleep
 import json
-import subprocess
 import os
+import subprocess
+
+from aw_export_timewarrior.main import retag_by_rules, timew_run
 
 start=int(os.environ.get('START', 1))
 stop=int(os.environ.get('STOP', 1150))
@@ -23,4 +23,4 @@ if __name__ == '__main__':
             timew_run(["retag", f"@{i}"] + list(new_tags))
         else:
             print(f"nothing to do with {source_tags}")
-                
+

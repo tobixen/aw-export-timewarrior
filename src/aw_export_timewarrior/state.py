@@ -10,11 +10,10 @@ variables in the Exporter class. It includes:
 See docs/STATE_MANAGEMENT_REFACTORING.md for the full refactoring plan.
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from enum import Enum
-from typing import Optional
 from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from enum import Enum
 
 
 class AfkState(Enum):
@@ -56,7 +55,7 @@ class TimeStats:
 
     def reset(
         self,
-        retain_tags: Optional[set[str]] = None,
+        retain_tags: set[str] | None = None,
         stickyness_factor: float = 1.0
     ) -> None:
         """Reset statistics.
@@ -102,10 +101,10 @@ class StateManager:
     """
 
     # Time tracking
-    last_tick: Optional[datetime] = None
-    last_known_tick: Optional[datetime] = None
-    last_start_time: Optional[datetime] = None
-    last_not_afk: Optional[datetime] = None
+    last_tick: datetime | None = None
+    last_known_tick: datetime | None = None
+    last_start_time: datetime | None = None
+    last_not_afk: datetime | None = None
 
     # AFK state
     afk_state: AfkState = AfkState.UNKNOWN
@@ -117,13 +116,13 @@ class StateManager:
     stats: TimeStats = field(default_factory=TimeStats)
 
     # Current ongoing event tracking (for idempotent incremental processing)
-    current_event_timestamp: Optional[datetime] = None
+    current_event_timestamp: datetime | None = None
     current_event_processed_duration: timedelta = field(default_factory=lambda: timedelta(0))
 
     # Configuration
     enable_validation: bool = True
 
-    def is_afk(self) -> Optional[bool]:
+    def is_afk(self) -> bool | None:
         """Return AFK status.
 
         Returns:
@@ -170,10 +169,10 @@ class StateManager:
 
     def update_time_bounds(
         self,
-        last_tick: Optional[datetime] = None,
-        last_known_tick: Optional[datetime] = None,
-        last_start_time: Optional[datetime] = None,
-        last_not_afk: Optional[datetime] = None,
+        last_tick: datetime | None = None,
+        last_known_tick: datetime | None = None,
+        last_start_time: datetime | None = None,
+        last_not_afk: datetime | None = None,
     ) -> None:
         """Update time boundary tracking with validation.
 
@@ -232,7 +231,7 @@ class StateManager:
         end: datetime,
         tags: set[str],
         reset_stats: bool = True,
-        retain_tags: Optional[set[str]] = None,
+        retain_tags: set[str] | None = None,
         stickyness_factor: float = 0.5,
         manual: bool = True,
     ) -> None:
@@ -270,7 +269,7 @@ class StateManager:
     def handle_afk_transition(
         self,
         new_state: AfkState,
-        current_time: Optional[datetime] = None,
+        current_time: datetime | None = None,
         reason: str = "",
         reset_stats: bool = True,
     ) -> None:
@@ -294,7 +293,7 @@ class StateManager:
         if new_state == AfkState.ACTIVE:
             # Becoming active - set last_not_afk to current time
             if current_time is None:
-                current_time = datetime.now(timezone.utc)
+                current_time = datetime.now(UTC)
             self.last_not_afk = current_time
         elif new_state == AfkState.AFK:
             # Going AFK - clear last_not_afk
@@ -308,10 +307,10 @@ class StateManager:
         # Update last_known_tick and last_tick when going AFK
         if new_state == AfkState.AFK:
             if current_time is None:
-                current_time = datetime.now(timezone.utc)
+                current_time = datetime.now(UTC)
             self.update_time_bounds(last_known_tick=current_time, last_tick=current_time)
 
-    def get_dominant_tags(self, min_time: Optional[timedelta] = None) -> set[str]:
+    def get_dominant_tags(self, min_time: timedelta | None = None) -> set[str]:
         """Get tags that have accumulated significant time.
 
         Args:
@@ -331,7 +330,7 @@ class StateManager:
             if time >= min_time
         }
 
-    def time_since_last_export(self) -> Optional[timedelta]:
+    def time_since_last_export(self) -> timedelta | None:
         """Calculate time since the last export ended.
 
         Uses current time as the reference point.
@@ -346,7 +345,7 @@ class StateManager:
         # Time since last known event (which is when last export happened)
         return self.last_tick - self.last_known_tick
 
-    def time_since_last_start(self) -> Optional[timedelta]:
+    def time_since_last_start(self) -> timedelta | None:
         """Calculate time since the last export started.
 
         Uses last_tick as the reference point (or current time if not set).
@@ -361,7 +360,7 @@ class StateManager:
         if self.last_tick is not None:
             return self.last_tick - self.last_start_time
         else:
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now(UTC)
             return current_time - self.last_start_time
 
     def get_state_summary(self) -> dict:

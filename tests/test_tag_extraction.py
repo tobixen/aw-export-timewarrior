@@ -1,8 +1,7 @@
 """Tests for tag extraction from browser, editor, and app events."""
 
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, Mock, patch, PropertyMock
-from collections import defaultdict
+from datetime import UTC, datetime, timedelta
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -28,7 +27,7 @@ def mock_aw_client():
         mock_client_instance = Mock()
 
         # Get current time for last_updated
-        current_time = datetime.now(timezone.utc).isoformat()
+        current_time = datetime.now(UTC).isoformat()
 
         mock_client_instance.get_buckets.return_value = {
             'aw-watcher-window_test': {
@@ -94,7 +93,7 @@ class TestBrowserTagExtraction:
 
         # Mock browser event
         browser_event = create_aw_event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration=timedelta(minutes=5),
             data={
                 'url': 'https://github.com/python-caldav/caldav',
@@ -106,7 +105,7 @@ class TestBrowserTagExtraction:
         mock_aw_client.get_events.return_value = [browser_event]
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {
                 'app': 'chrome',
@@ -131,7 +130,7 @@ class TestBrowserTagExtraction:
         }
 
         browser_event = create_aw_event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration=timedelta(seconds=30),
             data={
                 'url': 'chrome://newtab/',
@@ -142,7 +141,7 @@ class TestBrowserTagExtraction:
         mock_aw_client.get_events.return_value = [browser_event]
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(seconds=30),
             'data': {
                 'app': 'chromium',
@@ -159,7 +158,7 @@ class TestBrowserTagExtraction:
         exporter = Exporter()
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {
                 'app': 'Terminal',
@@ -192,7 +191,7 @@ class TestBrowserTagExtraction:
         mock_aw_client.get_events.return_value = []
 
         # Use an older timestamp to avoid retry logic based on wall clock
-        old_timestamp = datetime.now(timezone.utc) - timedelta(hours=1)
+        old_timestamp = datetime.now(UTC) - timedelta(hours=1)
         window_event = {
             'timestamp': old_timestamp,
             'duration': timedelta(minutes=5),
@@ -227,7 +226,7 @@ class TestEditorTagExtraction:
         }
 
         editor_event = create_aw_event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration=timedelta(minutes=10),
             data={
                 'project': 'caldav',
@@ -239,7 +238,7 @@ class TestEditorTagExtraction:
         mock_aw_client.get_events.return_value = [editor_event]
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=10),
             'data': {
                 'app': 'emacs',
@@ -271,7 +270,7 @@ class TestEditorTagExtraction:
         }
 
         editor_event = create_aw_event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration=timedelta(minutes=10),
             data={
                 'project': 'dotfiles',
@@ -283,7 +282,7 @@ class TestEditorTagExtraction:
         mock_aw_client.get_events.return_value = [editor_event]
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=10),
             'data': {
                 'app': 'vim',
@@ -303,7 +302,7 @@ class TestEditorTagExtraction:
         exporter = Exporter()
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {
                 'app': 'chrome',
@@ -336,7 +335,7 @@ class TestAppTagExtraction:
         }
 
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {
                 'app': 'Signal',
@@ -369,7 +368,7 @@ class TestAppTagExtraction:
         }
 
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=15),
             'data': {
                 'app': 'foot',
@@ -402,7 +401,7 @@ class TestAppTagExtraction:
         exporter = Exporter()
 
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {
                 'app': 'Terminal',
@@ -427,7 +426,7 @@ class TestAppTagExtraction:
         exporter = Exporter()
 
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {
                 'app': 'UnknownApp',
@@ -448,7 +447,7 @@ class TestGetCorrespondingEvent:
         exporter = Exporter()
 
         corresponding_event = create_aw_event(
-            timestamp=datetime(2025, 5, 28, 14, 30, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2025, 5, 28, 14, 30, 0, tzinfo=UTC),
             duration=timedelta(minutes=5),
             data={'url': 'https://example.com'}
         )
@@ -456,7 +455,7 @@ class TestGetCorrespondingEvent:
         mock_aw_client.get_events.return_value = [corresponding_event]
 
         window_event = {
-            'timestamp': datetime(2025, 5, 28, 14, 30, 0, tzinfo=timezone.utc),
+            'timestamp': datetime(2025, 5, 28, 14, 30, 0, tzinfo=UTC),
             'duration': timedelta(minutes=5),
             'data': {'app': 'chrome', 'title': 'Example'}
         }
@@ -473,13 +472,13 @@ class TestGetCorrespondingEvent:
         exporter = Exporter()
 
         short_event = create_aw_event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration=timedelta(seconds=5),
             data={'url': 'https://example.com'}
         )
 
         long_event = create_aw_event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             duration=timedelta(minutes=10),
             data={'url': 'https://example.com/page'}
         )
@@ -487,7 +486,7 @@ class TestGetCorrespondingEvent:
         mock_aw_client.get_events.return_value = [short_event, long_event]
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=10),
             'data': {'app': 'chrome', 'title': 'Example'}
         }
@@ -507,7 +506,7 @@ class TestGetCorrespondingEvent:
         mock_aw_client.get_events.return_value = []
 
         window_event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(seconds=2),  # Less than IGNORE_INTERVAL
             'data': {'app': 'emacs', 'title': '*scratch*'}
         }
@@ -529,7 +528,7 @@ class TestGetAfkTags:
         exporter = Exporter()
 
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=10),
             'data': {'status': 'afk'}
         }
@@ -543,7 +542,7 @@ class TestGetAfkTags:
         exporter = Exporter()
 
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(seconds=1),
             'data': {'status': 'not-afk'}
         }
@@ -557,7 +556,7 @@ class TestGetAfkTags:
         exporter = Exporter()
 
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {'app': 'chrome', 'title': 'Example'}
         }

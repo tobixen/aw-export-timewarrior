@@ -8,12 +8,11 @@ Generates detailed reports showing ActivityWatch events with columns for:
 - Determined tags
 """
 
-import sys
 import csv
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Any
-from collections import defaultdict
+from typing import Any
 
 from .main import Exporter
 
@@ -34,7 +33,7 @@ def format_duration(duration: timedelta) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
-def extract_specialized_data(exporter: Exporter, window_event: dict) -> Dict[str, Any]:
+def extract_specialized_data(exporter: Exporter, window_event: dict) -> dict[str, Any]:
     """Extract specialized watcher data (file path for editors, URL for browsers).
 
     Uses the exporter's existing get_corresponding_event() method which already
@@ -106,7 +105,7 @@ def collect_report_data(
     exporter: Exporter,
     start_time: datetime,
     end_time: datetime
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Collect activity data for the report.
 
     Returns a list of dictionaries with keys:
@@ -187,7 +186,7 @@ def collect_report_data(
 
 
 def format_as_table(
-    data: List[Dict[str, Any]],
+    data: list[dict[str, Any]],
     all_columns: bool = False,
     truncate: bool = True
 ) -> None:
@@ -255,7 +254,7 @@ def format_as_table(
 
 
 def format_as_csv(
-    data: List[Dict[str, Any]],
+    data: list[dict[str, Any]],
     all_columns: bool = False,
     delimiter: str = ','
 ) -> None:
@@ -307,7 +306,7 @@ def format_as_csv(
 def generate_activity_report(
     start_time: datetime,
     end_time: datetime,
-    config_path: Optional[Path] = None,
+    config_path: Path | None = None,
     all_columns: bool = False,
     format: str = 'table',
     truncate: bool = True,

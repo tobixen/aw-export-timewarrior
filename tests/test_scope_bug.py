@@ -8,8 +8,9 @@ a different loop (the one iterating through config rules at line 541).
 This test will FAIL with the buggy code and PASS with the fix.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
+
 import pytest
 
 from aw_export_timewarrior.main import Exporter
@@ -31,7 +32,7 @@ def mock_aw_client():
     with patch('aw_export_timewarrior.main.aw_client.ActivityWatchClient') as mock:
         mock_instance = Mock()
         mock.return_value = mock_instance
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         mock_instance.get_buckets.return_value = {
             'aw-watcher-window_test': {
                 'id': 'aw-watcher-window_test',
@@ -114,7 +115,7 @@ def test_browser_scope_bug_multiple_rules(mock_aw_client: Mock) -> None:
 
     # Mock browser event that should match the github rule
     browser_event = create_aw_event(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         duration=timedelta(minutes=5),
         data={
             'url': 'https://github.com/python-caldav/caldav',
@@ -125,7 +126,7 @@ def test_browser_scope_bug_multiple_rules(mock_aw_client: Mock) -> None:
     mock_aw_client.return_value.get_events.return_value = [browser_event]
 
     window_event = {
-        'timestamp': datetime.now(timezone.utc),
+        'timestamp': datetime.now(UTC),
         'duration': timedelta(minutes=5),
         'data': {
             'app': 'chrome',
@@ -174,7 +175,7 @@ def test_editor_scope_bug_projects_then_regexp(mock_aw_client: Mock) -> None:
     }
 
     editor_event = create_aw_event(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         duration=timedelta(minutes=10),
         data={
             'project': 'dotfiles',  # Doesn't match work_projects
@@ -186,7 +187,7 @@ def test_editor_scope_bug_projects_then_regexp(mock_aw_client: Mock) -> None:
     mock_aw_client.return_value.get_events.return_value = [editor_event]
 
     window_event = {
-        'timestamp': datetime.now(timezone.utc),
+        'timestamp': datetime.now(UTC),
         'duration': timedelta(minutes=10),
         'data': {
             'app': 'vim',

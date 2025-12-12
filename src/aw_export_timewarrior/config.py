@@ -1,6 +1,7 @@
-from aw_core.config import load_config_toml
 from pathlib import Path
+
 import toml
+from aw_core.config import load_config_toml
 
 default_config = """
 [tags.housework]

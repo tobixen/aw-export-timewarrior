@@ -1,18 +1,17 @@
 """Comprehensive unit tests for aw-export-timewarrior."""
 
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, Mock, patch
-from collections import defaultdict
+from datetime import UTC, datetime, timedelta
+from unittest.mock import Mock, patch
 
 import pytest
 
 from aw_export_timewarrior.main import (
     Exporter,
+    check_bucket_updated,
     exclusive_overlapping,
     retag_by_rules,
     ts2str,
     ts2strtime,
-    check_bucket_updated,
 )
 from aw_export_timewarrior.state import AfkState
 
@@ -33,7 +32,7 @@ def mock_aw_client():
         mock_client = Mock()
 
         # Get current time for last_updated
-        current_time = datetime.now(timezone.utc).isoformat()
+        current_time = datetime.now(UTC).isoformat()
 
         mock_client.get_buckets.return_value = {
             'aw-watcher-window_test': {
@@ -56,20 +55,20 @@ class TestTimestampFormatting:
 
     def test_ts2str_default_format(self) -> None:
         """Test ts2str with default format."""
-        dt = datetime(2025, 5, 28, 14, 30, 45, tzinfo=timezone.utc)
+        dt = datetime(2025, 5, 28, 14, 30, 45, tzinfo=UTC)
         result = ts2str(dt)
         assert "2025-05-28" in result
         assert ":30:45" in result  # Check time portion exists (timezone-independent)
 
     def test_ts2str_custom_format(self) -> None:
         """Test ts2str with custom format."""
-        dt = datetime(2025, 5, 28, 14, 30, 45, tzinfo=timezone.utc)
+        dt = datetime(2025, 5, 28, 14, 30, 45, tzinfo=UTC)
         result = ts2str(dt, format="%Y/%m/%d")
         assert "2025/05/28" in result
 
     def test_ts2strtime_with_timestamp(self) -> None:
         """Test ts2strtime with valid timestamp."""
-        dt = datetime(2025, 5, 28, 14, 30, 45, tzinfo=timezone.utc)
+        dt = datetime(2025, 5, 28, 14, 30, 45, tzinfo=UTC)
         result = ts2strtime(dt)
         # Should return time only
         assert ":" in result
@@ -215,7 +214,7 @@ class TestBucketUpdated:
         mock_time.return_value = 1000.0
         bucket = {
             'id': 'test-bucket',
-            'last_updated_dt': datetime.fromtimestamp(950.0, tz=timezone.utc)
+            'last_updated_dt': datetime.fromtimestamp(950.0, tz=UTC)
         }
         check_bucket_updated(bucket)
         mock_logger.warning.assert_not_called()
@@ -228,7 +227,7 @@ class TestBucketUpdated:
         mock_time.return_value = 1000.0
         bucket = {
             'id': 'test-bucket',
-            'last_updated_dt': datetime.fromtimestamp(500.0, tz=timezone.utc)
+            'last_updated_dt': datetime.fromtimestamp(500.0, tz=UTC)
         }
         check_bucket_updated(bucket)
         mock_logger.warning.assert_called_once()
@@ -265,23 +264,23 @@ class TestExporterInitialization:
 class TestExporterSetKnownTickStats:
     """Tests for set_known_tick_stats method."""
 
-    
+
     def test_set_known_tick_with_event(self, mock_aw_client: Mock) -> None:
         """Test set_known_tick_stats with an event."""
-        
+
         exporter = Exporter()
 
         event = {
-            'timestamp': datetime(2025, 5, 28, 10, 0, 0, tzinfo=timezone.utc),
+            'timestamp': datetime(2025, 5, 28, 10, 0, 0, tzinfo=UTC),
             'duration': timedelta(minutes=5)
         }
 
         exporter.set_known_tick_stats(event=event)
 
-        assert exporter.state.last_known_tick == datetime(2025, 5, 28, 10, 5, 0, tzinfo=timezone.utc)
-        assert exporter.state.last_start_time == datetime(2025, 5, 28, 10, 0, 0, tzinfo=timezone.utc)
+        assert exporter.state.last_known_tick == datetime(2025, 5, 28, 10, 5, 0, tzinfo=UTC)
+        assert exporter.state.last_start_time == datetime(2025, 5, 28, 10, 0, 0, tzinfo=UTC)
 
-    
+
     def test_set_known_tick_resets_accumulator(self, mock_aw_client: Mock) -> None:
         """Test that reset_accumulator clears accumulated times."""
 
@@ -292,14 +291,14 @@ class TestExporterSetKnownTickStats:
         exporter.state.stats.tags_accumulated_time['coding'] = timedelta(minutes=5)
 
         exporter.set_known_tick_stats(
-            start=datetime.now(timezone.utc),
+            start=datetime.now(UTC),
             reset_accumulator=True,
             retain_accumulator=False  # Don't retain to avoid needing tags parameter
         )
 
         assert len(exporter.state.stats.tags_accumulated_time) == 0
 
-    
+
     @patch('aw_export_timewarrior.main.STICKYNESS_FACTOR', 0.2)
     @patch('aw_export_timewarrior.main.MIN_RECORDING_INTERVAL', 60)
     def test_set_known_tick_retains_accumulator(self, mock_aw_client: Mock) -> None:
@@ -309,7 +308,7 @@ class TestExporterSetKnownTickStats:
 
         tags = ['work', 'coding']
         exporter.set_known_tick_stats(
-            start=datetime.now(timezone.utc),
+            start=datetime.now(UTC),
             reset_accumulator=True,
             retain_accumulator=True,
             tags=tags
@@ -326,15 +325,15 @@ class TestExporterSetKnownTickStats:
 class TestExporterFindTagsFromEvent:
     """Tests for find_tags_from_event method."""
 
-    
+
     @patch('aw_export_timewarrior.main.IGNORE_INTERVAL', 3)
     def test_short_event_returns_none(self, mock_aw_client: Mock) -> None:
         """Test that events shorter than IGNORE_INTERVAL return None."""
-        
+
         exporter = Exporter()
 
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(seconds=2),  # Less than IGNORE_INTERVAL
             'data': {'app': 'TestApp'}
         }
@@ -342,15 +341,15 @@ class TestExporterFindTagsFromEvent:
         result = exporter.find_tags_from_event(event)
         assert result is None
 
-    
+
     @patch('aw_export_timewarrior.main.IGNORE_INTERVAL', 3)
     def test_afk_event_returns_afk_tag(self, mock_aw_client: Mock) -> None:
         """Test that AFK events return afk tag."""
-        
+
         exporter = Exporter()
 
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(minutes=5),
             'data': {'status': 'afk'}
         }
@@ -362,51 +361,51 @@ class TestExporterFindTagsFromEvent:
 class TestExporterCheckAndHandleAfkStateChange:
     """Tests for check_and_handle_afk_state_change method."""
 
-    
+
     def test_initial_afk_state_from_tags(self, mock_aw_client: Mock) -> None:
         """Test initial AFK state is set from tags."""
-        
+
         exporter = Exporter()
         exporter.state.afk_state = AfkState.UNKNOWN  # Initial state
 
         tags = {'afk'}
-        event = {'timestamp': datetime.now(timezone.utc), 'duration': timedelta(minutes=5)}
+        event = {'timestamp': datetime.now(UTC), 'duration': timedelta(minutes=5)}
 
         result = exporter.check_and_handle_afk_state_change(tags, event)
 
         assert exporter.state.is_afk() is True
         assert result is True  # Handled completely
 
-    
+
     def test_initial_not_afk_state_from_tags(self, mock_aw_client: Mock) -> None:
         """Test initial not-AFK state is set from tags."""
-        
+
         exporter = Exporter()
         exporter.state.afk_state = AfkState.UNKNOWN
 
         tags = {'not-afk'}
-        event = {'timestamp': datetime.now(timezone.utc), 'duration': timedelta(seconds=1)}
+        event = {'timestamp': datetime.now(UTC), 'duration': timedelta(seconds=1)}
 
         result = exporter.check_and_handle_afk_state_change(tags, event)
 
         assert exporter.state.is_afk() is False
         assert result is True
 
-    
+
     def test_return_from_afk_resets_accumulator(self, mock_aw_client: Mock) -> None:
         """Test returning from AFK resets accumulator."""
 
         exporter = Exporter()
         exporter.state.set_afk_state(AfkState.AFK)
         exporter.timew_info = {'tags': {'afk'}}
-        exporter.state.last_start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+        exporter.state.last_start_time = datetime.now(UTC) - timedelta(minutes=10)
 
         # Add some accumulated time
         exporter.state.stats.tags_accumulated_time['work'] = timedelta(minutes=5)
 
         tags = {'not-afk'}
         event = {
-            'timestamp': datetime.now(timezone.utc),
+            'timestamp': datetime.now(UTC),
             'duration': timedelta(seconds=1)
         }
 
@@ -419,11 +418,11 @@ class TestExporterCheckAndHandleAfkStateChange:
 class TestExporterPrettyAccumulatorString:
     """Tests for pretty_accumulator_string method."""
 
-    
+
     @patch('aw_export_timewarrior.main.MIN_TAG_RECORDING_INTERVAL', 30)
     def test_pretty_accumulator_string_formatting(self, mock_aw_client: Mock) -> None:
         """Test accumulator string formatting."""
-        
+
         exporter = Exporter()
 
         exporter.state.stats.tags_accumulated_time['work'] = timedelta(seconds=120)

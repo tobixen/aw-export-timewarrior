@@ -14,15 +14,13 @@ import os
 import subprocess
 import tempfile
 from argparse import Namespace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Dict, List
 
 import pytest
 
-from aw_export_timewarrior.main import Exporter
-from aw_export_timewarrior.cli import run_sync, run_diff
-from aw_export_timewarrior.compare import fetch_timew_intervals, SuggestedInterval
+from aw_export_timewarrior.compare import SuggestedInterval, fetch_timew_intervals
+
 
 class MockNamespace(Namespace):
     def __getattr__(self, name):
@@ -76,7 +74,7 @@ class TimewTestDatabase:
             check=False
         )
 
-    def add_interval(self, start: datetime, end: datetime, tags: List[str]) -> None:
+    def add_interval(self, start: datetime, end: datetime, tags: list[str]) -> None:
         """Add an interval to the test database using timew track."""
         start_str = start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
         end_str = end.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
@@ -86,7 +84,7 @@ class TimewTestDatabase:
         if result.returncode != 0:
             raise RuntimeError(f"Failed to add interval: {result.stderr}")
 
-    def get_intervals(self, start: datetime, end: datetime) -> List[Dict]:
+    def get_intervals(self, start: datetime, end: datetime) -> list[dict]:
         """Get intervals from the database using timew export."""
         start_str = start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
         end_str = end.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
@@ -128,8 +126,8 @@ class TestTimewDatabaseSetup:
 
     def test_add_interval(self, timew_db: TimewTestDatabase) -> None:
         """Test that we can add an interval to the database."""
-        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
 
         timew_db.add_interval(start, end, ['test-tag', 'another-tag'])
 
@@ -140,7 +138,7 @@ class TestTimewDatabaseSetup:
 
     def test_multiple_intervals(self, timew_db: TimewTestDatabase) -> None:
         """Test that we can add multiple intervals."""
-        base = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
 
         # Add three intervals
         for i in range(3):
@@ -158,16 +156,16 @@ class TestFetchTimewIntervals:
 
     def test_fetch_empty_database(self, timew_db: TimewTestDatabase) -> None:
         """Test fetching from an empty database."""
-        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
 
         intervals = fetch_timew_intervals(start, end)
         assert len(intervals) == 0
 
     def test_fetch_with_intervals(self, timew_db: TimewTestDatabase) -> None:
         """Test fetching intervals that exist."""
-        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
 
         # Add an interval
         timew_db.add_interval(start, end, ['work', 'python'])
@@ -182,13 +180,13 @@ class TestFetchTimewIntervals:
     def test_fetch_partial_overlap(self, timew_db: TimewTestDatabase) -> None:
         """Test fetching intervals that partially overlap the time range."""
         # Add interval from 10:00-12:00
-        interval_start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
-        interval_end = datetime(2025, 12, 10, 12, 0, 0, tzinfo=timezone.utc)
+        interval_start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
+        interval_end = datetime(2025, 12, 10, 12, 0, 0, tzinfo=UTC)
         timew_db.add_interval(interval_start, interval_end, ['work'])
 
         # Query from 11:00-13:00 (partial overlap)
-        query_start = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
-        query_end = datetime(2025, 12, 10, 13, 0, 0, tzinfo=timezone.utc)
+        query_start = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
+        query_end = datetime(2025, 12, 10, 13, 0, 0, tzinfo=UTC)
 
         intervals = fetch_timew_intervals(query_start, query_end)
         # Should still fetch the interval since timew export includes overlapping intervals
@@ -200,8 +198,8 @@ class TestDiffWithRealTimew:
 
     def test_diff_missing_interval(self, timew_db: TimewTestDatabase) -> None:
         """Test detecting a missing interval."""
-        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
 
         # TimeWarrior is empty
         timew_intervals = fetch_timew_intervals(start, end)
@@ -220,8 +218,8 @@ class TestDiffWithRealTimew:
 
     def test_diff_extra_interval(self, timew_db: TimewTestDatabase) -> None:
         """Test detecting an extra interval in TimeWarrior."""
-        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
 
         # Add interval to TimeWarrior
         timew_db.add_interval(start, end, ['manual-entry'])
@@ -243,8 +241,8 @@ class TestDiffWithRealTimew:
 
     def test_diff_different_tags(self, timew_db: TimewTestDatabase) -> None:
         """Test detecting an interval with different tags."""
-        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
 
         # Add interval to TimeWarrior with wrong tags
         timew_db.add_interval(start, end, ['old-tag'])
@@ -266,8 +264,8 @@ class TestDiffWithRealTimew:
 
     def test_diff_matching_interval(self, timew_db: TimewTestDatabase) -> None:
         """Test detecting a matching interval."""
-        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
 
         # Add interval to TimeWarrior
         timew_db.add_interval(start, end, ['work', 'python'])
@@ -293,8 +291,8 @@ class TestApplyFix:
 
     def test_apply_missing_interval(self, timew_db: TimewTestDatabase) -> None:
         """Test adding a missing interval using generated commands."""
-        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
 
         # TimeWarrior is empty
         timew_intervals = fetch_timew_intervals(start, end)
@@ -331,8 +329,8 @@ class TestApplyFix:
 
     def test_apply_retag(self, timew_db: TimewTestDatabase) -> None:
         """Test retagging an interval using generated commands."""
-        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
 
         # Add interval with old tags (including ~aw to mark it as auto-generated)
         timew_db.add_interval(start, end, ['old-tag', '~aw'])

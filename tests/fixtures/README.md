@@ -131,6 +131,10 @@ Copy an existing fixture and modify it. This is useful for creating specific cor
 
 - **simple_work_session.json**: Basic 30-minute work session with coding and docs
 - **afk_transition.json**: AFK transition mid-session
+- **sample_15min.json**: 15-minute activity sample with processed data
+- **sample_15min_raw.json**: Raw 15-minute activity data before processing
+- **report_test_data.json**: Comprehensive dataset for testing report generation
+- **test_config.toml**: Sample configuration file for testing
 
 ## Tips for Good Fixtures
 
