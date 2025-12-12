@@ -7,7 +7,7 @@ class TimewMockup:
         self.tags = {'afk', 'lunch'}
         self.start_time = datetime(2025,5,28, 11,0,0)
 
-    def timew_run(commands):
+    def timew_run(self, commands):
         command = commands[0]
         tags = commands[1:]
         if command == 'start':

@@ -170,6 +170,8 @@ class TestTimewRetag:
         assert '4work' in call_args
         assert 'programming' in call_args
 
+        return result
+
     @patch('aw_export_timewarrior.main.config', {
         'exclusive': {},
         'tags': {}

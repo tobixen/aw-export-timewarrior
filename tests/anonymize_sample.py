@@ -119,7 +119,7 @@ def main() -> None:
         data = json.load(f)
 
     # Anonymize all events
-    for bucket_id, events in data['events'].items():
+    for _bucket_id, events in data['events'].items():
         for event in events:
             anonymize_event(event)
 

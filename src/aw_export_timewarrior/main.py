@@ -1224,8 +1224,8 @@ class Exporter:
                 if event['data'] == {'status': 'not-afk'}:
                     continue
                 if event['data'] != {'status': 'afk'} and event['timestamp'] > self.state.last_start_time:
-                    if self.enable_pdb and event['duration']>timedelta(seconds=30):
-                        import pdb; pdb.set_trace()
+                    if event['duration']>timedelta(seconds=30):
+                        self.breakpoint()
                     ## Do we need an exception here for afk events?
                     self.log(f"skipping event as the timestamp is too old - {event}", event=event)
                     continue
@@ -1412,8 +1412,7 @@ class Exporter:
                     # Check if we've reached end_time
                     if self.end_time and self.state.last_tick < self.end_time:
                         self.log(f"No more events before end_time, advancing to {self.end_time}")
-                        if self.enable_pdb:
-                            import pdb; pdb.set_trace()
+                        self.breakpoint()
                         self.state.last_tick = self.end_time
                         found_activity = self.find_next_activity()
                     if not found_activity:
@@ -1440,8 +1439,7 @@ class Exporter:
             if not found_activity:
                 # In dry-run mode without end_time, we can't continue (would loop forever)
                 if self.dry_run and not self.end_time:
-                    if self.enable_pdb:
-                        import pdb; pdb.set_trace()
+                    self.breakpoint()
                     raise ValueError("dry-run mode without end_time would loop forever - this should be prevented by CLI validation")
 
                 self.log("sleeping, because no events found")

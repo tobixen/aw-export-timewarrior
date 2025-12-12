@@ -130,10 +130,7 @@ class StateManager:
         """
         if self.afk_state == AfkState.UNKNOWN:
             return None
-        elif self.afk_state == AfkState.AFK:
-            return True
-        else:  # AfkState.ACTIVE
-            return False
+        return self.afk_state == AfkState.AFK
 
     def set_afk_state(self, new_state: AfkState, reason: str = "") -> None:
         """Set the AFK state with validation.

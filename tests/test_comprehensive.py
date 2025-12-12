@@ -182,7 +182,7 @@ class TestRetagByRules:
         """Test that retag respects exclusive tag rules."""
         source_tags = {'tea', '4break'}
         # Should not add 4work because it conflicts with 4break
-        with patch('aw_export_timewarrior.main.logging') as mock_logging:
+        with patch('aw_export_timewarrior.main.logging') as _mock_logging:
             result = retag_by_rules(source_tags)
             # The rule should be excluded due to conflict
             assert '4work' not in result or '4break' not in result
