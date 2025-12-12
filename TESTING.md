@@ -124,7 +124,7 @@ aw-export-timewarrior --dry-run --test-data tests/fixtures/afk_transition.json -
 #### Method 2: Use the Builder API
 
 ```python
-from tests.helpers import FixtureDataBuilder
+from tests.conftest import FixtureDataBuilder
 import json
 
 # Build a test scenario
@@ -149,7 +149,7 @@ Copy an existing fixture and modify it. See `tests/fixtures/README.md` for forma
 
 ```python
 from aw_export_timewarrior.main import Exporter
-from tests.helpers import FixtureDataBuilder
+from tests.conftest import FixtureDataBuilder
 
 def test_work_session_tagging():
     # Create test data
@@ -337,5 +337,5 @@ Check:
 ## Further Reading
 
 - `tests/fixtures/README.md` - Detailed fixture format documentation
-- `tests/helpers.py` - FixtureDataBuilder API documentation
+- `tests/conftest.py` - FixtureDataBuilder API documentation
 - `src/aw_export_timewarrior/export.py` - Export functionality source

@@ -27,7 +27,7 @@ aw-export-timewarrior --dry-run --test-data tests/fixtures/simple_work_session.j
 ### In Unit Tests
 
 ```python
-from tests.helpers import FixtureDataBuilder
+from tests.conftest import FixtureDataBuilder
 
 def test_my_scenario():
     # Option 1: Use the builder
@@ -110,7 +110,7 @@ Then edit the file to:
 ### Method 2: Use the Builder
 
 ```python
-from tests.helpers import FixtureDataBuilder
+from tests.conftest import FixtureDataBuilder
 import json
 
 data = (FixtureDataBuilder()

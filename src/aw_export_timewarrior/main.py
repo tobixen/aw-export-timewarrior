@@ -1019,16 +1019,13 @@ class Exporter:
             if 'not-afk' in tags:
                 self._afk_change_stats('not-afk', tags, event)
                 self.log(f"You have returned to the keyboard after {(event['timestamp']-self.state.last_start_time).total_seconds()}s absence", event=event)
-                if tags != { 'not-afk' }:
-                    ## Some possibilities:
-                    ## 1) We have returned from the keyboard without the 'not-afk' special event triggered?
-                    ## 2) We're catching up some "ghost tracking" of window events while we're afk?
-                    ## 3) The 'not-afk' special event is not in the right order in the event queue?
-                    ## 4) The data from the afk/not-afk watcher is unreliable
-                    ## I think I found out that 3 is normal, but we may want to investigate TODO
-                    return False
-                else:
-                    return True
+                ## Some possibilities when tags != {'not-afk'}:
+                ## 1) We have returned from the keyboard without the 'not-afk' special event triggered?
+                ## 2) We're catching up some "ghost tracking" of window events while we're afk?
+                ## 3) The 'not-afk' special event is not in the right order in the event queue?
+                ## 4) The data from the afk/not-afk watcher is unreliable
+                ## I think I found out that 3 is normal, but we may want to investigate TODO
+                return tags == { 'not-afk' }
         else: ## We're not afk
             if tags == { 'not-afk' }:
                 ## Check this up manually.  Possibilities:

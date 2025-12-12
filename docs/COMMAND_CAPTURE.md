@@ -16,7 +16,7 @@ The command capture infrastructure allows you to:
 
 ```python
 from aw_export_timewarrior.main import Exporter
-from tests.helpers import FixtureDataBuilder
+from tests.conftest import FixtureDataBuilder
 
 # Create test data
 data = (FixtureDataBuilder()
@@ -248,5 +248,5 @@ def debug_processing():
 ## See Also
 
 - `tests/test_command_capture.py` - Example tests
-- `tests/helpers.py` - FixtureDataBuilder for creating fixtures
+- `tests/conftest.py` - FixtureDataBuilder for creating fixtures
 - `TESTING.md` - General testing documentation

@@ -765,7 +765,7 @@ class TestStatistics:
 
 
 class TestDebugging:
-    """Test debugging helpers."""
+    """Test debugging conftest."""
 
     def test_get_state_summary(self):
         """Test state summary for debugging."""
