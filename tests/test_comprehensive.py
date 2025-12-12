@@ -14,6 +14,7 @@ from aw_export_timewarrior.main import (
     ts2strtime,
     check_bucket_updated,
 )
+from aw_export_timewarrior.state import AfkState
 
 
 def create_aw_event(timestamp, duration, data):
@@ -277,8 +278,8 @@ class TestExporterSetKnownTickStats:
 
         exporter.set_known_tick_stats(event=event)
 
-        assert exporter.last_known_tick == datetime(2025, 5, 28, 10, 5, 0, tzinfo=timezone.utc)
-        assert exporter.last_start_time == datetime(2025, 5, 28, 10, 0, 0, tzinfo=timezone.utc)
+        assert exporter.state.last_known_tick == datetime(2025, 5, 28, 10, 5, 0, tzinfo=timezone.utc)
+        assert exporter.state.last_start_time == datetime(2025, 5, 28, 10, 0, 0, tzinfo=timezone.utc)
 
     
     def test_set_known_tick_resets_accumulator(self, mock_aw_client: Mock) -> None:
@@ -287,8 +288,8 @@ class TestExporterSetKnownTickStats:
         exporter = Exporter()
 
         # Add some accumulated time
-        exporter.tags_accumulated_time['work'] = timedelta(minutes=10)
-        exporter.tags_accumulated_time['coding'] = timedelta(minutes=5)
+        exporter.state.stats.tags_accumulated_time['work'] = timedelta(minutes=10)
+        exporter.state.stats.tags_accumulated_time['coding'] = timedelta(minutes=5)
 
         exporter.set_known_tick_stats(
             start=datetime.now(timezone.utc),
@@ -296,7 +297,7 @@ class TestExporterSetKnownTickStats:
             retain_accumulator=False  # Don't retain to avoid needing tags parameter
         )
 
-        assert len(exporter.tags_accumulated_time) == 0
+        assert len(exporter.state.stats.tags_accumulated_time) == 0
 
     
     @patch('aw_export_timewarrior.main.STICKYNESS_FACTOR', 0.2)
@@ -315,11 +316,11 @@ class TestExporterSetKnownTickStats:
         )
 
         # Should have retained tags with STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL
-        # Note: The code stores a float, not a timedelta
-        assert 'work' in exporter.tags_accumulated_time
-        assert 'coding' in exporter.tags_accumulated_time
-        expected_duration = 0.2 * 60  # STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL
-        assert exporter.tags_accumulated_time['work'] == pytest.approx(expected_duration)
+        assert 'work' in exporter.state.stats.tags_accumulated_time
+        assert 'coding' in exporter.state.stats.tags_accumulated_time
+        expected_duration = timedelta(seconds=0.2 * 60)  # STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL
+        assert exporter.state.stats.tags_accumulated_time['work'] == expected_duration
+        assert exporter.state.stats.tags_accumulated_time['coding'] == expected_duration
 
 
 class TestExporterFindTagsFromEvent:
@@ -366,14 +367,14 @@ class TestExporterCheckAndHandleAfkStateChange:
         """Test initial AFK state is set from tags."""
         
         exporter = Exporter()
-        exporter.afk = None  # Initial state
+        exporter.state.afk_state = AfkState.UNKNOWN  # Initial state
 
         tags = {'afk'}
         event = {'timestamp': datetime.now(timezone.utc), 'duration': timedelta(minutes=5)}
 
         result = exporter.check_and_handle_afk_state_change(tags, event)
 
-        assert exporter.afk is True
+        assert exporter.state.is_afk() is True
         assert result is True  # Handled completely
 
     
@@ -381,27 +382,27 @@ class TestExporterCheckAndHandleAfkStateChange:
         """Test initial not-AFK state is set from tags."""
         
         exporter = Exporter()
-        exporter.afk = None
+        exporter.state.afk_state = AfkState.UNKNOWN
 
         tags = {'not-afk'}
         event = {'timestamp': datetime.now(timezone.utc), 'duration': timedelta(seconds=1)}
 
         result = exporter.check_and_handle_afk_state_change(tags, event)
 
-        assert exporter.afk is False
+        assert exporter.state.is_afk() is False
         assert result is True
 
     
     def test_return_from_afk_resets_accumulator(self, mock_aw_client: Mock) -> None:
         """Test returning from AFK resets accumulator."""
-        
+
         exporter = Exporter()
-        exporter.afk = True
+        exporter.state.set_afk_state(AfkState.AFK)
         exporter.timew_info = {'tags': {'afk'}}
-        exporter.last_start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+        exporter.state.last_start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
 
         # Add some accumulated time
-        exporter.tags_accumulated_time['work'] = timedelta(minutes=5)
+        exporter.state.stats.tags_accumulated_time['work'] = timedelta(minutes=5)
 
         tags = {'not-afk'}
         event = {
@@ -412,7 +413,7 @@ class TestExporterCheckAndHandleAfkStateChange:
         exporter.check_and_handle_afk_state_change(tags, event)
 
         # Accumulator should be reset
-        assert len(exporter.tags_accumulated_time) == 0
+        assert len(exporter.state.stats.tags_accumulated_time) == 0
 
 
 class TestExporterPrettyAccumulatorString:
@@ -425,10 +426,10 @@ class TestExporterPrettyAccumulatorString:
         
         exporter = Exporter()
 
-        exporter.tags_accumulated_time['work'] = timedelta(seconds=120)
-        exporter.tags_accumulated_time['coding'] = timedelta(seconds=60)
-        exporter.tags_accumulated_time['python'] = timedelta(seconds=45)
-        exporter.tags_accumulated_time['short'] = timedelta(seconds=10)  # Below threshold
+        exporter.state.stats.tags_accumulated_time['work'] = timedelta(seconds=120)
+        exporter.state.stats.tags_accumulated_time['coding'] = timedelta(seconds=60)
+        exporter.state.stats.tags_accumulated_time['python'] = timedelta(seconds=45)
+        exporter.state.stats.tags_accumulated_time['short'] = timedelta(seconds=10)  # Below threshold
 
         result = exporter.pretty_accumulator_string()
 

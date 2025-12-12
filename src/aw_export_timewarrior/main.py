@@ -12,6 +12,7 @@ import os
 import sys
 
 from .config import config
+from .state import StateManager, AfkState
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
@@ -208,52 +209,11 @@ def load_config(config_path):
 ## not through arbitrary assignments in unrelated methods
 @dataclass
 class Exporter:
-    ## self.tags_accumulated_time is a time counter for each tags that has been observed.
-    ## When enough time has been counted, we'll look through and run ensure_tag_exported on the tags that has accumulated most time.
-    ## self.tags_accumulated_time is cleared ...
-    ## 1) when coming/going afk/not-afk
-    ## 3) when some event has been going on for MAX_MIXED_INTERVAL
-    ## 4) when some mixed events is recorded, the numbers are reduced - we
-    ## spill over some of the content to the next recording interval, to reduce flapping
-    tags_accumulated_time: defaultdict = field(default_factory=lambda: defaultdict(timedelta))
+    ## State Manager - centralized state management
+    _state: StateManager = field(default_factory=StateManager, init=False, repr=False)
 
-    ## Last tick is updated all the time.  It's the end time of the last event handled.
-    ## Used for determinating when we should start fetching window information
-    last_tick: datetime = None
-
-    ## last known tick is the end time of the last event causing tags to be "ensured"
-    ## (that is, exported if needed).  Should be set in the ensure algorithm.
-    last_known_tick: datetime = None
-
-    ## last known start time is the start time of the last event causing tags to be "ensured".
-    ## (that is, exported if needed).  Should be set in the ensure algorithm.
-    last_start_time: datetime = None
-
-    ## Assume we're afk when script is started ... but ... why?
-    afk: bool = None
-
-    ## total_time_known_events is summing up the time spent on
-    ## tag-generating activities since last time a tag was
-    ## recorded.  So it should be nulled out only when ensure_tag
-    ## is run It is useful for debugging; if
-    ## total_time_known_events is very low compared to the time
-    ## since last known tick, then something is wrong.
-    total_time_known_events: timedelta = timedelta(0)
-
-    ## Special case when one has just arrived to the computer.  It's
-    ## important that all the not-afk time is tagged up.  Should be
-    ## not-None only when the time hasn't been tagged yet.  TODO:
-    ## better naming?
-    last_not_afk: datetime = None
-
-    ## manual_tracking is set to True whenever you have used timew manually
-    manual_tracking: bool = True
-
-    ## Information from timew about the current tagging
+    ## Information from timew about the current tagging (not part of StateManager)
     timew_info: dict = None
-
-    ## This is not quite reliable
-    total_time_unknown_events: timedelta = timedelta(0)
 
     ## Testing and debugging options
     dry_run: bool = False  # If True, don't actually modify timewarrior
@@ -311,6 +271,11 @@ class Exporter:
     def breakpoint(self):
         if self.enable_pdb:
             breakpoint()
+
+    @property
+    def state(self) -> StateManager:
+        """Access to the StateManager instance."""
+        return self._state
 
     def load_test_data(self, file_path):
         """Load test data from a JSON/YAML file."""
@@ -442,12 +407,19 @@ class Exporter:
                     print("=" * 80 + "\n")
 
                     for cmd in fix_commands:
+                        # Skip commented-out commands (manually-entered events)
+                        if cmd.startswith('#'):
+                            print(f"Skipping (manual entry): {cmd}")
+                            continue
+
                         print(f"Executing: {cmd}")
-                        # Parse and execute the command
+                        # Parse and execute the command (strip comment part)
                         import subprocess
                         try:
+                            # Remove comment part if present (e.g., "  # 2025-12-10 - old tags: ...")
+                            command_part = cmd.split('  #')[0].strip()
                             result = subprocess.run(
-                                cmd.split(),
+                                command_part.split(),
                                 capture_output=True,
                                 text=True,
                                 check=True
@@ -577,23 +549,53 @@ class Exporter:
             return self.aw.get_events(bucket_id, start=start, end=end)
 
     def set_known_tick_stats(self, event=None, start=None, end=None, manual=False, tags=None, reset_accumulator=False, retain_accumulator=True):
+        """
+        Set statistics after exporting tags.
+
+        Args:
+            event: Event dictionary with timestamp and duration
+            start: Start time (overrides event timestamp)
+            end: End time (overrides event timestamp + duration)
+            manual: Whether this is manual tracking
+            tags: Tags being exported
+            reset_accumulator: Whether to reset tag accumulator
+            retain_accumulator: Whether to retain current tags with stickyness
+        """
+        # Extract timestamps
         if event and not start:
             start = event['timestamp']
         if event and not end:
             end = event['timestamp'] + event['duration']
         if start and not end:
             end = start
-        self.last_known_tick = end
-        self.last_tick = end
-        self.last_start_time = start
-        self.manual_tracking = manual
-        self.total_time_unknown_events = timedelta(0)
-        if reset_accumulator:
-            self.tags_accumulated_time = defaultdict(timedelta)
-            if retain_accumulator:
-                for tag in tags:
-                    self.tags_accumulated_time[tag] = STICKYNESS_FACTOR*MIN_RECORDING_INTERVAL
-        self.total_time_known_events = timedelta(0)                
+
+        # Prepare tags for retention
+        if tags is None:
+            tags = set()
+        elif isinstance(tags, str):
+            tags = {tags}
+        else:
+            tags = set(tags)  # Ensure it's a set
+
+        # Delegate to StateManager
+        self.state.record_export(
+            start=start,
+            end=end,
+            tags=tags,
+            manual=manual,
+            reset_stats=reset_accumulator,
+            retain_tags=tags if (reset_accumulator and retain_accumulator) else None,
+            stickyness_factor=STICKYNESS_FACTOR if (reset_accumulator and retain_accumulator) else 0.0
+        )
+
+        # Handle the special case where retain_accumulator adds initial time to tags
+        # This matches the old behavior: self.tags_accumulated_time[tag] = STICKYNESS_FACTOR*MIN_RECORDING_INTERVAL
+        if reset_accumulator and retain_accumulator and tags:
+            for tag in tags:
+                # If tag wasn't in accumulator before (so it has 0 time after reset),
+                # initialize it with STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL
+                if self.state.stats.tags_accumulated_time[tag] == timedelta(0):
+                    self.state.stats.tags_accumulated_time[tag] = timedelta(seconds=STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL)                
 
 
     ## TODO: move all dealings with statistics to explicit statistics-handling methods
@@ -604,32 +606,34 @@ class Exporter:
         if isinstance(tags, str):
             tags = { tags }
 
-        ## Now, the previously tagged thing has been running (at least) since self.last_known_tick,
-        ## no matter if we have activity supporting it or not since self.last_known_tick.
-        last_activity_run_time = since - self.last_start_time
+        # Only perform validation checks if state has been initialized
+        if self.state.last_start_time is not None and self.state.last_known_tick is not None:
+            ## Now, the previously tagged thing has been running (at least) since self.last_known_tick,
+            ## no matter if we have activity supporting it or not since self.last_known_tick.
+            last_activity_run_time = since - self.state.last_start_time
 
-        ## We'd like to compare with self.total_time_known_event, but it's counted from the end of the previous event to the end of the current event
-        tracked_gap = event['timestamp'] + event['duration'] - self.last_known_tick
+            ## We'd like to compare with self.total_time_known_event, but it's counted from the end of the previous event to the end of the current event
+            tracked_gap = event['timestamp'] + event['duration'] - self.state.last_known_tick
 
-        ## if the time tracked is significantly less than the minimum
-        ## time we're supposed to track, something is also probably
-        ## wrong and should be investigated
-        if tags != { 'afk' } and not self.afk and not self.manual_tracking and last_activity_run_time.total_seconds() < MIN_RECORDING_INTERVAL-3:
-            self.breakpoint()
+            ## if the time tracked is significantly less than the minimum
+            ## time we're supposed to track, something is also probably
+            ## wrong and should be investigated
+            if tags != { 'afk' } and not self.state.is_afk() and not self.state.manual_tracking and last_activity_run_time.total_seconds() < MIN_RECORDING_INTERVAL-3:
+                self.breakpoint()
 
-        ## If the tracked time is less than the known events time we've counted
-        ## then something is a little bit wrong.
-        if tags != { 'afk' } and tracked_gap < self.total_time_known_events:
-            self.breakpoint()
+            ## If the tracked time is less than the known events time we've counted
+            ## then something is a little bit wrong.
+            if tags != { 'afk' } and tracked_gap < self.state.stats.known_events_time:
+                self.breakpoint()
 
-        ## If he time tracked is way longer than the
-        ## self.total_time_known_events, something is probably wrong
-        ## and should be investigated
-        if tags != { 'afk' } and tracked_gap.total_seconds()>MAX_MIXED_INTERVAL and self.total_time_known_events/tracked_gap < 0.3 and not self.manual_tracking:
-            self.breakpoint()
+            ## If he time tracked is way longer than the
+            ## self.total_time_known_events, something is probably wrong
+            ## and should be investigated
+            if tags != { 'afk' } and tracked_gap.total_seconds()>MAX_MIXED_INTERVAL and self.state.stats.known_events_time/tracked_gap < 0.3 and not self.state.manual_tracking:
+                self.breakpoint()
 
         if 'afk' in tags:
-            self.afk = True
+            self.state.set_afk_state(AfkState.AFK)
 
         self.set_known_tick_stats(event=event, start=since)
 
@@ -657,7 +661,7 @@ class Exporter:
             self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run, capture_to=self.captured_commands))
 
     def pretty_accumulator_string(self) -> str:
-        a = self.tags_accumulated_time
+        a = self.state.stats.tags_accumulated_time
         tags = [x for x in a if a[x].total_seconds() > MIN_TAG_RECORDING_INTERVAL]
         tags.sort(key=lambda x: -a[x])
         return "\n".join([f"{x}: {a[x].total_seconds():5.1f}s" for x in tags])
@@ -678,7 +682,7 @@ class Exporter:
 
         # Build extra context for structured logging
         extra.update({
-            'last_tick': ts2strtime(self.last_tick) if self.last_tick else 'XX:XX:XX',
+            'last_tick': ts2strtime(self.state.last_tick) if self.state.last_tick else 'XX:XX:XX',
         })
 
         if ts:
@@ -955,33 +959,27 @@ class Exporter:
     def _afk_change_stats(self, afk, tags, event):
         """
         Internal method used from check_and_handle_afk_state_change.
-        Reset statistics counters when coming/going afk
-        
-        TODO: self.afk should ONLY be set here and on initialization
+        Reset statistics counters when coming/going afk.
         """
-        if tags == { 'afk' }:
-            ## This event may overlap other events.
-            ## We should ignore all other overlapping events, the afk tag
-            ## takes precedence.
-            ## By setting last_known_tick to the end of the afk event
-            ## we mark up that the activity up until then is known.
-            ## (This is redundant, if the afk event is also exported).
-            self.last_known_tick = event['timestamp'] + event['duration']
-            self.last_tick = self.last_known_tick
-        elif tags == { 'not-afk' }:
-            ## This event may overlap other events.
-            ## The duration of this event should be ignored.
-            ## The below statements should be kind of redundant, possibly harmful
-            ## if we have extra not-afk events, so they are commented out:
-            #self.last_tick = event['timestamp']
-            #self.last_known_tick = self.last_tick
-            ## All time since the start of the not-afk event should be tracked.
-            ## We keep a special counter on this.
-            self.last_not_afk = event['timestamp']
-            ## TODO: the statistic above should be honored
-        self.tags_accumulated_time = defaultdict(timedelta)
-        ## TODO - there is more to be done, isn't it?  Or perhaps not?
-        self.afk = afk=='afk'
+        # Determine new AFK state
+        if afk == 'afk':
+            new_state = AfkState.AFK
+        elif afk == 'not-afk':
+            new_state = AfkState.ACTIVE
+        else:
+            # Handle unexpected states - default to UNKNOWN->ACTIVE transition
+            logger.warning(f"Unexpected afk value: {afk}, treating as 'not-afk'")
+            new_state = AfkState.ACTIVE
+
+        # Calculate event end time
+        event_end = event['timestamp'] + event['duration']
+
+        # Delegate to StateManager
+        self.state.handle_afk_transition(
+            new_state=new_state,
+            current_time=event_end if tags == {'afk'} else event['timestamp'],
+            reason=f"AFK change: {afk}, tags: {tags}"
+        )
 
     def check_and_handle_afk_state_change(self, tags, event=None):
         """
@@ -991,22 +989,22 @@ class Exporter:
         * Returns False if the event/tags needs further handling
         * Returns True if all logic has been handled in this function, meaning that the event/tags does not need further handling
         """
-        if not tags: ## Not much to do here.  Except, we could verify that the event is compatible with the self.afk setting
+        if not tags: ## Not much to do here.  Except, we could verify that the event is compatible with the afk setting
             return False
         if 'afk' in tags and 'not-afk' in tags:
             ## Those are exclusive, should not happen!
             self.breakpoint()
-        if self.afk is None:
+        if self.state.afk_state == AfkState.UNKNOWN:
             ## Program has just been started, and we don't know if we're afk or not
             if 'afk' in tags:
-                self.afk = True
+                self.state.set_afk_state(AfkState.AFK)
             if 'not-afk' in tags:
-                self.afk = False
+                self.state.set_afk_state(AfkState.ACTIVE)
             ## unless tags are { 'afk' } or { 'non-afk' } we'll return False
             ## to indicate that we haven't handled any state change, and that
             ## the tags still needs handling
-            return self.afk is not None and len(tags) == 1
-        if self.afk:
+            return self.state.afk_state != AfkState.UNKNOWN and len(tags) == 1
+        if self.state.is_afk():
             if tags == { 'afk' }:
                 ## This should probably be checked up ... we're already afk, but now
                 ## we got a new afk tag?
@@ -1020,7 +1018,7 @@ class Exporter:
                 self.breakpoint()
             if 'not-afk' in tags:
                 self._afk_change_stats('not-afk', tags, event)
-                self.log(f"You have returned to the keyboard after {(event['timestamp']-self.last_start_time).total_seconds()}s absence", event=event)
+                self.log(f"You have returned to the keyboard after {(event['timestamp']-self.state.last_start_time).total_seconds()}s absence", event=event)
                 if tags != { 'not-afk' }:
                     ## Some possibilities:
                     ## 1) We have returned from the keyboard without the 'not-afk' special event triggered?
@@ -1071,6 +1069,89 @@ class Exporter:
                 break
         return tags
     
+    def _process_current_event_incrementally(self, event):
+        """
+        Process the current ongoing event in an idempotent way.
+
+        Since the current event's duration increases on each loop,
+        we track what we've already processed and only handle the delta.
+
+        This ensures the program is "snappy" (processes current events immediately)
+        while remaining idempotent (doesn't duplicate work when the same event
+        comes back with increased duration).
+
+        Args:
+            event: The current ongoing event from ActivityWatch
+        """
+        event_start = event['timestamp']
+        current_duration = event['duration']
+
+        # Check if this is the same ongoing event as last time
+        if self.state.current_event_timestamp == event_start:
+            # Same event - calculate the incremental duration
+            already_processed = self.state.current_event_processed_duration
+            new_duration = current_duration - already_processed
+
+            if new_duration <= timedelta(0):
+                # No new duration to process
+                return
+
+            # Create a synthetic event with just the new duration
+            # The timestamp is adjusted to start where we left off
+            incremental_event = event.copy()
+            incremental_event['duration'] = new_duration
+            incremental_event['timestamp'] = event_start + already_processed
+
+            # Process the incremental part
+            tags = self.find_tags_from_event(incremental_event)
+
+            if tags:
+                # Handle AFK state changes
+                if not self.check_and_handle_afk_state_change(tags, incremental_event):
+                    # Add to known events time
+                    self.state.stats.known_events_time += new_duration
+
+                    # Apply retagging rules
+                    tags = retag_by_rules(tags, self.config)
+
+                    # Accumulate tags from the incremental duration
+                    for tag in tags:
+                        self.state.stats.tags_accumulated_time[tag] += new_duration
+
+                    self.log(f"Processed incremental {new_duration.total_seconds()}s of current event with tags: {tags}")
+
+            # Update the processed duration
+            self.state.current_event_processed_duration = current_duration
+
+        else:
+            # New ongoing event - the previous one must have ended
+            if self.state.current_event_timestamp is not None:
+                # The previous ongoing event has now completed
+                # It was already processed incrementally, nothing more to do
+                self.log(f"Previous ongoing event completed, starting new event at {event_start}")
+
+            # Start tracking the new ongoing event
+            self.state.current_event_timestamp = event_start
+            self.state.current_event_processed_duration = timedelta(0)
+
+            # Process the entire current event (first time seeing it)
+            tags = self.find_tags_from_event(event)
+
+            if tags:
+                if not self.check_and_handle_afk_state_change(tags, event):
+                    self.state.stats.known_events_time += current_duration
+
+                    # Apply retagging rules
+                    tags = retag_by_rules(tags, self.config)
+
+                    for tag in tags:
+                        self.state.stats.tags_accumulated_time[tag] += current_duration
+
+                    self.log(f"Started tracking new current event ({current_duration.total_seconds()}s) with tags: {tags}")
+
+            # Record what we've processed
+            self.state.current_event_processed_duration = current_duration
+
     def find_next_activity(self):
         afk_id = self.bucket_by_client['aw-watcher-afk'][0]
         window_id = self.bucket_by_client['aw-watcher-window'][0]
@@ -1091,9 +1172,9 @@ class Exporter:
         total_time_skipped_events = timedelta(0)
 
         ## just to make sure we won't lose any events
-        #self.last_tick = self.last_tick - timedelta(1)
-        
-        afk_events = self.get_events(afk_id, start=self.last_tick, end=self.end_time)
+        #self.state.last_tick = self.state.last_tick - timedelta(1)
+
+        afk_events = self.get_events(afk_id, start=self.state.last_tick, end=self.end_time)
 
         ### START WORKAROUND
         ## TODO
@@ -1120,19 +1201,22 @@ class Exporter:
         afk_events = [ x for x in afk_events if x['duration'] > timedelta(seconds=MAX_MIXED_INTERVAL) ]
 
         ## afk and window_events
-        afk_window_events = self.get_events(window_id, start=self.last_tick, end=self.end_time) + afk_events
+        afk_window_events = self.get_events(window_id, start=self.state.last_tick, end=self.end_time) + afk_events
         afk_window_events.sort(key=lambda x: x['timestamp'])
-        if len(afk_window_events)<2:
+        if len(afk_window_events) == 0:
             return False
-        ## The last event on the list is unreliable, as it's about non-ended events
-        afk_window_events.pop()
+
+        ## Separate the current ongoing event from completed events
+        ## The last event is the "current" event still in progress
+        current_event = afk_window_events[-1] if len(afk_window_events) > 0 else None
+        completed_events = afk_window_events[:-1] if len(afk_window_events) > 1 else []
 
         cnt = 0
-        for event in afk_window_events[:-1]:
-            if event['timestamp'] < self.last_tick or event['timestamp'] < self.last_known_tick:
+        for event in completed_events:
+            if event['timestamp'] < self.state.last_tick or event['timestamp'] < self.state.last_known_tick:
                 if event['data'] == {'status': 'not-afk'}:
                     continue
-                if event['data'] != {'status': 'afk'} and event['timestamp'] > self.last_start_time:
+                if event['data'] != {'status': 'afk'} and event['timestamp'] > self.state.last_start_time:
                     if self.enable_pdb and event['duration']>timedelta(seconds=30):
                         import pdb; pdb.set_trace()
                     ## Do we need an exception here for afk events?
@@ -1150,12 +1234,12 @@ class Exporter:
                 ## continue after handling { 'afk' } and
                 ## we will pick up "ghost" events that should be
                 ## ignored.  (we could add some logic to skip handled or skippable events)
-                if self.afk:
+                if self.state.is_afk():
                     return True
                 continue
 
             if tags:
-                self.total_time_known_events += event['duration']
+                self.state.stats.known_events_time += event['duration']
 
             ## tags can be False or None and those means different things.
             ## TODO: Bad design
@@ -1169,17 +1253,17 @@ class Exporter:
             
             if tags is False:
                 num_unknown_events += 1
-                self.total_time_unknown_events += event['duration']
+                self.state.stats.unknown_events_time += event['duration']
                 # Track unmatched event if requested
                 if self.show_unmatched:
                     self.unmatched_events.append(event)
-                if self.total_time_unknown_events.total_seconds()>MAX_MIXED_INTERVAL*2:
+                if self.state.stats.unknown_events_time.total_seconds()>MAX_MIXED_INTERVAL*2:
                     # Significant unknown activity - tag it as UNKNOWN
-                    self.log(f"Significant unknown activity ({self.total_time_unknown_events.total_seconds()}s), tagging as UNKNOWN", event=event)
+                    self.log(f"Significant unknown activity ({self.state.stats.unknown_events_time.total_seconds()}s), tagging as UNKNOWN", event=event)
                     self.ensure_tag_exported({'UNKNOWN', 'not-afk'}, event)
-                    self.total_time_unknown_events = timedelta(0)
+                    self.state.stats.unknown_events_time = timedelta(0)
                 else:
-                    self.log(f"{self.total_time_unknown_events.total_seconds()}s unknown events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)", event=event)
+                    self.log(f"{self.state.stats.unknown_events_time.total_seconds()}s unknown events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)", event=event)
             else:
                 self.log(f"{event['data']} - tags found: {tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)")
             num_skipped_events = 0
@@ -1192,7 +1276,7 @@ class Exporter:
                 #print(f"We're tossing data: {self.tags_accumulated_time}")
                 self.ensure_tag_exported(tags, event)
 
-            interval_since_last_known_tick = event['timestamp'] + event['duration'] - self.last_known_tick
+            interval_since_last_known_tick = event['timestamp'] + event['duration'] - self.state.last_known_tick
             if (interval_since_last_known_tick < timedelta(0)):
                 ## Something is very wrong here, it needs investigation.
                 self.breakpoint()
@@ -1202,32 +1286,32 @@ class Exporter:
             if tags:
                 tags = retag_by_rules(tags, self.config)
                 for tag in tags:
-                    self.tags_accumulated_time[tag] += event['duration']
+                    self.state.stats.tags_accumulated_time[tag] += event['duration']
 
             ## Check - if `timew start` was run manually since last "known tick", then reset everything
             # Only update timew_info if not in dry-run mode
             if not self.dry_run:
                 self.set_timew_info(timew_retag(get_timew_info(), capture_to=self.captured_commands))
-            if interval_since_last_known_tick.total_seconds() > MIN_RECORDING_INTERVAL_ADJ and any(x for x in self.tags_accumulated_time if x not in SPECIAL_TAGS and self.tags_accumulated_time[x].total_seconds()>MIN_RECORDING_INTERVAL_ADJ):
+            if interval_since_last_known_tick.total_seconds() > MIN_RECORDING_INTERVAL_ADJ and any(x for x in self.state.stats.tags_accumulated_time if x not in SPECIAL_TAGS and self.state.stats.tags_accumulated_time[x].total_seconds()>MIN_RECORDING_INTERVAL_ADJ):
                 self.log("Emptying the accumulator!")
                 tags = set()
                 ## TODO: This looks like a bug - we reset tags, and then assert that they are not overlapping?
                 assert not exclusive_overlapping(tags, self.config)
                 min_tag_recording_interval=MIN_TAG_RECORDING_INTERVAL
-                while exclusive_overlapping(set([tag for tag in self.tags_accumulated_time if  self.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval]), self.config):
+                while exclusive_overlapping(set([tag for tag in self.state.stats.tags_accumulated_time if  self.state.stats.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval]), self.config):
                     min_tag_recording_interval += 1
-                for tag in self.tags_accumulated_time:
-                    if self.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval:
+                for tag in self.state.stats.tags_accumulated_time:
+                    if self.state.stats.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval:
                         tags.add(tag)
-                    self.tags_accumulated_time[tag] *= STICKYNESS_FACTOR
-                if self.manual_tracking:
-                    since = event['timestamp']-self.total_time_known_events+event['duration']
+                    self.state.stats.tags_accumulated_time[tag] *= STICKYNESS_FACTOR
+                if self.state.manual_tracking:
+                    since = event['timestamp']-self.state.stats.known_events_time+event['duration']
                 else:
-                    since = self.last_known_tick
+                    since = self.state.last_known_tick
                 self.log(f"Ensuring tags export, tags={tags}")
                 self.ensure_tag_exported(tags, event, since)
 
-            self.last_tick = event['timestamp'] + event['duration']
+            self.state.last_tick = event['timestamp'] + event['duration']
             cnt += 1
 
             if tags is not False:
@@ -1237,6 +1321,11 @@ class Exporter:
                 self.log(f"Unknown terminal event {event['data']['title']}", event=event, level=logging.WARNING)
             else:
                 self.log(f"No rules found for event {event['data']}", event=event, level=logging.WARNING)
+
+        ## Process the current ongoing event incrementally (idempotent)
+        if current_event:
+            self._process_current_event_incrementally(current_event)
+
         return cnt>1
 
     def set_timew_info(self, timew_info):
@@ -1250,16 +1339,16 @@ class Exporter:
             self.timew_info = None
             return
 
-        if self.afk is None and 'afk' in timew_info['tags']:
-            self.afk = True
-        if self.afk is None and 'not-afk' in timew_info['tags']:
-            self.afk = False
+        if self.state.afk_state == AfkState.UNKNOWN and 'afk' in timew_info['tags']:
+            self.state.set_afk_state(AfkState.AFK)
+        if self.state.afk_state == AfkState.UNKNOWN and 'not-afk' in timew_info['tags']:
+            self.state.set_afk_state(AfkState.ACTIVE)
 
         foo = self.timew_info
         self.timew_info = timew_info
         if foo != self.timew_info: ## timew has been run since last
             self.log(f"tracking from {ts2strtime(self.timew_info['start_dt'])}: {self.timew_info['tags']}")
-            if not self.last_known_tick or timew_info['start_dt'] > self.last_known_tick:
+            if not self.state.last_known_tick or timew_info['start_dt'] > self.state.last_known_tick:
                 self.set_known_tick_stats(start=timew_info['start_dt'], manual=True, tags=timew_info['tags'])
 
     def tick(self, process_all: bool = False) -> bool:
@@ -1298,15 +1387,15 @@ class Exporter:
                 else:
                     raise
 
-        if not self.last_tick:
+        if not self.state.last_tick:
             ## TODO: think more through this.  This is in practice program initialization
             # Use start_time if provided, otherwise use timew start
             if self.start_time:
-                self.last_tick = self.start_time
+                self.state.last_tick = self.start_time
             else:
-                self.last_tick = self.timew_info['start_dt']
-            self.last_known_tick = self.last_tick
-            self.last_start_time = self.last_tick
+                self.state.last_tick = self.timew_info['start_dt']
+            self.state.last_known_tick = self.state.last_tick
+            self.state.last_start_time = self.state.last_tick
 
         # If process_all is True, keep finding activity until there's none left
         if process_all:
@@ -1314,11 +1403,11 @@ class Exporter:
                 found_activity = self.find_next_activity()
                 if not found_activity:
                     # Check if we've reached end_time
-                    if self.end_time and self.last_tick < self.end_time:
+                    if self.end_time and self.state.last_tick < self.end_time:
                         self.log(f"No more events before end_time, advancing to {self.end_time}")
                         if self.enable_pdb:
                             import pdb; pdb.set_trace()
-                        self.last_tick = self.end_time
+                        self.state.last_tick = self.end_time
                         found_activity = self.find_next_activity()
                     if not found_activity:
                         break
@@ -1330,9 +1419,9 @@ class Exporter:
             # If we have an end_time and no new activity was found, check if we should stop
             if not found_activity and self.end_time:
                 # Update last_tick to end_time if we've processed everything up to it
-                if self.last_tick < self.end_time:
+                if self.state.last_tick < self.end_time:
                     self.log(f"No more events before end_time, advancing to {self.end_time}")
-                    self.last_tick = self.end_time
+                    self.state.last_tick = self.end_time
                     # Try one more time to find activity
                     found_activity = self.find_next_activity()
 

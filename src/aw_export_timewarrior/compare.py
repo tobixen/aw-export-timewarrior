@@ -247,11 +247,11 @@ def generate_fix_commands(comparison: Dict[str, List]) -> List[str]:
     """
     Generate timew commands to fix differences.
 
-    Uses 'timew track' for missing intervals and 'timew retag' for intervals
-    with different tags.
+    Uses 'timew track' for missing intervals, 'timew retag' for intervals
+    with different tags, and 'timew delete' for extra intervals.
 
     Commands for manually-entered events (those without ~aw tag) are commented out
-    to prevent accidental overwriting.
+    to prevent accidental deletion/overwriting.
 
     Args:
         comparison: Result from compare_intervals
@@ -289,6 +289,28 @@ def generate_fix_commands(comparison: Dict[str, List]) -> List[str]:
         # Build the command with comment
         base_cmd = f"timew retag @{timew_int.id} {tags}"
         comment = f"  # {timestamp_str} - old tags: {old_tags_str}"
+
+        # Comment out the entire command if it's a manually-entered event
+        if is_manual:
+            commands.append(f"# {base_cmd}{comment}")
+        else:
+            commands.append(f"{base_cmd}{comment}")
+
+    # Delete extra intervals using 'timew delete'
+    for timew_int in comparison['extra']:
+        # Format timestamp for comment
+        timestamp_str = timew_int.start.astimezone().strftime('%Y-%m-%d %H:%M')
+
+        # Format tags for comment
+        tags_str = ' '.join(sorted(timew_int.tags))
+
+        # Check if this is a manually-entered event (no ~aw tag)
+        is_manual = '~aw' not in timew_int.tags
+
+        # Build the command with comment
+        # Note: timew delete requires confirmation unless :yes is used
+        base_cmd = f"timew delete @{timew_int.id} :yes"
+        comment = f"  # {timestamp_str} - tags: {tags_str}"
 
         # Comment out the entire command if it's a manually-entered event
         if is_manual:

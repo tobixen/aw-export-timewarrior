@@ -116,6 +116,10 @@ class StateManager:
     # Statistics
     stats: TimeStats = field(default_factory=TimeStats)
 
+    # Current ongoing event tracking (for idempotent incremental processing)
+    current_event_timestamp: Optional[datetime] = None
+    current_event_processed_duration: timedelta = field(default_factory=lambda: timedelta(0))
+
     # Configuration
     enable_validation: bool = True
 
@@ -259,6 +263,9 @@ class StateManager:
         # Reset stats if requested (before adding new data)
         if reset_stats:
             self.stats.reset(retain_tags=retain_tags, stickyness_factor=stickyness_factor)
+            # Also reset current event tracking when starting a new export period
+            self.current_event_timestamp = None
+            self.current_event_processed_duration = timedelta(0)
 
     def handle_afk_transition(
         self,
@@ -270,13 +277,13 @@ class StateManager:
         """Handle a transition in AFK state.
 
         This method handles the state transition and any associated cleanup,
-        such as resetting statistics when going AFK.
+        such as resetting statistics on any AFK state change.
 
         Args:
             new_state: The new AFK state
             current_time: Time of the transition (defaults to now)
             reason: Optional reason for transition
-            reset_stats: Whether to reset statistics on transition to AFK
+            reset_stats: Whether to reset statistics on any state transition
         """
         old_state = self.afk_state
 
@@ -293,8 +300,9 @@ class StateManager:
             # Going AFK - clear last_not_afk
             self.last_not_afk = None
 
-        # Handle going AFK: reset statistics
-        if old_state != AfkState.AFK and new_state == AfkState.AFK and reset_stats:
+        # Handle AFK state transitions: reset statistics on any transition
+        # (both going AFK and returning from AFK)
+        if old_state != new_state and reset_stats:
             self.stats.reset(retain_tags=None)
 
         # Update last_known_tick and last_tick when going AFK

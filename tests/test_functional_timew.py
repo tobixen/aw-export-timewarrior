@@ -334,8 +334,8 @@ class TestApplyFix:
         start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc)
         end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc)
 
-        # Add interval with old tags
-        timew_db.add_interval(start, end, ['old-tag'])
+        # Add interval with old tags (including ~aw to mark it as auto-generated)
+        timew_db.add_interval(start, end, ['old-tag', '~aw'])
 
         # Fetch it
         timew_intervals = fetch_timew_intervals(start, end)
@@ -356,14 +356,16 @@ class TestApplyFix:
         assert 'new-tag' in commands[0]
         assert 'work' in commands[0]
 
-        # Execute the command
-        parts = commands[0].split()
+        # Execute the command (strip comment part if present)
+        command_line = commands[0].split('  #')[0]  # Remove comment with timestamp/old tags
+        parts = command_line.split()
         result = timew_db.run_timew(*parts[1:])
         assert result.returncode == 0
 
         # Verify the tags were changed
         new_intervals = fetch_timew_intervals(start, end)
         assert len(new_intervals) == 1
+        # Note: suggested tags don't include ~aw, so it won't be in the new tags
         assert new_intervals[0].tags == {'new-tag', 'work'}
         assert new_intervals[0].id == original_id  # Same interval
 

@@ -418,3 +418,85 @@ class TestGenerateFixCommands:
         assert not commands[1].startswith('# timew')
         # Third should be commented retag (no ~aw)
         assert commands[2].startswith('# timew retag @2')
+
+    def test_generate_delete_command_for_extra_auto(self) -> None:
+        """Test that extra auto-generated intervals get delete commands."""
+        comparison = {
+            'matching': [],
+            'different_tags': [],
+            'missing': [],
+            'extra': [
+                TimewInterval(
+                    id=42,
+                    start=datetime(2025, 12, 10, 14, 0, 0, tzinfo=timezone.utc),
+                    end=datetime(2025, 12, 10, 15, 0, 0, tzinfo=timezone.utc),
+                    tags={'UNKNOWN', 'not-afk', '~aw'}
+                )
+            ],
+        }
+
+        commands = generate_fix_commands(comparison)
+
+        assert len(commands) == 1
+        # Should generate uncommented delete command (has ~aw)
+        assert commands[0].startswith('timew delete @42 :yes')
+        assert not commands[0].startswith('#')
+        assert '# 2025-12-10' in commands[0]  # Check date, not exact time (timezone conversion)
+        assert 'tags: UNKNOWN not-afk ~aw' in commands[0]
+
+    def test_generate_delete_command_for_extra_manual(self) -> None:
+        """Test that extra manually-entered intervals get commented delete commands."""
+        comparison = {
+            'matching': [],
+            'different_tags': [],
+            'missing': [],
+            'extra': [
+                TimewInterval(
+                    id=99,
+                    start=datetime(2025, 12, 10, 16, 0, 0, tzinfo=timezone.utc),
+                    end=datetime(2025, 12, 10, 17, 0, 0, tzinfo=timezone.utc),
+                    tags={'manual-work', 'meeting'}  # No ~aw tag
+                )
+            ],
+        }
+
+        commands = generate_fix_commands(comparison)
+
+        assert len(commands) == 1
+        # Should generate commented delete command (no ~aw)
+        assert commands[0].startswith('# timew delete @99 :yes')
+        assert '# 2025-12-10' in commands[0]  # Check date, not exact time (timezone conversion)
+        assert 'tags: manual-work meeting' in commands[0]
+
+    def test_generate_delete_commands_mixed(self) -> None:
+        """Test generating delete commands for both auto and manual extra intervals."""
+        comparison = {
+            'matching': [],
+            'different_tags': [],
+            'missing': [],
+            'extra': [
+                # Auto-generated
+                TimewInterval(
+                    id=1,
+                    start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.utc),
+                    end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
+                    tags={'auto', '~aw'}
+                ),
+                # Manual
+                TimewInterval(
+                    id=2,
+                    start=datetime(2025, 12, 10, 11, 0, 0, tzinfo=timezone.utc),
+                    end=datetime(2025, 12, 10, 12, 0, 0, tzinfo=timezone.utc),
+                    tags={'manual'}
+                ),
+            ],
+        }
+
+        commands = generate_fix_commands(comparison)
+
+        assert len(commands) == 2
+        # First should be uncommented delete (has ~aw)
+        assert commands[0].startswith('timew delete @1 :yes')
+        assert not commands[0].startswith('#')
+        # Second should be commented delete (no ~aw)
+        assert commands[1].startswith('# timew delete @2 :yes')

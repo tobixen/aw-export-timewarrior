@@ -13,6 +13,7 @@ from aw_export_timewarrior.main import (
     timew_run,
     timew_retag,
 )
+from aw_export_timewarrior.state import AfkState
 
 
 def create_aw_event(timestamp, duration, data):
@@ -212,10 +213,10 @@ class TestEnsureTagExported:
     ) -> None:
         """Test that ensure_tag_exported starts new timewarrior tracking."""
         exporter = Exporter()
-        exporter.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
-        exporter.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
-        exporter.afk = False
-        exporter.manual_tracking = False
+        exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.set_afk_state(AfkState.ACTIVE)
+        exporter.state.manual_tracking = False
 
         mock_timew_info = {
             'id': 1,
@@ -257,9 +258,9 @@ class TestEnsureTagExported:
     ) -> None:
         """Test that ensure_tag_exported skips when 'override' tag is present."""
         exporter = Exporter()
-        exporter.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
-        exporter.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
-        exporter.afk = False
+        exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.set_afk_state(AfkState.ACTIVE)
 
         mock_timew_info = {
             'id': 1,
@@ -296,9 +297,9 @@ class TestEnsureTagExported:
     ) -> None:
         """Test that ensure_tag_exported skips when tags are already tracked."""
         exporter = Exporter()
-        exporter.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
-        exporter.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
-        exporter.afk = False
+        exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.set_afk_state(AfkState.ACTIVE)
 
         mock_timew_info = {
             'id': 1,
@@ -336,7 +337,7 @@ class TestExporterTick:
     ) -> None:
         """Test that first tick initializes from timewarrior info."""
         exporter = Exporter()
-        exporter.last_tick = None  # Not initialized
+        exporter.state.last_tick = None  # Not initialized
 
         timew_info = {
             'id': 1,
@@ -352,8 +353,8 @@ class TestExporterTick:
 
         exporter.tick()
 
-        assert exporter.last_tick == timew_info['start_dt']
-        assert exporter.last_known_tick == timew_info['start_dt']
+        assert exporter.state.last_tick == timew_info['start_dt']
+        assert exporter.state.last_known_tick == timew_info['start_dt']
 
     @patch('aw_export_timewarrior.main.get_timew_info')
     @patch('aw_export_timewarrior.main.timew_retag')
@@ -368,7 +369,7 @@ class TestExporterTick:
     ) -> None:
         """Test that tick sleeps when no events are found."""
         exporter = Exporter()
-        exporter.last_tick = datetime.now(timezone.utc)
+        exporter.state.last_tick = datetime.now(timezone.utc)
 
         timew_info = {
             'id': 1,
@@ -394,7 +395,7 @@ class TestExporterLog:
     def test_log_with_event(self, mock_logger: Mock, mock_aw_client: Mock) -> None:
         """Test logging with an event."""
         exporter = Exporter()
-        exporter.last_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
+        exporter.state.last_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=timezone.utc)
 
         event = {
             'timestamp': datetime(2025, 5, 28, 14, 5, 0, tzinfo=timezone.utc),
