@@ -223,11 +223,9 @@ def format_as_table(
 
     # Print header
     if all_columns:
-        headers = ['Time', 'Duration', 'Window Title', 'App', 'Type', 'File/URL', 'AFK', 'Tags']
         print(f"{'Time':<8} {'Dur':<8} {'Window Title':<50} {'App':<15} {'Type':<8} {'File/URL':<60} {'AFK':<8} {'Tags'}")
         print('=' * 180)
     else:
-        headers = ['Time', 'Duration', 'Window Title', 'File/URL', 'AFK', 'Tags']
         print(f"{'Time':<8} {'Dur':<8} {'Window Title':<50} {'File/URL':<60} {'AFK':<8} {'Tags'}")
         print('=' * 145)
 

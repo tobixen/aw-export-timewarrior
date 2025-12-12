@@ -70,10 +70,7 @@ class StructuredFormatter(logging.Formatter):
         event_ts = log_data.get('event_ts', '')
 
         # Build timestamp prefix
-        if event_ts:
-            ts_prefix = f"{now} / {last_tick} / {event_ts}"
-        else:
-            ts_prefix = f"{now} / {last_tick}"
+        ts_prefix = f"{now} / {last_tick} / {event_ts}" if event_ts else f"{now} / {last_tick}"
 
         # Add duration if present
         if 'event_duration' in log_data:
@@ -240,10 +237,7 @@ class Exporter:
             self.config = load_config(self.config_path)
         ## data fetching - skip if using test data
         if not self.test_data:
-            if self.dry_run:
-                client_name = "timewarrior_test_export"
-            else:
-                client_name = "timewarrior_export"
+            client_name = "timewarrior_test_export" if self.dry_run else "timewarrior_export"
             self.aw = aw_client.ActivityWatchClient(client_name=client_name)
             self.buckets = self.aw.get_buckets()
         else:
@@ -425,7 +419,7 @@ class Exporter:
                         try:
                             # Remove comment part if present (e.g., "  # 2025-12-10 - old tags: ...")
                             command_part = cmd.split('  #')[0].strip()
-                            result = subprocess.run(
+                            subprocess.run(
                                 command_part.split(),
                                 capture_output=True,
                                 text=True,
@@ -899,14 +893,13 @@ class Exporter:
         ret = self.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=1), end=window_event['timestamp']+window_event['duration'])
 
         ## If nothing found ... try harder
-        if not ret and not ignorable and retry:
+        if not ret and not ignorable and retry and time() - SLEEP_INTERVAL*3 < (window_event['timestamp'] + window_event['duration']).timestamp():
             ## Perhaps the event hasn't reached ActivityWatch yet?  Perhaps it helps to sleep?
             ## Obviously, it may only help if the wall clock matches the event time
-            if time() - SLEEP_INTERVAL*3 < (window_event['timestamp'] + window_event['duration']).timestamp():
-                self.log(f"Event details for {window_event} not in yet, attempting to sleep for a while", event=window_event)
-                sleep(SLEEP_INTERVAL*3/retry+0.2)
-                retry -= 1
-                return self.get_corresponding_event(window_event, event_type_id, ignorable, retry)
+            self.log(f"Event details for {window_event} not in yet, attempting to sleep for a while", event=window_event)
+            sleep(SLEEP_INTERVAL*3/retry+0.2)
+            retry -= 1
+            return self.get_corresponding_event(window_event, event_type_id, ignorable, retry)
 
         if not ret and not ignorable:
             ret = self.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=15), end=window_event['timestamp']+window_event['duration']+timedelta(seconds=15))
@@ -1112,20 +1105,18 @@ class Exporter:
             # Process the incremental part
             tags = self.find_tags_from_event(incremental_event)
 
-            if tags:
-                # Handle AFK state changes
-                if not self.check_and_handle_afk_state_change(tags, incremental_event):
-                    # Add to known events time
-                    self.state.stats.known_events_time += new_duration
+            if tags and not self.check_and_handle_afk_state_change(tags, incremental_event):
+                # Add to known events time
+                self.state.stats.known_events_time += new_duration
 
-                    # Apply retagging rules
-                    tags = retag_by_rules(tags, self.config)
+                # Apply retagging rules
+                tags = retag_by_rules(tags, self.config)
 
-                    # Accumulate tags from the incremental duration
-                    for tag in tags:
-                        self.state.stats.tags_accumulated_time[tag] += new_duration
+                # Accumulate tags from the incremental duration
+                for tag in tags:
+                    self.state.stats.tags_accumulated_time[tag] += new_duration
 
-                    self.log(f"Processed incremental {new_duration.total_seconds()}s of current event with tags: {tags}")
+                self.log(f"Processed incremental {new_duration.total_seconds()}s of current event with tags: {tags}")
 
             # Update the processed duration
             self.state.current_event_processed_duration = current_duration
@@ -1144,17 +1135,16 @@ class Exporter:
             # Process the entire current event (first time seeing it)
             tags = self.find_tags_from_event(event)
 
-            if tags:
-                if not self.check_and_handle_afk_state_change(tags, event):
-                    self.state.stats.known_events_time += current_duration
+            if tags and not self.check_and_handle_afk_state_change(tags, event):
+                self.state.stats.known_events_time += current_duration
 
-                    # Apply retagging rules
-                    tags = retag_by_rules(tags, self.config)
+                # Apply retagging rules
+                tags = retag_by_rules(tags, self.config)
 
-                    for tag in tags:
-                        self.state.stats.tags_accumulated_time[tag] += current_duration
+                for tag in tags:
+                    self.state.stats.tags_accumulated_time[tag] += current_duration
 
-                    self.log(f"Started tracking new current event ({current_duration.total_seconds()}s) with tags: {tags}")
+                self.log(f"Started tracking new current event ({current_duration.total_seconds()}s) with tags: {tags}")
 
             # Record what we've processed
             self.state.current_event_processed_duration = current_duration
@@ -1305,7 +1295,7 @@ class Exporter:
                 ## TODO: This looks like a bug - we reset tags, and then assert that they are not overlapping?
                 assert not exclusive_overlapping(tags, self.config)
                 min_tag_recording_interval=MIN_TAG_RECORDING_INTERVAL
-                while exclusive_overlapping(set([tag for tag in self.state.stats.tags_accumulated_time if  self.state.stats.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval]), self.config):
+                while exclusive_overlapping({tag for tag in self.state.stats.tags_accumulated_time if  self.state.stats.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval}, self.config):
                     min_tag_recording_interval += 1
                 for tag in self.state.stats.tags_accumulated_time:
                     if self.state.stats.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval:

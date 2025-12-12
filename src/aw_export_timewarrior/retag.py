@@ -14,7 +14,7 @@ if __name__ == '__main__':
         source_tags = set(timew_data['tags'])
         try:
             new_tags = retag_by_rules(source_tags)
-        except:
+        except Exception:
             print(f"problems with {source_tags}")
             continue
 

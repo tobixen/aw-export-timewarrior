@@ -101,9 +101,9 @@ def fetch_timew_intervals(start_time: datetime, end_time: datetime) -> list[Time
         return intervals
 
     except subprocess.CalledProcessError as e:
-        raise Exception(f"Failed to fetch timew data: {e.stderr}")
+        raise Exception(f"Failed to fetch timew data: {e.stderr}") from e
     except json.JSONDecodeError as e:
-        raise Exception(f"Failed to parse timew export output: {e}")
+        raise Exception(f"Failed to parse timew export output: {e}") from e
 
 
 def compare_intervals(timew_intervals: list[TimewInterval],
@@ -226,7 +226,7 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
     # Matching intervals (if verbose)
     if verbose and comparison['matching']:
         lines.append(f"\n{colored('Matching intervals:', 'green', attrs=['bold'])}")
-        for timew_int, suggested in comparison['matching']:
+        for timew_int, _suggested in comparison['matching']:
             duration = timew_int.duration()
             # Convert to local time for display
             start_local = timew_int.start.astimezone().strftime('%H:%M:%S')
@@ -390,8 +390,6 @@ def format_timeline(timew_intervals: list[TimewInterval],
     lines.append("-" * 100)
 
     # Track previous intervals to detect continuations
-    prev_timew_active = None
-    prev_suggested_active = None
 
     for i, time_point in enumerate(time_points[:-1]):
         next_point = time_points[i + 1]
@@ -432,7 +430,6 @@ def format_timeline(timew_intervals: list[TimewInterval],
         else:
             timew_str = colored("(no tracking)", "red")
 
-        prev_timew_active = timew_active
 
         # Format the ActivityWatch intervals
         if not in_requested_window:
@@ -455,19 +452,18 @@ def format_timeline(timew_intervals: list[TimewInterval],
 
         # Color code based on match status (only for time slices within requested window)
         # Only color when we have actual text to display (not blank continuation lines)
-        if in_requested_window and timew_str and suggested_str:
-            if timew_active and suggested_active:
-                # Both have something - check if tags match
-                timew_tags = set().union(*[iv.tags for iv in timew_active])
-                suggested_tags = set().union(*[iv.tags for iv in suggested_active])
-                if timew_tags == suggested_tags:
-                    # Perfect match
-                    timew_str = colored(timew_str, "green")
-                    suggested_str = colored(suggested_str, "green")
-                else:
-                    # Different tags
-                    timew_str = colored(timew_str, "yellow")
-                    suggested_str = colored(suggested_str, "yellow")
+        if in_requested_window and timew_str and suggested_str and timew_active and suggested_active:
+            # Both have something - check if tags match
+            timew_tags = set().union(*[iv.tags for iv in timew_active])
+            suggested_tags = set().union(*[iv.tags for iv in suggested_active])
+            if timew_tags == suggested_tags:
+                # Perfect match
+                timew_str = colored(timew_str, "green")
+                suggested_str = colored(suggested_str, "green")
+            else:
+                # Different tags
+                timew_str = colored(timew_str, "yellow")
+                suggested_str = colored(suggested_str, "yellow")
 
         # Color suggested intervals red when missing from timew (only when we display tags, not blanks)
         if in_requested_window and not timew_active and suggested_active and suggested_str:

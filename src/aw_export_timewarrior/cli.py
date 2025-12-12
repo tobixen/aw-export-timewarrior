@@ -389,7 +389,7 @@ Examples:
     )
 
     # ===== VALIDATE subcommand =====
-    validate_parser = subparsers.add_parser(
+    subparsers.add_parser(
         'validate',
         help='Validate configuration file',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -416,10 +416,7 @@ def get_default_log_file(json: bool) -> Path:
     # Use XDG_DATA_HOME or fallback to ~/.local/share
     import os
     data_home = os.environ.get('XDG_DATA_HOME')
-    if data_home:
-        data_dir = Path(data_home)
-    else:
-        data_dir = Path.home() / '.local' / 'share'
+    data_dir = Path(data_home) if data_home else Path.home() / '.local' / 'share'
 
     log_dir = data_dir / 'aw-export-timewarrior'
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -483,9 +480,8 @@ def validate_sync_args(args: argparse.Namespace) -> str | None:
             return "Error: --start/--end not compatible with --test-data (test data has its own time range)"
 
     # Dry-run without --once requires time boundaries to prevent infinite loop
-    if args.dry_run and not args.once:
-        if not (args.start and args.end):
-            return "Error: --dry-run without --once requires both --start and --end (to prevent infinite loop)"
+    if args.dry_run and not args.once and not (args.start and args.end):
+        return "Error: --dry-run without --once requires both --start and --end (to prevent infinite loop)"
 
     # End without start doesn't make sense
     if args.end and not args.start:
@@ -534,10 +530,7 @@ def run_sync(args: argparse.Namespace) -> int:
     if args.start:
         start_time = parse_datetime(args.start)
         # Default end time to now if not specified
-        if args.end:
-            end_time = parse_datetime(args.end)
-        else:
-            end_time = datetime.now(UTC)
+        end_time = parse_datetime(args.end) if args.end else datetime.now(UTC)
         print(f"Processing time range: {start_time} to {end_time}")
 
     # Load test data if specified
@@ -732,7 +725,7 @@ def run_report(args: argparse.Namespace) -> int:
 
 def run_validate(args: argparse.Namespace) -> int:
     """Execute the validate subcommand."""
-    config = load_config(args.config)
+    load_config(args.config)
     print("Configuration is valid")
     return 0
 
