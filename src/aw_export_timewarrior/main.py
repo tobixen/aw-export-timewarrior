@@ -235,6 +235,8 @@ class Exporter:
     def __post_init__(self):
         if not self.config:
             self.config = load_config(self.config_path)
+        # Convert terminal_apps list to lowercase set for efficient lookups
+        self.terminal_apps = {app.lower() for app in self.config.get('terminal_apps', [])}
         ## data fetching - skip if using test data
         if not self.test_data:
             client_name = "timewarrior_test_export" if self.dry_run else "timewarrior_export"
@@ -638,7 +640,7 @@ class Exporter:
 
         self.set_known_tick_stats(event=event, start=since)
 
-        # Only update timew_info if not in dry-run mode
+        # Update timew_info (either from actual timew or maintain simulated state in dry-run)
         if not self.dry_run:
             self.set_timew_info(timew_retag(get_timew_info(), capture_to=self.captured_commands))
 
@@ -652,14 +654,28 @@ class Exporter:
                 return
         tags = retag_by_rules(tags, self.config)
         assert not exclusive_overlapping(tags, self.config)
+
+        # Check if tags are exactly the same as current tags (after rule application)
+        # This prevents redundant timew start commands when tags haven't changed
+        final_tags = tags | {'~aw'}  # Add ~aw tag as it's always added
+        if self.timew_info is not None and final_tags == self.timew_info['tags']:
+            return
+
         timew_run(['start'] + list(tags) + ['~aw', since.astimezone().strftime('%FT%H:%M:%S')],
                   dry_run=self.dry_run,
                   capture_to=self.captured_commands if self.dry_run else None,
                   hide_output=self.hide_processing_output)
 
-        # Only update timew_info after command if not in dry-run mode
+        # Update timew_info after command
         if not self.dry_run:
             self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run, capture_to=self.captured_commands))
+        else:
+            # In dry-run mode, simulate the timew_info state as if the command was executed
+            self.set_timew_info({
+                'start': since.strftime("%Y%m%dT%H%M%SZ"),
+                'start_dt': since,
+                'tags': final_tags
+            })
 
     def pretty_accumulator_string(self) -> str:
         a = self.state.stats.tags_accumulated_time
@@ -1146,6 +1162,56 @@ class Exporter:
             # Record what we've processed
             self.state.current_event_processed_duration = current_duration
 
+    def _apply_afk_gap_workaround(self, afk_events: list) -> list:
+        """
+        Apply workaround for aw-watcher-window-wayland issue #41.
+
+        Issue: https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/41
+        Problem: AFK watcher on Wayland may not report AFK events, leaving gaps
+                 between "not-afk" events that should be treated as AFK periods.
+
+        This workaround fills gaps between consecutive AFK events with synthetic
+        AFK events, assuming that any gap longer than MIN_RECORDING_INTERVAL
+        should be treated as an AFK period.
+
+        Args:
+            afk_events: List of AFK events from ActivityWatch
+
+        Returns:
+            Modified list of AFK events with synthetic gaps filled in
+
+        Note:
+            This workaround can be disabled by setting enable_afk_gap_workaround=false
+            in the config file if the upstream issue is fixed or if it causes problems.
+        """
+        if len(afk_events) <= 1:
+            return afk_events
+
+        # Sort events by timestamp to find gaps
+        sorted_events = sorted(afk_events, key=lambda x: x['timestamp'])
+
+        # Find gaps between consecutive events and fill with synthetic AFK events
+        synthetic_afk_events = []
+        for i in range(1, len(sorted_events)):
+            prev_event = sorted_events[i - 1]
+            curr_event = sorted_events[i]
+
+            # Calculate gap between end of previous event and start of current
+            gap_start = prev_event['timestamp'] + prev_event['duration']
+            gap_end = curr_event['timestamp']
+            gap_duration = gap_end - gap_start
+
+            # Only create synthetic AFK event if gap is significant
+            if gap_duration.total_seconds() >= MIN_RECORDING_INTERVAL:
+                synthetic_afk_events.append({
+                    'data': {'status': 'afk'},
+                    'timestamp': gap_start,
+                    'duration': gap_duration
+                })
+
+        # Combine original and synthetic events
+        return afk_events + synthetic_afk_events
+
     def find_next_activity(self):
         afk_id = self.bucket_by_client['aw-watcher-afk'][0]
         window_id = self.bucket_by_client['aw-watcher-window'][0]
@@ -1170,23 +1236,9 @@ class Exporter:
 
         afk_events = self.get_events(afk_id, start=self.state.last_tick, end=self.end_time)
 
-        ### START WORKAROUND
-        ## TODO
-        ## workaround for https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/41
-        ## assume all gaps are afk
-        #if len(afk_events) == 0:
-            #afk_events = [{'data': {'status': 'afk'}, 'timestamp': self.last_tick, 'duration': timedelta(seconds=time()-self.last_tick.timestamp())}]
-        if len(afk_events)>1: #and not any(x for x in afk_events if x['data']['status'] != 'not-afk'):
-            afk_events.reverse()
-            afk_events.sort(key=lambda x: x['timestamp'])
-            for i in range(1, len(afk_events)):
-                end = afk_events[i]['timestamp']
-                start = afk_events[i-1]['timestamp'] + afk_events[i-1]['duration']
-                duration = end-start
-                if duration.total_seconds() < MIN_RECORDING_INTERVAL:
-                    continue
-                afk_events.append({'data': {'status': 'afk'}, 'timestamp': start, 'duration': duration})
-        ### END WORKAROUND
+        # Apply workaround if enabled in config
+        if self.config.get('enable_afk_gap_workaround', True):
+            afk_events = self._apply_afk_gap_workaround(afk_events)
 
         ## The afk tracker is not reliable.  Sometimes it shows me
         ## being afk even when I've been sitting constantly by the
@@ -1311,7 +1363,7 @@ class Exporter:
             if tags is not False:
                 pass
 
-            elif event['data'].get('app', '').lower() in ('foot', 'xterm', ...): ## TODO: complete the list
+            elif event['data'].get('app', '').lower() in self.terminal_apps:
                 self.log(f"Unknown terminal event {event['data']['title']}", event=event, level=logging.WARNING)
             else:
                 self.log(f"No rules found for event {event['data']}", event=event, level=logging.WARNING)

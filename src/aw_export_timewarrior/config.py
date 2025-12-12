@@ -4,6 +4,33 @@ import toml
 from aw_core.config import load_config_toml
 
 default_config = """
+# Enable workaround for aw-watcher-window-wayland issue #41
+# (https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/41)
+# When enabled, gaps between AFK events are filled with synthetic AFK events
+# Set to false if the upstream issue is fixed or if this causes problems
+enable_afk_gap_workaround = true
+
+# Terminal applications - used to suppress warnings for unknown terminal events
+terminal_apps = [
+    "alacritty",
+    "foot",
+    "gnome-terminal",
+    "kitty",
+    "konsole",
+    "terminator",
+    "tilix",
+    "xfce4-terminal",
+    "xterm",
+    "rxvt",
+    "urxvt",
+    "st",
+    "wezterm",
+    "cool-retro-term",
+    "hyper",
+    "iterm2",
+    "terminal",
+]
+
 [tags.housework]
 source_tags = [ "housework", "dishwash" ]
 prepend = [ "4chores", "afk" ]

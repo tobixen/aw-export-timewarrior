@@ -13,6 +13,24 @@ from pathlib import Path
 
 from .main import Exporter, load_config, setup_logging
 
+def add_timespan_arguments(parser):
+    start_group = parser.add_mutually_exclusive_group()
+    start_group.add_argument(
+        '--from', '--since', '--begin', '--start',
+        dest='start',
+        metavar='DATETIME',
+        help='Start time for processing window (defaults to last observed timew tagging timestamp)'
+    )
+
+    # End time aliases
+    end_group = parser.add_mutually_exclusive_group()
+    end_group.add_argument(
+        '--to', '--until', '--end',
+        dest='end',
+        metavar='DATETIME',
+        help='End time (continuous mode: runs indefinitely; with --once or --dry-run: defaults to now)'
+    )
+
 
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser with subcommands."""
@@ -128,23 +146,8 @@ Examples:
         help='Process once and exit (instead of continuous monitoring)'
     )
 
-    # Start time aliases
-    sync_start_group = sync_parser.add_mutually_exclusive_group()
-    sync_start_group.add_argument(
-        '--from', '--since', '--begin', '--start',
-        dest='start',
-        metavar='DATETIME',
-        help='Start time for processing window (defaults to last observed timew tagging timestamp)'
-    )
-
-    # End time aliases
-    sync_end_group = sync_parser.add_mutually_exclusive_group()
-    sync_end_group.add_argument(
-        '--to', '--until', '--end',
-        dest='end',
-        metavar='DATETIME',
-        help='End time (continuous mode: runs indefinitely; with --once or --dry-run: defaults to now)'
-    )
+    # time aliases
+    add_timespan_arguments(sync_parser)
 
     sync_parser.add_argument(
         '--verbose', '-v',
@@ -186,23 +189,8 @@ Examples:
         """
     )
 
-    # Start time aliases
-    diff_start_group = diff_parser.add_mutually_exclusive_group()
-    diff_start_group.add_argument(
-        '--from', '--since', '--begin', '--start',
-        dest='start',
-        metavar='DATETIME',
-        help='Start of comparison window (defaults to beginning of current day)'
-    )
-
-    # End time aliases
-    diff_end_group = diff_parser.add_mutually_exclusive_group()
-    diff_end_group.add_argument(
-        '--to', '--until', '--end',
-        dest='end',
-        metavar='DATETIME',
-        help='End of comparison window (defaults to now)'
-    )
+    # time aliases
+    add_timespan_arguments(diff_parser)
 
     diff_parser.add_argument(
         '--show-commands',
@@ -261,22 +249,7 @@ Examples:
     )
 
     # Start time aliases
-    analyze_start_group = analyze_parser.add_mutually_exclusive_group()
-    analyze_start_group.add_argument(
-        '--from', '--since', '--begin', '--start',
-        dest='start',
-        metavar='DATETIME',
-        help='Start of analysis window (defaults to beginning of current day)'
-    )
-
-    # End time aliases
-    analyze_end_group = analyze_parser.add_mutually_exclusive_group()
-    analyze_end_group.add_argument(
-        '--to', '--until', '--end',
-        dest='end',
-        metavar='DATETIME',
-        help='End of analysis window (defaults to now)'
-    )
+    add_timespan_arguments(analyze_parser)
 
     analyze_parser.add_argument(
         '--verbose', '-v',
@@ -314,23 +287,7 @@ Examples:
         """
     )
 
-    # Start time aliases
-    export_start_group = export_parser.add_mutually_exclusive_group()
-    export_start_group.add_argument(
-        '--from', '--since', '--begin', '--start',
-        dest='start',
-        metavar='DATETIME',
-        help='Start time (defaults to beginning of current day)'
-    )
-
-    # End time aliases
-    export_end_group = export_parser.add_mutually_exclusive_group()
-    export_end_group.add_argument(
-        '--to', '--until', '--end',
-        dest='end',
-        metavar='DATETIME',
-        help='End time (defaults to now)'
-    )
+    add_timespan_arguments(export_parser)
 
     export_parser.add_argument(
         '--output', '-o',
@@ -359,18 +316,7 @@ Examples:
   %(prog)s --from yesterday --format csv > report.csv
         """
     )
-    report_parser.add_argument(
-        '--from', '--start',
-        dest='start',
-        metavar='TIME',
-        help='Start time (e.g., "yesterday", "2025-12-10", "2025-12-10 09:00")'
-    )
-    report_parser.add_argument(
-        '--to', '--end',
-        dest='end',
-        metavar='TIME',
-        help='End time (default: now)'
-    )
+    add_timespan_arguments(report_parser)
     report_parser.add_argument(
         '--all-columns',
         action='store_true',

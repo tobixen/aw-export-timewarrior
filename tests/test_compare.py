@@ -8,6 +8,7 @@ from aw_export_timewarrior.compare import (
     compare_intervals,
     format_diff_output,
     generate_fix_commands,
+    merge_consecutive_intervals,
 )
 
 
@@ -57,6 +58,148 @@ class TestTimewInterval:
             tags={'tag1'}
         )
         assert interval.duration() == timedelta(hours=1, minutes=30)
+
+
+class TestMergeConsecutiveIntervals:
+    """Tests for merge_consecutive_intervals function."""
+
+    def test_merge_consecutive_with_same_tags(self) -> None:
+        """Test that consecutive intervals with identical tags are merged."""
+        intervals = [
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
+                tags={'4work', 'python', '~aw'}
+            ),
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
+                tags={'4work', 'python', '~aw'}
+            ),
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC),
+                tags={'4work', 'python', '~aw'}
+            ),
+        ]
+
+        merged = merge_consecutive_intervals(intervals)
+
+        assert len(merged) == 1
+        assert merged[0].start == datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
+        assert merged[0].end == datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC)
+        assert merged[0].tags == {'4work', 'python', '~aw'}
+
+    def test_no_merge_different_tags(self) -> None:
+        """Test that intervals with different tags are not merged."""
+        intervals = [
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
+                tags={'4work', 'python', '~aw'}
+            ),
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
+                tags={'4work', 'java', '~aw'}  # Different tag
+            ),
+        ]
+
+        merged = merge_consecutive_intervals(intervals)
+
+        assert len(merged) == 2
+        assert merged[0].tags == {'4work', 'python', '~aw'}
+        assert merged[1].tags == {'4work', 'java', '~aw'}
+
+    def test_no_merge_non_consecutive(self) -> None:
+        """Test that non-consecutive intervals are not merged."""
+        intervals = [
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
+                tags={'4work', 'python', '~aw'}
+            ),
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 20, 0, tzinfo=UTC),  # Gap of 5 minutes
+                end=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
+                tags={'4work', 'python', '~aw'}
+            ),
+        ]
+
+        merged = merge_consecutive_intervals(intervals)
+
+        assert len(merged) == 2
+
+    def test_mixed_scenario(self) -> None:
+        """Test a mixed scenario with some mergeable and some not."""
+        intervals = [
+            # These two should merge
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
+                tags={'4work', 'python', '~aw'}
+            ),
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
+                tags={'4work', 'python', '~aw'}
+            ),
+            # This one has different tags, so starts a new group
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC),
+                tags={'4work', 'java', '~aw'}
+            ),
+            # These two should merge with each other
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                tags={'4me', 'browsing', '~aw'}
+            ),
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 15, 0, tzinfo=UTC),
+                tags={'4me', 'browsing', '~aw'}
+            ),
+        ]
+
+        merged = merge_consecutive_intervals(intervals)
+
+        assert len(merged) == 3
+        # First merged interval: 10:00 - 10:30
+        assert merged[0].start == datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
+        assert merged[0].end == datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC)
+        assert merged[0].tags == {'4work', 'python', '~aw'}
+        # Second interval: 10:30 - 10:45 (different tags)
+        assert merged[1].start == datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC)
+        assert merged[1].end == datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC)
+        assert merged[1].tags == {'4work', 'java', '~aw'}
+        # Third merged interval: 10:45 - 11:15
+        assert merged[2].start == datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC)
+        assert merged[2].end == datetime(2025, 1, 1, 11, 15, 0, tzinfo=UTC)
+        assert merged[2].tags == {'4me', 'browsing', '~aw'}
+
+    def test_empty_list(self) -> None:
+        """Test that an empty list returns an empty list."""
+        merged = merge_consecutive_intervals([])
+        assert merged == []
+
+    def test_single_interval(self) -> None:
+        """Test that a single interval is returned unchanged."""
+        intervals = [
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                tags={'4work', 'python', '~aw'}
+            )
+        ]
+
+        merged = merge_consecutive_intervals(intervals)
+
+        assert len(merged) == 1
+        assert merged[0].start == intervals[0].start
+        assert merged[0].end == intervals[0].end
+        assert merged[0].tags == intervals[0].tags
 
 
 class TestCompareIntervals:

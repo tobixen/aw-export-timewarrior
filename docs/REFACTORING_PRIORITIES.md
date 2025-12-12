@@ -185,17 +185,18 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
 
 ### 🔧 **QUICK WINS (Do First for Momentum)**
 
-21. ~~Remove backup files~~ - done
+21. ✅ ~~Remove backup files~~ - done
 
-22. **Complete terminal app list**
+22. ✅ **Complete terminal app list**
     - Location: `main.py:1235` - List has `...` ellipsis
     - Action:
       - Add common terminals: alacritty, kitty, gnome-terminal, konsole, terminator, etc.
       - Move to config file as `terminal_apps` list
     - Impact: Fewer false warnings
     - Effort: Low (30 minutes)
+    - Status: COMPLETE - Added comprehensive terminal list to config, converted to set for efficient lookups
 
-23. **Add comprehensive .gitignore**
+23. ✅ **Add comprehensive .gitignore**
     - Action: Exclude:
       - `__pycache__/`, `*.pyc`, `*.pyo`
       - `*.egg-info/`
@@ -204,8 +205,9 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
       - IDE files (`.vscode/`, `.idea/`)
     - Impact: Cleaner `git status`
     - Effort: Trivial (10 minutes)
+    - Status: COMPLETE - Added comprehensive .gitignore with Python, IDE, and backup file exclusions
 
-24. **Fix ActivityWatch bug workaround**
+24. ✅ **Fix ActivityWatch bug workaround**
     - Location: `main.py:1097-1113`
     - Action:
       - Check if https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/41 is fixed
@@ -213,6 +215,7 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
       - If not: move to separate well-documented function, add flag to disable
     - Impact: Code clarity
     - Effort: Low (1 hour)
+    - Status: COMPLETE - Issue still open, moved to `_apply_afk_gap_workaround()` method with comprehensive docs and `enable_afk_gap_workaround` config flag
 
 ---
 

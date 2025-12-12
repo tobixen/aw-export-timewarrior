@@ -241,6 +241,45 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
     return "\n".join(lines)
 
 
+def merge_consecutive_intervals(intervals: list[SuggestedInterval]) -> list[SuggestedInterval]:
+    """
+    Merge consecutive intervals with identical tags into single continuous intervals.
+
+    Args:
+        intervals: List of SuggestedInterval objects (should be sorted by start time)
+
+    Returns:
+        List of merged SuggestedInterval objects
+    """
+    if not intervals:
+        return []
+
+    # Sort intervals by start time to ensure consecutive ones are adjacent
+    sorted_intervals = sorted(intervals, key=lambda x: x.start)
+
+    merged = []
+    current = sorted_intervals[0]
+
+    for next_interval in sorted_intervals[1:]:
+        # Check if the next interval is consecutive (or overlapping) and has the same tags
+        if current.end == next_interval.start and current.tags == next_interval.tags:
+            # Merge: extend the current interval to include the next one
+            current = SuggestedInterval(
+                start=current.start,
+                end=next_interval.end,
+                tags=current.tags
+            )
+        else:
+            # Not consecutive or different tags - add current to results and start new
+            merged.append(current)
+            current = next_interval
+
+    # Add the last interval
+    merged.append(current)
+
+    return merged
+
+
 def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     """
     Generate timew commands to fix differences.
@@ -259,8 +298,11 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     """
     commands = []
 
+    # Merge consecutive intervals with the same tags before generating commands
+    merged_missing = merge_consecutive_intervals(comparison['missing'])
+
     # Add missing intervals using 'timew track'
-    for suggested in comparison['missing']:
+    for suggested in merged_missing:
         # Format: timew track 2025-12-08T10:00:00 - 2025-12-08T11:00:00 tag1 tag2 :adjust
         start_str = suggested.start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
         end_str = suggested.end.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
