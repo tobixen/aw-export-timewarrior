@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from aw_export_timewarrior.cli import run_diff, run_sync
+from tests.helpers import no_sleep
 
 
 @pytest.fixture

@@ -11,3 +11,4 @@
 * tmux watcher
 * terminal watcher
 * Rebrand from "timewarrior exporter" to "tags exporter", and let the timew backend export be optional.  The "export" method needs to be renamed to "export_testdata"
+* Deal with other things from REFACTORING_PRIORITIES.md

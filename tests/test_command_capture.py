@@ -9,7 +9,7 @@ allowing us to verify what commands would be executed without actually running t
 from datetime import UTC, datetime
 
 from aw_export_timewarrior.main import Exporter
-from tests.helpers import FixtureDataBuilder
+from tests.helpers import FixtureDataBuilder, no_sleep
 
 
 def test_basic_command_capture() -> None:
