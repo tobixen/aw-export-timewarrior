@@ -231,7 +231,9 @@ def format_as_table(
 
     # Print data rows
     for row in data:
-        time_str = row['timestamp'].strftime('%H:%M:%S')
+        # Convert timestamp to local time for display
+        local_time = row['timestamp'].astimezone()
+        time_str = local_time.strftime('%H:%M:%S')
         duration_str = format_duration(row['duration'])
         window_title = row['window_title']
         specialized = row['specialized_data']
