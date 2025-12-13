@@ -8,13 +8,8 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
 
 ### 🟠 **HIGH PRIORITY (Schedule Soon)**
 
-4. **Introduce Ruff for linting and formatting**
-   - Action:
-     - Add ruff to dev dependencies in `pyproject.toml`
-     - Configure in `pyproject.toml` with ruff rules
-     - Run `ruff check` and `ruff format`
-   - Impact: Consistent code style, catch common errors
-   - Effort: Low (2-4 hours)
+4. ~~**Introduce Ruff for linting and formatting**~~
+   ... added, but we still need to add the precommit thing and add it to the test suite.
 
 5. **Break up God Class: Exporter (1475 lines)**
    - Location: `src/aw_export_timewarrior/main.py:207-1475`

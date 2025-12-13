@@ -104,10 +104,16 @@ Examples:
         action='store_true',
         help='Do not output logs in JSON format'
     )
-    parser.add_argument(
+    debug_group = parser.add_mutually_exclusive_group()
+    debug_group.add_argument(
         '--pdb',
         action='store_true',
         help='Drop into debugger on unexpected states (for development)'
+    )
+    debug_group.add_argument(
+        '--break-assert',
+        action='store_true',
+        help='Assert no unexpected states (for development)'
     )
 
     # Create subparsers
@@ -503,6 +509,7 @@ def run_sync(args: argparse.Namespace) -> int:
         verbose=args.verbose,
         hide_processing_output=args.hide_processing_output,
         enable_pdb=args.pdb,
+        enable_assert=args.break_assert,
         start_time=start_time,
         end_time=end_time,
         test_data=test_data
@@ -575,6 +582,7 @@ def run_diff(args: argparse.Namespace) -> int:
         apply_fix=args.apply,
         hide_diff_report=args.hide_report,
         enable_pdb=args.pdb,
+        enable_assert=args.break_assert,
         start_time=start_time,
         end_time=end_time,
         test_data=test_data,
@@ -607,6 +615,7 @@ def run_analyze(args: argparse.Namespace) -> int:
         verbose=args.verbose,
         show_unmatched=True,
         enable_pdb=args.pdb,
+        enable_assert=args.break_assert,
         start_time=start_time,
         end_time=end_time
     )
@@ -663,7 +672,8 @@ def run_report(args: argparse.Namespace) -> int:
         all_columns=args.all_columns,
         format=args.format,
         truncate=not args.no_truncate,
-        enable_pdb=args.pdb
+        enable_pdb=args.pdb,
+        enable_assert=args.break_assert,
     )
 
     return 0

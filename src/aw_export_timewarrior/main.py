@@ -177,7 +177,7 @@ SLEEP_INTERVAL=float(os.environ.get('AW2TW_SLEEP_INTERVAL') or 30) ## Sleeps bet
 IGNORE_INTERVAL=float(os.environ.get('AW2TW_IGNORE_INTERVAL') or 3) ## ignore any window visits lasting for less than five seconds (TODO: may need tuning if terminal windows change title for every command run)
 MIN_RECORDING_INTERVAL=float(os.environ.get('AW2TW_MIN_RECORDING_INTERVAL') or 90) ## Never record an activities more frequently than once per minute.
 MIN_TAG_RECORDING_INTERVAL=float(os.environ.get('AW2TW_MIN_TAG_RECORDING_INTERVAL') or 50) ## When recording something, include every tag that has been observed for more than 50s
-STICKYNESS_FACTOR=float(os.environ.get('AW2TW_STICKYNESS_FACTOR') or 0.2) ## Don't reset everything on each "tick".
+STICKYNESS_FACTOR=float(os.environ.get('AW2TW_STICKYNESS_FACTOR') or 0.1) ## Don't reset everything on each "tick".
 MAX_MIXED_INTERVAL=float(os.environ.get('AW2TW_MAX_MIXED_INTERVAL') or 240) ## Any window event lasting for more than four minutes should be considered independently from what you did before and after
 
 GRACE_TIME=float(os.environ.get('AW2TW_GRACE_TIME') or 10)
@@ -224,6 +224,7 @@ class Exporter:
     show_unmatched: bool = False  # If True, show events that didn't match any rules
     show_timeline: bool = False  # If True, show side-by-side timeline view in diff mode
     enable_pdb: bool = False  # If True, drop into debugger on unexpected states
+    enable_assert: bool = True # If True, assert on unexpected states
     config: dict = None  # Configuration
     config_path: str = None  # Configuration file name
     test_data: dict = None  # Optional test data instead of querying AW
@@ -265,9 +266,13 @@ class Exporter:
                 for b in self.bucket_by_client[bucketclient]:
                     check_bucket_updated(self.buckets[b])
 
-    def breakpoint(self):
+    ## TODO: perhaps better to have an _assert method
+    def breakpoint(self, reason: str = "Unexpected condition"):
+        self.log(f"ASSERTION FAILED: {reason}", level=logging.ERROR)
         if self.enable_pdb:
             breakpoint()
+        elif self.enable_assert:
+            assert False, reason
 
     @property
     def state(self) -> StateManager:
@@ -622,23 +627,28 @@ class Exporter:
             ## time we're supposed to track, something is also probably
             ## wrong and should be investigated
             if tags != { 'afk' } and not self.state.is_afk() and not self.state.manual_tracking and last_activity_run_time.total_seconds() < MIN_RECORDING_INTERVAL-3:
-                self.breakpoint()
+                self.breakpoint(f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < MIN_RECORDING_INTERVAL-3 ({MIN_RECORDING_INTERVAL-3}s), last_start_time={self.state.last_start_time}, since={since}")
 
             ## If the tracked time is less than the known events time we've counted
             ## then something is a little bit wrong.
             if tags != { 'afk' } and tracked_gap < self.state.stats.known_events_time:
-                self.breakpoint()
+                self.breakpoint(f"tracked_gap ({tracked_gap.total_seconds()}s) < known_events_time ({self.state.stats.known_events_time.total_seconds()}s) for event {event['data']}, last_known_tick={self.state.last_known_tick}, event_start={event['timestamp']}, event_end={event['timestamp'] + event['duration']}")
 
-            ## If he time tracked is way longer than the
-            ## self.total_time_known_events, something is probably wrong
-            ## and should be investigated
+            ## If the time tracked is way longer than the known events time we've counted
+            ## then we have too much unknown activity - tag it as UNKNOWN
             if tags != { 'afk' } and tracked_gap.total_seconds()>MAX_MIXED_INTERVAL and self.state.stats.known_events_time/tracked_gap < 0.3 and not self.state.manual_tracking:
-                self.breakpoint()
+                self.log(f"Large gap ({tracked_gap.total_seconds()}s) with low known activity ({(self.state.stats.known_events_time/tracked_gap):.1%}), tagging as UNKNOWN", event=event, level=logging.WARNING)
+                tags = {'UNKNOWN', 'not-afk'}
 
         if 'afk' in tags:
             self.state.set_afk_state(AfkState.AFK)
 
         self.set_known_tick_stats(event=event, start=since)
+
+        # Reset statistics counters at the start of new tracking cycle
+        # This ensures known_events_time only tracks events since the last export
+        # and makes the validation assertions meaningful
+        self.state.stats.reset(retain_tags=tags)
 
         # Update timew_info (either from actual timew or maintain simulated state in dry-run)
         if not self.dry_run:
@@ -1119,8 +1129,9 @@ class Exporter:
             tags = self.find_tags_from_event(incremental_event)
 
             if tags and not self.check_and_handle_afk_state_change(tags, incremental_event):
-                # Add to known events time
-                self.state.stats.known_events_time += new_duration
+                # Add to known events time (only for non-AFK events to avoid double-counting)
+                if 'status' not in incremental_event['data']:
+                    self.state.stats.known_events_time += new_duration
 
                 # Apply retagging rules
                 tags = retag_by_rules(tags, self.config)
@@ -1149,7 +1160,9 @@ class Exporter:
             tags = self.find_tags_from_event(event)
 
             if tags and not self.check_and_handle_afk_state_change(tags, event):
-                self.state.stats.known_events_time += current_duration
+                # Add to known events time (only for non-AFK events to avoid double-counting)
+                if 'status' not in event['data']:
+                    self.state.stats.known_events_time += current_duration
 
                 # Apply retagging rules
                 tags = retag_by_rules(tags, self.config)
@@ -1284,7 +1297,9 @@ class Exporter:
                     return True
                 continue
 
-            if tags:
+            # Only count duration for non-AFK events to avoid double-counting
+            # (AFK events overlap with window/browser/editor events)
+            if tags and 'status' not in event['data']:
                 self.state.stats.known_events_time += event['duration']
 
             ## tags can be False or None and those means different things.
@@ -1451,7 +1466,6 @@ class Exporter:
                     # Check if we've reached end_time
                     if self.end_time and self.state.last_tick < self.end_time:
                         self.log(f"No more events before end_time, advancing to {self.end_time}")
-                        self.breakpoint()
                         self.state.last_tick = self.end_time
                         found_activity = self.find_next_activity()
                     if not found_activity:
