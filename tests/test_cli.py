@@ -1,7 +1,7 @@
 """Tests for CLI argument parsing, validation, and factory functions."""
 
 import argparse
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -379,7 +379,6 @@ class TestHandleStartStopTestdata:
         """Test that non-sync methods default start to midnight today."""
         from aw_export_timewarrior.cli import _handle_start_stop_testdata_from_args
 
-        mock_now = datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC)
         mock_datetime.now.return_value.astimezone.return_value.replace.return_value = \
             datetime(2025, 1, 15, 0, 0, 0, tzinfo=UTC)
 

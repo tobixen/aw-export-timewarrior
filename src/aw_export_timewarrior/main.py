@@ -272,7 +272,7 @@ class Exporter:
         if self.enable_pdb:
             breakpoint()
         elif self.enable_assert:
-            assert False, reason
+            raise AssertionError(reason)
 
     @property
     def state(self) -> StateManager:

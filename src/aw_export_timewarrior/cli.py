@@ -23,14 +23,14 @@ def create_exporter_from_args(
 ) -> Exporter:
     """
     Create an Exporter instance from CLI arguments.
-    
+
     Maps argparse.Namespace to Exporter dataclass fields automatically,
     with explicit overrides for special cases.
-    
+
     Args:
         args: Parsed command-line arguments
         **overrides: Explicit parameter overrides (e.g., dry_run=True)
-    
+
     Returns:
         Configured Exporter instance
     """
@@ -631,11 +631,20 @@ def run_analyze(args: argparse.Namespace) -> int:
 
 def run_export(args: argparse.Namespace) -> int:
     """Execute the export subcommand."""
+
     import sys
+
+    from .export import export_aw_data
+
+    exporter_args = {}
+    _handle_start_stop_testdata_from_args(args, exporter_args, 'export')
 
     # Direct progress messages to stderr if outputting to stdout
     use_stdout = str(args.output) == '-'
     progress_output = sys.stderr if use_stdout else sys.stdout
+
+    start_time = exporter_args.get('start_time')
+    end_time = exporter_args.get('end_time')
 
     print(f"Exporting data from {start_time} to {end_time}...", file=progress_output)
     export_aw_data(args.start or str(start_time), args.end or str(end_time), args.output)
