@@ -28,7 +28,8 @@ def create_aw_event(timestamp, duration, data):
 @pytest.fixture
 def mock_aw_client():
     """Fixture for mocked ActivityWatch client with required buckets."""
-    with patch('aw_export_timewarrior.main.aw_client') as mock_aw:
+    with patch('aw_export_timewarrior.main.aw_client') as mock_aw, \
+         patch('aw_export_timewarrior.aw_client.ActivityWatchClient') as mock_aw_class:
         mock_client = Mock()
 
         # Get current time for last_updated
@@ -46,7 +47,9 @@ def mock_aw_client():
                 'last_updated': current_time
             }
         }
+        # Set up both patches to return the same mock
         mock_aw.ActivityWatchClient.return_value = mock_client
+        mock_aw_class.return_value = mock_client
         yield mock_client
 
 

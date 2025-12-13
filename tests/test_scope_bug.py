@@ -29,9 +29,11 @@ def create_aw_event(timestamp, duration, data):
 @pytest.fixture
 def mock_aw_client():
     """Mock the ActivityWatch client."""
-    with patch('aw_export_timewarrior.main.aw_client.ActivityWatchClient') as mock:
+    with patch('aw_export_timewarrior.main.aw_client.ActivityWatchClient') as mock, \
+         patch('aw_export_timewarrior.aw_client.ActivityWatchClient') as mock_aw_class:
         mock_instance = Mock()
         mock.return_value = mock_instance
+        mock_aw_class.return_value = mock_instance
         now = datetime.now(UTC)
         mock_instance.get_buckets.return_value = {
             'aw-watcher-window_test': {

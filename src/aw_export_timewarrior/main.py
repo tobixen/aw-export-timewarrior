@@ -12,8 +12,10 @@ from time import sleep, time
 import aw_client
 from termcolor import cprint
 
+from .aw_client import EventFetcher
 from .config import config
 from .state import AfkState, StateManager
+from .tag_extractor import TagExtractor
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
@@ -238,33 +240,36 @@ class Exporter:
             self.config = load_config(self.config_path)
         # Convert terminal_apps list to lowercase set for efficient lookups
         self.terminal_apps = {app.lower() for app in self.config.get('terminal_apps', [])}
-        ## data fetching - skip if using test data
-        if not self.test_data:
-            client_name = "timewarrior_test_export" if self.dry_run else "timewarrior_export"
-            self.aw = aw_client.ActivityWatchClient(client_name=client_name)
-            self.buckets = self.aw.get_buckets()
-        else:
-            # Using test data - create mock AW client
-            self.aw = None
-            self.buckets = self.test_data.get('buckets', {})
 
-        self.bucket_by_client = defaultdict(list)
-        self.bucket_short = {}
+        ## Initialize EventFetcher for all ActivityWatch data access
+        client_name = "timewarrior_test_export" if self.dry_run else "timewarrior_export"
+        self.event_fetcher = EventFetcher(
+            test_data=self.test_data,
+            client_name=client_name,
+            log_callback=self.log
+        )
 
-        for x in self.buckets:
-            lu = self.buckets[x].get('last_updated')
-            self.buckets[x]['last_updated_dt'] = datetime.fromisoformat(lu) if lu else None
-            client = self.buckets[x]['client']
-            self.bucket_by_client[client].append(x)
-            bucket_short = x[:x.find('_')]
-            assert bucket_short not in self.bucket_short
-            self.bucket_short[bucket_short] = self.buckets[x]
+        ## TODO: we don't need to consider backward compatibility
+        # Maintain backward compatibility - expose EventFetcher properties
+        self.aw = self.event_fetcher.aw
+        self.buckets = self.event_fetcher.buckets
+        self.bucket_by_client = self.event_fetcher.bucket_by_client
+        self.bucket_short = self.event_fetcher.bucket_short
+
+        # Initialize TagExtractor for all tag matching logic
+        # Pass lambda to support tests that change config after initialization
+        self.tag_extractor = TagExtractor(
+            config=lambda: self.config,
+            event_fetcher=self.event_fetcher,
+            terminal_apps=self.terminal_apps,
+            log_callback=self.log
+        )
+
         # Only check bucket freshness when using real ActivityWatch data
         if not self.test_data:
             for bucketclient in ('aw-watcher-window', 'aw-watcher-afk'):
                 assert bucketclient in self.bucket_by_client
-                for b in self.bucket_by_client[bucketclient]:
-                    check_bucket_updated(self.buckets[b])
+            self.event_fetcher.check_bucket_freshness()
 
     ## TODO: perhaps better to have an _assert method
     def breakpoint(self, reason: str = "Unexpected condition"):
@@ -510,51 +515,11 @@ class Exporter:
         print("\n" + "=" * 80 + "\n")
 
     def get_events(self, bucket_id, start=None, end=None):
-        """Get events from ActivityWatch or test data."""
-        if self.test_data:
-            # Return events from test data
-            events = self.test_data.get('events', {}).get(bucket_id, [])
+        """Get events from ActivityWatch or test data.
 
-            # Convert dict events to Event objects supporting both dict and attribute access
-            class Event(dict):
-                def _convert_value(self, key, val):
-                    """Convert values for consistency between dict and attribute access."""
-                    # Convert timestamp strings to datetime
-                    if key == 'timestamp' and isinstance(val, str):
-                        return datetime.fromisoformat(val)
-                    # Convert duration to timedelta
-                    if key == 'duration' and isinstance(val, (int, float)):
-                        return timedelta(seconds=val)
-                    return val
-
-                def __getitem__(self, key):
-                    val = super().__getitem__(key)
-                    return self._convert_value(key, val)
-
-                def __getattr__(self, key):
-                    if key.startswith('_'):
-                        raise AttributeError(f"Event has no attribute '{key}'")
-                    if key in self:
-                        return self[key]  # Use __getitem__ for conversion
-                    raise AttributeError(f"Event has no attribute '{key}'")
-
-            event_objs = [Event(e) for e in events]
-
-            # Filter by time range if specified
-            if start or end:
-                filtered = []
-                for event in event_objs:
-                    event_time = event.timestamp
-                    event_end = event_time + event.duration
-                    if start and event_end < start:
-                        continue
-                    if end and event_time > end:
-                        continue
-                    filtered.append(event)
-                return filtered
-            return event_objs
-        else:
-            return self.aw.get_events(bucket_id, start=start, end=end)
+        Delegates to EventFetcher for all event retrieval.
+        """
+        return self.event_fetcher.get_events(bucket_id, start=start, end=end)
 
     def set_known_tick_stats(self, event=None, start=None, end=None, manual=False, tags=None, reset_accumulator=False, retain_accumulator=True):
         """
@@ -729,221 +694,36 @@ class Exporter:
         logger.log(level, msg, extra=extra)
 
     def get_editor_tags(self, window_event):
-        """Get tags for editor events."""
-        return self._get_subevent_tags(
-            window_event=window_event,
-            subtype='editor',
-            apps=('emacs', 'vi', 'vim'),
-            bucket_pattern='aw-watcher-{app}',
-            matchers=[
-                ('projects', self._match_project),
-                ('path_regexp', self._match_path_regexp),
-            ]
-        )
+        """Get tags for editor events.
+
+        Delegates to TagExtractor.
+        """
+        return self.tag_extractor.get_editor_tags(window_event)
 
     def get_browser_tags(self, window_event):
-        """Get tags for browser events."""
-        return self._get_subevent_tags(
-            window_event=window_event,
-            subtype='browser',
-            apps=('chromium', 'chrome', 'firefox'),
-            bucket_pattern='aw-watcher-web-{app}',
-            app_normalizer=lambda app: 'chrome' if app == 'chromium' else app,
-            matchers=[
-                ('url_regexp', self._match_url_regexp),
-            ],
-            skip_if=lambda sub_event: sub_event['data'].get('url') in ('chrome://newtab/', 'about:newtab')
-        )
+        """Get tags for browser events.
 
-    def _is_ignorable_event(self, app: str, window_event: dict) -> bool:
-        """Check if an event should be ignored (e.g., emacs internal buffers)."""
-        if app == 'emacs':
-            return bool(re.match(r'^( )?\*.*\*', window_event['data']['title']))
-        return False
-
-    def _match_project(self, rule: dict, sub_event: dict, rule_key: str):
-        """Match editor events by project name."""
-        for project in rule.get('projects', []):
-            if project == sub_event['data'].get('project'):
-                return self._build_tags(rule['timew_tags'])
-        return None
-
-    def _match_path_regexp(self, rule: dict, sub_event: dict, rule_key: str):
-        """Match editor events by file path regexp."""
-        return self._match_regexp(
-            rule=rule,
-            text=sub_event['data'].get('file', ''),
-            rule_key=rule_key
-        )
-
-    def _match_url_regexp(self, rule: dict, sub_event: dict, rule_key: str):
-        """Match browser events by URL regexp."""
-        return self._match_regexp(
-            rule=rule,
-            text=sub_event['data'].get('url', ''),
-            rule_key=rule_key
-        )
-
-    def _match_regexp(self, rule: dict, text: str, rule_key: str):
+        Delegates to TagExtractor.
         """
-        Generic regexp matcher with group substitution.
-
-        Args:
-            rule: The rule dict containing the regexp and timew_tags
-            text: The text to match against
-            rule_key: The key in the rule containing the regexp pattern
-
-        Returns:
-            Set of tags with substitutions applied, or None if no match
-        """
-        if rule_key not in rule:
-            return None
-
-        match = re.search(rule[rule_key], text)
-        if not match:
-            return None
-
-        # Build substitutions from match groups
-        substitutions = {}
-        for i, group in enumerate(match.groups(), start=1):
-            substitutions[f'${i}'] = group
-
-        return self._build_tags(rule['timew_tags'], substitutions)
-
-    def _build_tags(self, tag_templates: list, substitutions: dict = None):
-        """
-        Build a set of tags from templates with variable substitution.
-
-        Args:
-            tag_templates: List of tag templates (e.g., ['4work', 'github', '$1'])
-            substitutions: Dict of {variable: value} for substitution (e.g., {'$1': 'python-caldav'})
-
-        Returns:
-            Set of tags with 'not-afk' added
-        """
-        substitutions = substitutions or {}
-        tags = set()
-
-        for tag in tag_templates:
-            # Skip tags with variables that have no value
-            if '$' in tag:
-                # Try to substitute all variables
-                new_tag = tag
-                has_missing_var = False
-
-                for var, value in substitutions.items():
-                    if var in tag:
-                        if value is None:
-                            has_missing_var = True
-                            break
-                        new_tag = new_tag.replace(var, value)
-
-                # Skip if we couldn't substitute all variables
-                if has_missing_var or '$' in new_tag:
-                    continue
-
-                tags.add(new_tag)
-            else:
-                tags.add(tag)
-
-        tags.add('not-afk')
-        return tags
-
-    def _get_subevent_tags(self, window_event: dict, subtype: str, apps: tuple,
-                          bucket_pattern: str, app_normalizer=None, matchers=None, skip_if=None):
-        """
-        Generic method to extract tags from events that require sub-events.
-
-        Args:
-            window_event: The main window event
-            subtype: Type of rule ('browser', 'editor')
-            apps: Tuple of app names to match
-            bucket_pattern: Pattern for bucket ID (e.g., 'aw-watcher-{app}')
-            app_normalizer: Optional function to normalize app name (e.g., chromium -> chrome)
-            matchers: List of (rule_key, matcher_function) tuples to try in order
-            skip_if: Optional function that returns True if we should skip this sub_event
-
-        Returns:
-            Set of tags, empty list if no match, or False if wrong app type
-        """
-        # Check if this is the right app type
-        if window_event['data'].get('app', '').lower() not in apps:
-            return False
-
-        app = window_event['data']['app'].lower()
-
-        # Normalize app name if needed
-        app_normalized = app_normalizer(app) if app_normalizer else app
-
-        # Get the bucket ID
-        bucket_id = self.bucket_short[bucket_pattern.format(app=app_normalized)]['id']
-
-        # Determine if we should ignore certain events (e.g., emacs buffers)
-        ignorable = self._is_ignorable_event(app, window_event)
-
-        # Get the corresponding sub-event
-        sub_event = self.get_corresponding_event(window_event, bucket_id, ignorable=ignorable)
-
-        if not sub_event:
-            return []
-
-        # Check if we should skip this sub-event
-        if skip_if and skip_if(sub_event):
-            return []
-
-        # Try each matcher in order
-        for rule_key, matcher_func in (matchers or []):
-            for rule_name in self.config.get('rules', {}).get(subtype, {}):
-                rule = self.config['rules'][subtype][rule_name]
-
-                # Skip rules that don't have this key
-                if rule_key not in rule:
-                    continue
-
-                # Try to match
-                tags = matcher_func(rule, sub_event, rule_key)
-                if tags:
-                    return tags
-
-        # No rules matched
-        self.log(
-            f"Unhandled {subtype} event",
-            event=window_event,
-            extra={'sub_event': sub_event, 'event_type': subtype, 'log_event': 'unhandled'},
-            level=logging.WARNING
-        )
-        return []
+        return self.tag_extractor.get_browser_tags(window_event)
 
     ## TODO - remove hard coded constants!
     def get_corresponding_event(self, window_event, event_type_id, ignorable=False, retry=6):
-        ret = self.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=1), end=window_event['timestamp']+window_event['duration'])
+        """Find corresponding sub-event (browser URL, editor file).
 
-        ## If nothing found ... try harder
-        if not ret and not ignorable and retry and time() - SLEEP_INTERVAL*3 < (window_event['timestamp'] + window_event['duration']).timestamp():
-            ## Perhaps the event hasn't reached ActivityWatch yet?  Perhaps it helps to sleep?
-            ## Obviously, it may only help if the wall clock matches the event time
-            self.log(f"Event details for {window_event} not in yet, attempting to sleep for a while", event=window_event)
-            sleep(SLEEP_INTERVAL*3/retry+0.2)
-            retry -= 1
-            return self.get_corresponding_event(window_event, event_type_id, ignorable, retry)
-
-        if not ret and not ignorable:
-            ret = self.get_events(event_type_id, start=window_event['timestamp']-timedelta(seconds=15), end=window_event['timestamp']+window_event['duration']+timedelta(seconds=15))
-        if not ret:
-            if not ignorable and not window_event['duration']<timedelta(seconds=IGNORE_INTERVAL*4):
-                self.log(f"No corresponding {event_type_id} found.  Window title: {window_event['data']['title']}.  If you see this often, you should verify that the relevant watchers are active and running.", event=window_event)
-            return None
-        if len(ret)>1:
-            ret2 = [x for x in ret if x.duration > timedelta(seconds=IGNORE_INTERVAL)]
-            if ret2:
-                ret = ret2
-            ## TODO this is maybe too simplistic
-            ret.sort(key=lambda x: -x['duration'])
-        return ret[0]
+        Delegates to EventFetcher for specialized event matching.
+        """
+        return self.event_fetcher.get_corresponding_event(
+            window_event,
+            event_type_id,
+            ignorable=ignorable,
+            retry=retry
+        )
 
     def get_app_tags(self, event):
-        """
-        Get tags for app events (doesn't need sub-events).
+        """Get tags for app events (doesn't need sub-events).
+
+        Delegates to TagExtractor.
 
         Args:
             event: The window event
@@ -951,36 +731,14 @@ class Exporter:
         Returns:
             Set of tags, or False if no rules matched
         """
-        for rule_name in self.config.get('rules', {}).get('app', {}):
-            rule = self.config['rules']['app'][rule_name]
-
-            # Check if app matches
-            if event['data'].get('app') not in rule.get('app_names', []):
-                continue
-
-            # Try to match title regexp if present
-            title_match = None
-            if 'title_regexp' in rule:
-                title_match = re.search(rule['title_regexp'], event['data'].get('title', ''))
-                if not title_match:
-                    continue  # Required regexp didn't match
-
-            # Build tags with variable substitution
-            substitutions = {
-                '$app': event['data'].get('app'),
-                '$1': title_match.group(1) if title_match and title_match.groups() else None,
-            }
-
-            return self._build_tags(rule['timew_tags'], substitutions)
-
-        return False
-
+        return self.tag_extractor.get_app_tags(event)
 
     def get_afk_tags(self, event):
-        if 'status' in event['data']:
-            return { event['data']['status'] }
-        else:
-            return False
+        """Get AFK status tags.
+
+        Delegates to TagExtractor.
+        """
+        return self.tag_extractor.get_afk_tags(event)
 
     def _afk_change_stats(self, afk, tags, event):
         """
@@ -1551,42 +1309,48 @@ def timew_run(commands, dry_run=False, capture_to=None, hide_output=False):
     user_output(f"Use timew undo if you don't agree!  You have {GRACE_TIME} seconds to press ctrl^c", attrs=["bold"])
     sleep(GRACE_TIME)
 
+## TODO: do we need this?
 def exclusive_overlapping(tags, cfg=None):
+    """Check if tags violate exclusive group rules.
+
+    This is a module-level function for backward compatibility.
+    Delegates to TagExtractor for the actual logic.
+
+    Args:
+        tags: Set of tags to check
+        cfg: Configuration dict (uses global config if None)
+
+    Returns:
+        True if tags violate exclusivity (conflict detected)
+    """
     if cfg is None:
         cfg = config
-    for gid in cfg.get('exclusive', {}):
-        group = set(cfg['exclusive'][gid]['tags'])
-        if len(group.intersection(tags)) > 1:
-            return True
-    return False
+    # Create a temporary TagExtractor to use the logic
+    from .aw_client import EventFetcher
+    temp_extractor = TagExtractor(config=cfg, event_fetcher=None)
+    return temp_extractor.check_exclusive_groups(tags)
 
+## TODO: do we need this backward compatibility function?
 ## not really retag, more like expand tags?  But it's my plan to allow replacement and not only addings
 def retag_by_rules(source_tags, cfg=None):
+    """Apply retagging rules to expand tags.
+
+    This is a module-level function for backward compatibility.
+    Delegates to TagExtractor for the actual logic.
+
+    Args:
+        source_tags: Original set of tags
+        cfg: Configuration dict (uses global config if None)
+
+    Returns:
+        Expanded set of tags after applying retag rules
+    """
     if cfg is None:
         cfg = config
-    assert not exclusive_overlapping(source_tags, cfg)
-    new_tags = source_tags.copy()  ## TODO: bad variable naming.  `revised_tags` maybe?
-    for tag_section in cfg.get('tags', {}):
-        retags = cfg['tags'][tag_section]
-        intersection = source_tags.intersection(set(retags['source_tags']))
-        if intersection:
-            new_tags_ = set()
-            for tag in retags.get('add', []):
-                if "$source_tag" in tag:
-                    for source_tag in intersection:
-                        new_tags_.add(tag.replace("$source_tag", source_tag))
-                else:
-                    new_tags_.add(tag)
-            new_tags_ = new_tags.union(new_tags_)
-            if exclusive_overlapping(new_tags_):
-                logger.warning(f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts")
-            else:
-                new_tags = new_tags_
-    if new_tags != source_tags:
-        ## We could end up doing infinite recursion here
-        ## TODO: add some recursion-safety here?
-        return retag_by_rules(new_tags)
-    return new_tags
+    # Create a temporary TagExtractor to use the logic
+    from .aw_client import EventFetcher
+    temp_extractor = TagExtractor(config=cfg, event_fetcher=None)
+    return temp_extractor.apply_retag_rules(source_tags)
 
 def timew_retag(timew_info, dry_run=False, capture_to=None):
     """Retag the current TimeWarrior interval according to rules.

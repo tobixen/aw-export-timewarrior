@@ -26,9 +26,11 @@ def create_aw_event(timestamp, duration, data):
 @pytest.fixture
 def mock_aw_client():
     """Mock the ActivityWatch client."""
-    with patch('aw_export_timewarrior.main.aw_client.ActivityWatchClient') as mock:
+    with patch('aw_export_timewarrior.main.aw_client.ActivityWatchClient') as mock, \
+         patch('aw_export_timewarrior.aw_client.ActivityWatchClient') as mock_aw_class:
         mock_instance = Mock()
         mock.return_value = mock_instance
+        mock_aw_class.return_value = mock_instance
         now = datetime.now(UTC)
         mock_instance.get_buckets.return_value = {
             'aw-watcher-window_test': {
@@ -242,7 +244,7 @@ class TestBuildTagsEdgeCases:
         exporter = Exporter()
 
         # Build tags where $1 is None
-        tags = exporter._build_tags(
+        tags = exporter.tag_extractor._build_tags(
             tag_templates=['4work', 'project-$1', 'fixed-tag'],
             substitutions={'$1': None}
         )
@@ -259,7 +261,7 @@ class TestBuildTagsEdgeCases:
         exporter = Exporter()
 
         # Build tags where we have $1 but the tag uses $2
-        tags = exporter._build_tags(
+        tags = exporter.tag_extractor._build_tags(
             tag_templates=['4work', 'issue-$1-$2'],
             substitutions={'$1': 'repo'}  # No $2!
         )
