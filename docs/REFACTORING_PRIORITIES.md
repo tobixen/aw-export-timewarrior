@@ -8,9 +8,6 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
 
 ### 🟠 **HIGH PRIORITY (Schedule Soon)**
 
-4. ~~**Introduce Ruff for linting and formatting**~~
-   ... added, but we still need to add the precommit thing and add it to the test suite.
-
 5. **Break up God Class: Exporter (1475 lines)**
    - Location: `src/aw_export_timewarrior/main.py:207-1475`
    - Issue: Single class with 60+ attributes handling everything
@@ -177,41 +174,7 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
       - Cache events within time window
     - Impact: Speed, efficiency for large datasets
     - Effort: Medium (1-2 weeks)
-
-### 🔧 **QUICK WINS (Do First for Momentum)**
-
-21. ✅ ~~Remove backup files~~ - done
-
-22. ✅ **Complete terminal app list**
-    - Location: `main.py:1235` - List has `...` ellipsis
-    - Action:
-      - Add common terminals: alacritty, kitty, gnome-terminal, konsole, terminator, etc.
-      - Move to config file as `terminal_apps` list
-    - Impact: Fewer false warnings
-    - Effort: Low (30 minutes)
-    - Status: COMPLETE - Added comprehensive terminal list to config, converted to set for efficient lookups
-
-23. ✅ **Add comprehensive .gitignore**
-    - Action: Exclude:
-      - `__pycache__/`, `*.pyc`, `*.pyo`
-      - `*.egg-info/`
-      - `.pytest_cache/`
-      - Backup files (`*~`, `*.backup`)
-      - IDE files (`.vscode/`, `.idea/`)
-    - Impact: Cleaner `git status`
-    - Effort: Trivial (10 minutes)
-    - Status: COMPLETE - Added comprehensive .gitignore with Python, IDE, and backup file exclusions
-
-24. ✅ **Fix ActivityWatch bug workaround**
-    - Location: `main.py:1097-1113`
-    - Action:
-      - Check if https://github.com/ActivityWatch/aw-watcher-window-wayland/issues/41 is fixed
-      - If fixed: remove workaround
-      - If not: move to separate well-documented function, add flag to disable
-    - Impact: Code clarity
-    - Effort: Low (1 hour)
-    - Status: COMPLETE - Issue still open, moved to `_apply_afk_gap_workaround()` method with comprehensive docs and `enable_afk_gap_workaround` config flag
-
+	
 ---
 
 ## Recommended Execution Order
