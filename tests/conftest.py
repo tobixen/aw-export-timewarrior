@@ -14,9 +14,11 @@ sleep_counter=0
 @pytest.fixture(autouse=True)  # Applies to all tests automatically
 def no_sleep(monkeypatch):
     global sleep_counter
-    assert sleep_counter<200
-    sleep_counter += 1
+    sleep_counter = 0
     def fake_sleep(seconds):
+        global sleep_counter
+        sleep_counter += 1
+        assert sleep_counter<200
         print(f"SLEEP requested for {seconds}seconds")
     import time
 
