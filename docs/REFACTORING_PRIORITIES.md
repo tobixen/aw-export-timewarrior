@@ -180,11 +180,10 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
 ## Recommended Execution Order
 
 ### **Phase 1: Foundation + Ruff (Week 1-2)**
-- ✅ Fix critical issues (#1-3)
-- ✅ Introduce Ruff (#4)
-- ✅ Quick wins (#21-24)
-- ✅ Add type annotations (#8)
-- **Goal:** Clean foundation, consistent style, critical bugs fixed
+- ✅ ~~Fix critical issues (#1-3)~~ - done
+- ✅ ~~Introduce Ruff (#4)~~ - done
+- ✅ ~~Quick wins (#21-24)~~ - done
+- ✅ Add type annotations (#8) - **Goal:** Clean foundation, consistent style, critical bugs fixed
 
 ### **Phase 2: Major Refactoring (Week 3-5)**
 - Break up Exporter class (#5)

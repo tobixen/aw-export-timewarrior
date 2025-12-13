@@ -200,14 +200,8 @@ class TestEnsureTagExported:
         'exclusive': {},
         'tags': {}
     })
-    @patch('aw_export_timewarrior.main.timew_run')
-    @patch('aw_export_timewarrior.main.get_timew_info')
-    @patch('aw_export_timewarrior.main.timew_retag')
     def test_ensure_tag_exported_starts_new_tracking(
         self,
-        mock_retag: Mock,
-        mock_get_info: Mock,
-        mock_timew_run: Mock,
         mock_aw_client: Mock
     ) -> None:
         """Test that ensure_tag_exported starts new timewarrior tracking."""
@@ -223,8 +217,11 @@ class TestEnsureTagExported:
             'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             'tags': {'old', 'tags'}
         }
-        mock_retag.return_value = mock_timew_info
-        mock_get_info.return_value = mock_timew_info
+
+        # Mock tracker methods
+        exporter.tracker.get_current_tracking = Mock(return_value=mock_timew_info)
+        exporter.tracker.start_tracking = Mock()
+        exporter.tracker.retag = Mock()
 
         event = {
             'timestamp': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
@@ -234,12 +231,13 @@ class TestEnsureTagExported:
         tags = {'4work', 'programming'}
         exporter.ensure_tag_exported(tags, event)
 
-        # Should have called timew start with new tags
-        mock_timew_run.assert_called_once()
-        call_args = mock_timew_run.call_args[0][0]
-        assert call_args[0] == 'start'
-        assert '4work' in call_args
-        assert 'programming' in call_args
+        # Should have called tracker.start_tracking with new tags
+        exporter.tracker.start_tracking.assert_called_once()
+        call_args = exporter.tracker.start_tracking.call_args
+        tags_arg = call_args[0][0]  # First positional argument (tags)
+        assert '4work' in tags_arg
+        assert 'programming' in tags_arg
+        assert '~aw' in tags_arg
 
     @patch('aw_export_timewarrior.main.config', {
         'exclusive': {},
@@ -324,14 +322,10 @@ class TestEnsureTagExported:
 class TestExporterTick:
     """Tests for main tick method."""
 
-    @patch('aw_export_timewarrior.main.get_timew_info')
-    @patch('aw_export_timewarrior.main.timew_retag')
     @patch('aw_export_timewarrior.main.sleep')
     def test_tick_initializes_last_tick_from_timew(
         self,
         mock_sleep: Mock,
-        mock_retag: Mock,
-        mock_get_info: Mock,
         mock_aw_client: Mock
     ) -> None:
         """Test that first tick initializes from timewarrior info."""
@@ -344,8 +338,10 @@ class TestExporterTick:
             'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             'tags': {'4work'}
         }
-        mock_retag.return_value = timew_info
-        mock_get_info.return_value = timew_info
+
+        # Mock tracker methods
+        exporter.tracker.get_current_tracking = Mock(return_value=timew_info)
+        exporter.retag_current_interval = Mock(return_value=timew_info)
 
         # Mock find_next_activity to return False (no events)
         exporter.find_next_activity = Mock(return_value=False)

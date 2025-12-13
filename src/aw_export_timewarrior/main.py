@@ -16,6 +16,8 @@ from .aw_client import EventFetcher
 from .config import config
 from .state import AfkState, StateManager
 from .tag_extractor import TagExtractor
+from .time_tracker import DryRunTracker
+from .timew_tracker import TimewTracker
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
@@ -263,6 +265,15 @@ class Exporter:
             event_fetcher=self.event_fetcher,
             terminal_apps=self.terminal_apps,
             log_callback=self.log
+        )
+
+        # Initialize TimeTracker for time tracking backend
+        # Use TimewTracker even in dry-run mode to capture commands for testing
+        # TimewTracker will use grace_time=0 to avoid sleeping in tests
+        self.tracker = TimewTracker(
+            grace_time=0 if self.dry_run else None,
+            capture_commands=self.captured_commands,
+            hide_output=self.hide_processing_output
         )
 
         # Only check bucket freshness when using real ActivityWatch data
@@ -617,7 +628,7 @@ class Exporter:
 
         # Update timew_info (either from actual timew or maintain simulated state in dry-run)
         if not self.dry_run:
-            self.set_timew_info(timew_retag(get_timew_info(), capture_to=self.captured_commands))
+            self.set_timew_info(self.retag_current_interval())
 
         ## Special logic with 'override', 'manual' and 'unknown' should be documented or removed!
         if self.timew_info is not None:
@@ -636,14 +647,12 @@ class Exporter:
         if self.timew_info is not None and final_tags == self.timew_info['tags']:
             return
 
-        timew_run(['start'] + list(tags) + ['~aw', since.astimezone().strftime('%FT%H:%M:%S')],
-                  dry_run=self.dry_run,
-                  capture_to=self.captured_commands if self.dry_run else None,
-                  hide_output=self.hide_processing_output)
+        # Start tracking with the final tags
+        self.tracker.start_tracking(final_tags, since)
 
         # Update timew_info after command
         if not self.dry_run:
-            self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run, capture_to=self.captured_commands))
+            self.set_timew_info(self.retag_current_interval())
         else:
             # In dry-run mode, simulate the timew_info state as if the command was executed
             self.set_timew_info({
@@ -739,6 +748,33 @@ class Exporter:
         Delegates to TagExtractor.
         """
         return self.tag_extractor.get_afk_tags(event)
+
+    def retag_current_interval(self) -> dict | None:
+        """Get current tracking and apply retag rules if needed.
+
+        Returns:
+            Updated tracking info, or None if no active tracking
+        """
+        # Get current tracking
+        timew_info = self.tracker.get_current_tracking()
+
+        if timew_info is None:
+            return None
+
+        # Apply retag rules
+        source_tags = set(timew_info['tags'])
+        new_tags = self.tag_extractor.apply_retag_rules(source_tags)
+
+        # Retag if tags changed
+        if new_tags != source_tags:
+            self.tracker.retag(new_tags)
+            # Get updated info
+            if not self.dry_run:
+                timew_info = self.tracker.get_current_tracking()
+                if timew_info:  # Check if still active
+                    assert set(timew_info['tags']) == new_tags, f"Expected {new_tags}, got {timew_info['tags']}"
+
+        return timew_info
 
     def _afk_change_stats(self, afk, tags, event):
         """
@@ -1110,7 +1146,7 @@ class Exporter:
             ## Check - if `timew start` was run manually since last "known tick", then reset everything
             # Only update timew_info if not in dry-run mode
             if not self.dry_run:
-                self.set_timew_info(timew_retag(get_timew_info(), capture_to=self.captured_commands))
+                self.set_timew_info(self.retag_current_interval())
             if interval_since_last_known_tick.total_seconds() > MIN_RECORDING_INTERVAL_ADJ and any(x for x in self.state.stats.tags_accumulated_time if x not in SPECIAL_TAGS and self.state.stats.tags_accumulated_time[x].total_seconds()>MIN_RECORDING_INTERVAL_ADJ):
                 self.log("Emptying the accumulator!")
                 tags = set()
@@ -1193,7 +1229,7 @@ class Exporter:
         elif not self.timew_info:
             # Normal mode or dry-run without start_time - get current timew tracking state
             try:
-                self.set_timew_info(timew_retag(get_timew_info(), dry_run=self.dry_run, capture_to=self.captured_commands))
+                self.set_timew_info(self.retag_current_interval())
             except Exception:
                 # No active tracking - create mock info
                 if self.dry_run:
