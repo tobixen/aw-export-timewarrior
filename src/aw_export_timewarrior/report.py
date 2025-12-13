@@ -11,7 +11,6 @@ Generates detailed reports showing ActivityWatch events with columns for:
 import csv
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 from .main import Exporter
@@ -304,36 +303,21 @@ def format_as_csv(
 
 
 def generate_activity_report(
-    start_time: datetime,
-    end_time: datetime,
-    config_path: Path | None = None,
+    exporter: Exporter,
     all_columns: bool = False,
     format: str = 'table',
     truncate: bool = True,
-    enable_pdb: bool = False
 ) -> None:
     """Generate and display an activity report.
 
     Args:
-        start_time: Report start time
-        end_time: Report end time
-        config_path: Optional path to config file
+        exporter: Exporter instance configured for reading ActivityWatch data
         all_columns: Whether to show all available columns
         format: Output format ('table', 'csv', 'tsv')
         truncate: Whether to truncate long values (table mode only)
-        enable_pdb: Whether to enable debugger on errors
     """
-    # Create exporter to access ActivityWatch data
-    exporter = Exporter(
-        dry_run=True,  # We're just reading data, not exporting
-        config_path=config_path,
-        enable_pdb=enable_pdb,
-        start_time=start_time,
-        end_time=end_time
-    )
-
     # Collect report data
-    data = collect_report_data(exporter, start_time, end_time)
+    data = collect_report_data(exporter, exporter.start_time, exporter.end_time)
 
     # Format and output
     if format == 'table':

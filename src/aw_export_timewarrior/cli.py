@@ -8,10 +8,55 @@ Provides subcommands for different operational modes: sync, diff, analyze, expor
 import argparse
 import logging
 import sys
-from datetime import UTC, datetime
+from dataclasses import fields
+from datetime import datetime, timedelta
 from pathlib import Path
 
+from .export import load_test_data, parse_datetime
 from .main import Exporter, load_config, setup_logging
+
+
+def create_exporter_from_args(
+    args: argparse.Namespace,
+    method: str,
+    **overrides
+) -> Exporter:
+    """
+    Create an Exporter instance from CLI arguments.
+    
+    Maps argparse.Namespace to Exporter dataclass fields automatically,
+    with explicit overrides for special cases.
+    
+    Args:
+        args: Parsed command-line arguments
+        **overrides: Explicit parameter overrides (e.g., dry_run=True)
+    
+    Returns:
+        Configured Exporter instance
+    """
+     # Build kwargs from args
+    kwargs = {}
+
+    arg_mapping = {
+        'timeline': 'show_timeline',
+        'config': 'config_path'
+    }
+
+    exporter_field_names = {f.name for f in fields(Exporter)}
+
+    for arg_name, arg_value in vars(args).items():
+        # Map CLI arg name to Exporter field name
+        field_name = arg_mapping.get(arg_name, arg_name)
+
+        if field_name in exporter_field_names and arg_value is not None:
+            kwargs[field_name] = arg_value
+
+    _handle_start_stop_testdata_from_args(args, kwargs, method)
+
+    # Apply overrides (takes precedence)
+    kwargs.update(overrides)
+
+    return Exporter(**kwargs)
 
 def add_timespan_arguments(parser):
     start_group = parser.add_mutually_exclusive_group()
@@ -31,6 +76,7 @@ def add_timespan_arguments(parser):
         help='End time (continuous mode: runs indefinitely; with --once or --dry-run: defaults to now)'
     )
 
+    start_group.add_argument('--day', metavar='DATE')
 
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser with subcommands."""
@@ -106,12 +152,12 @@ Examples:
     )
     debug_group = parser.add_mutually_exclusive_group()
     debug_group.add_argument(
-        '--pdb',
+        '--enable-pdb',
         action='store_true',
         help='Drop into debugger on unexpected states (for development)'
     )
     debug_group.add_argument(
-        '--break-assert',
+        '--enable-assert',
         action='store_true',
         help='Assert no unexpected states (for development)'
     )
@@ -425,7 +471,7 @@ def configure_logging(args: argparse.Namespace, subcommand: str) -> None:
 
 def validate_sync_args(args: argparse.Namespace) -> str | None:
     """Validate arguments for sync subcommand."""
-    if args.test_data:
+    if getattr(args, 'test_data', False):
         if not args.test_data.exists():
             return f"Error: Test data file not found: {args.test_data}"
         if args.start or args.end:
@@ -471,49 +517,58 @@ def validate_validate_args(args: argparse.Namespace) -> str | None:
     # No special validation needed
     return None
 
+def _handle_start_stop_testdata_from_args(args, exporter_args, method):
+    ## TODO: I want a --day parameter for processing a full day (local time, midnight to midnight)
 
-def run_sync(args: argparse.Namespace) -> int:
-    """Execute the sync subcommand."""
-    from .export import load_test_data, parse_datetime
-
-    # Parse start/end times if provided
-    start_time = None
-    end_time = None
-    if args.start:
-        start_time = parse_datetime(args.start)
-        # Default end time to now if not specified
-        end_time = parse_datetime(args.end) if args.end else datetime.now(UTC)
-        print(f"Processing time range: {start_time} to {end_time}")
-
-    # Load test data if specified
+    start = None
+    end = None
     test_data = None
-    if args.test_data:
+
+    if args.day:
+        start = parse_datetime(args.day)
+        end = start + timedelta(day=1)
+
+    if args.start:
+        start = parse_datetime(args.start)
+
+    if args.end:
+        ## TODO - can we make this work?
+        #if args.day:
+            #end = args.day +parse_time(args.end)
+        end = parse_datetime(args.end)
+
+    if getattr(args, 'test_data', False):
         print(f"Loading test data from {args.test_data}")
         test_data = load_test_data(args.test_data)
 
         # Extract start/end times from test data metadata if not provided via CLI
-        if not start_time and 'metadata' in test_data and 'start_time' in test_data['metadata']:
-            start_time = parse_datetime(test_data['metadata']['start_time'])
-            print(f"Using start time from test data: {start_time}")
-        if not end_time and 'metadata' in test_data and 'end_time' in test_data['metadata']:
-            end_time = parse_datetime(test_data['metadata']['end_time'])
-            print(f"Using end time from test data: {end_time}")
+        if not start and 'metadata' in test_data and 'start_time' in test_data['metadata']:
+            start = parse_datetime(test_data['metadata']['start_time'])
+            print(f"Using start time from test data: {start}")
+        if not end and 'metadata' in test_data and 'end_time' in test_data['metadata']:
+            end = parse_datetime(test_data['metadata']['end_time'])
+            print(f"Using end time from test data: {end}")
 
+    ## The default for sync, "since last timew entry" is set somewhere else, otherwise it should be set here.
+    if method != 'sync' and not start:
+        start = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    ## The default for sync is "run forever" or "run once", otherwise we should end at current timestamp
+    if method != 'sync' and not end:
+        end = datetime.now().astimezone()
+
+    print(f"Processing time range: {start} to {end}")
+    exporter_args['start_time'] = start
+    exporter_args['end_time'] = end
+    exporter_args['test_data'] = test_data
+
+def run_sync(args: argparse.Namespace) -> int:
+    """Execute the sync subcommand."""
     if args.test_data and not args.no_dry_run:
         args.dry_run = True
 
     # Create exporter with options
-    exporter = Exporter(
-        dry_run=args.dry_run,
-        config_path=args.config,
-        verbose=args.verbose,
-        hide_processing_output=args.hide_processing_output,
-        enable_pdb=args.pdb,
-        enable_assert=args.break_assert,
-        start_time=start_time,
-        end_time=end_time,
-        test_data=test_data
-    )
+    exporter = create_exporter_from_args(args, 'sync')
 
     # Run exporter
     if args.dry_run:
@@ -525,68 +580,25 @@ def run_sync(args: argparse.Namespace) -> int:
         exporter.tick(process_all=True)
         print("\nProcessing completed")
     else:
-        # Continuous monitoring mode
-        if start_time and end_time:
-            print(f"Processing time range: {start_time} to {end_time}")
-        else:
-            ## TODO: is this right?  Do we ever get to this line in the first place?
+        if not exporter.end_time:
             print("Starting continuous monitoring (Ctrl+C to stop)...")
 
         while exporter.tick():
             pass  # tick() returns False when we should stop
 
-        if start_time and end_time:
-            print(f"\nReached end of time range at {end_time}")
+        if exporter.end_time:
+            print(f"\nReached end of time range at {exporter.end_time}")
 
     return 0
 
 
 def run_diff(args: argparse.Namespace) -> int:
     """Execute the diff subcommand."""
-    from .export import load_test_data, parse_datetime
-
-    # Load test data if specified
-    test_data = None
-    if hasattr(args, 'test_data') and args.test_data:
-        print(f"Loading test data from {args.test_data}")
-        test_data = load_test_data(args.test_data)
-
-    # Parse start/end times with defaults
-    start_time = parse_datetime(args.start) if hasattr(args, 'start') and args.start else None
-    end_time = parse_datetime(args.end) if hasattr(args, 'end') and args.end else None
-
-    # Extract start/end times from test data metadata if not provided via CLI
-    if test_data:
-        if not start_time and 'metadata' in test_data and 'start_time' in test_data['metadata']:
-            start_time = parse_datetime(test_data['metadata']['start_time'])
-            print(f"Using start time from test data: {start_time}")
-        if not end_time and 'metadata' in test_data and 'end_time' in test_data['metadata']:
-            end_time = parse_datetime(test_data['metadata']['end_time'])
-            print(f"Using end time from test data: {end_time}")
-
-    # Apply defaults if still not set
-    if not start_time:
-        start_time = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    if not end_time:
-        end_time = datetime.now(UTC)
-
-    print(f"Comparing time range: {start_time} to {end_time}")
 
     # Create exporter in dry-run mode (diff doesn't modify unless --apply)
-    exporter = Exporter(
-        dry_run=not args.apply,  # dry_run=False only if applying
-        config_path=args.config,
-        verbose=args.verbose,
+    exporter = create_exporter_from_args(args, 'diff',
         show_diff=True,
         show_fix_commands=args.show_commands or args.apply,
-        apply_fix=args.apply,
-        hide_diff_report=args.hide_report,
-        enable_pdb=args.pdb,
-        enable_assert=args.break_assert,
-        start_time=start_time,
-        end_time=end_time,
-        test_data=test_data,
-        show_timeline=args.timeline if hasattr(args, 'timeline') else False
     )
 
     # Process all events first (to build suggested intervals)
@@ -600,24 +612,12 @@ def run_diff(args: argparse.Namespace) -> int:
 
 def run_analyze(args: argparse.Namespace) -> int:
     """Execute the analyze subcommand."""
-    from .export import parse_datetime
-
-    # Parse start/end times with defaults
-    start_time = parse_datetime(args.start) if args.start else datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    end_time = parse_datetime(args.end) if args.end else datetime.now(UTC)
-
-    print(f"Analyzing time range: {start_time} to {end_time}")
-
     # Create exporter in dry-run mode with show_unmatched
-    exporter = Exporter(
+    exporter = create_exporter_from_args(
+        args,
+        'analyze',
         dry_run=True,
-        config_path=args.config,
-        verbose=args.verbose,
-        show_unmatched=True,
-        enable_pdb=args.pdb,
-        enable_assert=args.break_assert,
-        start_time=start_time,
-        end_time=end_time
+        show_unmatched=True
     )
 
     # Process all events
@@ -632,12 +632,6 @@ def run_analyze(args: argparse.Namespace) -> int:
 def run_export(args: argparse.Namespace) -> int:
     """Execute the export subcommand."""
     import sys
-
-    from .export import export_aw_data, parse_datetime
-
-    # Parse start/end times with defaults
-    start_time = parse_datetime(args.start) if args.start else datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    end_time = parse_datetime(args.end) if args.end else datetime.now(UTC)
 
     # Direct progress messages to stderr if outputting to stdout
     use_stdout = str(args.output) == '-'
@@ -655,25 +649,17 @@ def run_export(args: argparse.Namespace) -> int:
 
 def run_report(args: argparse.Namespace) -> int:
     """Execute the report subcommand."""
-    from .export import parse_datetime
     from .report import generate_activity_report
 
-    # Parse start/end times with defaults
-    start_time = parse_datetime(args.start) if args.start else datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    end_time = parse_datetime(args.end) if args.end else datetime.now(UTC)
-
-    print(f"Generating report for: {start_time} to {end_time}", file=sys.stderr)
+    # Create exporter for reading ActivityWatch data
+    exporter = create_exporter_from_args(args, 'report', dry_run=True)
 
     # Generate report
     generate_activity_report(
-        start_time=start_time,
-        end_time=end_time,
-        config_path=args.config,
+        exporter=exporter,
         all_columns=args.all_columns,
         format=args.format,
         truncate=not args.no_truncate,
-        enable_pdb=args.pdb,
-        enable_assert=args.break_assert,
     )
 
     return 0
