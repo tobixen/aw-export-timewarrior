@@ -1131,10 +1131,214 @@ class Exporter:
         # Combine original and synthetic events
         return afk_events + synthetic_afk_events
 
-    def find_next_activity(self):
+    def _fetch_and_prepare_events(self) -> tuple[list, dict | None]:
+        """Fetch, filter, merge, and sort events from ActivityWatch.
+
+        Returns:
+            Tuple of (completed_events, current_event):
+            - completed_events: List of finished events to process
+            - current_event: The ongoing event (or None)
+        """
         afk_id = self.bucket_by_client["aw-watcher-afk"][0]
         window_id = self.bucket_by_client["aw-watcher-window"][0]
 
+        # Fetch AFK events
+        afk_events = self.event_fetcher.get_events(
+            afk_id, start=self.state.last_tick, end=self.end_time
+        )
+
+        # Apply workaround if enabled in config
+        if self.config.get("enable_afk_gap_workaround", True):
+            afk_events = self._apply_afk_gap_workaround(afk_events)
+
+        # The afk tracker is not reliable. Sometimes it shows me
+        # being afk even when I've been sitting constantly by the
+        # computer, working most of the time, perhaps spending a
+        # minute reading something?
+        # Filter out short AFK events
+        afk_events = [
+            x for x in afk_events if x["duration"] > timedelta(seconds=self.max_mixed_interval)
+        ]
+
+        # Fetch window events and merge with AFK events
+        afk_window_events = (
+            self.event_fetcher.get_events(window_id, start=self.state.last_tick, end=self.end_time)
+            + afk_events
+        )
+        afk_window_events.sort(key=lambda x: x["timestamp"])
+
+        if len(afk_window_events) == 0:
+            return [], None
+
+        # Separate the current ongoing event from completed events
+        # The last event is the "current" event still in progress
+        current_event = afk_window_events[-1] if len(afk_window_events) > 0 else None
+        completed_events = afk_window_events[:-1] if len(afk_window_events) > 1 else []
+
+        return completed_events, current_event
+
+    def _should_skip_event(self, event: dict) -> bool:
+        """Check if event should be skipped due to old timestamp.
+
+        Args:
+            event: The event to check
+
+        Returns:
+            True if event should be skipped, False otherwise
+        """
+        # Skip events older than last_tick or last_known_tick
+        if (
+            event["timestamp"] < self.state.last_tick
+            or event["timestamp"] < self.state.last_known_tick
+        ):
+            # Always skip not-afk status events with old timestamps
+            if event["data"] == {"status": "not-afk"}:
+                return True
+
+            # For other events, check additional conditions
+            if (
+                event["data"] != {"status": "afk"}
+                and event["timestamp"] > self.state.last_start_time
+            ):
+                if event["duration"] > timedelta(seconds=30):
+                    self.breakpoint()
+                self.log(f"skipping event as the timestamp is too old - {event}", event=event)
+                return True
+
+        return False
+
+    def _should_export_accumulator(
+        self, interval_since_last_tick: timedelta, event: dict
+    ) -> tuple[bool, set[str], datetime]:
+        """Decide if accumulator should be exported and get tags to export.
+
+        Args:
+            interval_since_last_tick: Time since last known tick
+            event: Current event being processed
+
+        Returns:
+            Tuple of (should_export, tags_to_export, since_timestamp):
+            - should_export: True if accumulator should be exported
+            - tags_to_export: Set of tags that should be exported
+            - since_timestamp: Timestamp to use for export
+        """
+        # Check if enough time has passed and we have significant tags
+        if not (
+            interval_since_last_tick.total_seconds() > self.min_recording_interval_adj
+            and any(
+                x
+                for x in self.state.stats.tags_accumulated_time
+                if x not in SPECIAL_TAGS
+                and self.state.stats.tags_accumulated_time[x].total_seconds()
+                > self.min_recording_interval_adj
+            )
+        ):
+            return False, set(), self.state.last_known_tick
+
+        self.log("Emptying the accumulator!")
+
+        # Build set of tags that meet the threshold
+        tags = set()
+
+        # TODO: This looks like a bug - we reset tags, and then assert that they are not overlapping?
+        assert not exclusive_overlapping(tags, self.config)
+
+        # Find minimum threshold that avoids exclusive tag conflicts
+        min_tag_recording_interval = self.min_tag_recording_interval
+        while exclusive_overlapping(
+            {
+                tag
+                for tag in self.state.stats.tags_accumulated_time
+                if self.state.stats.tags_accumulated_time[tag].total_seconds()
+                > min_tag_recording_interval
+            },
+            self.config,
+        ):
+            min_tag_recording_interval += 1
+
+        # Collect tags above threshold and apply stickyness
+        for tag in self.state.stats.tags_accumulated_time:
+            if (
+                self.state.stats.tags_accumulated_time[tag].total_seconds()
+                > min_tag_recording_interval
+            ):
+                tags.add(tag)
+            self.state.stats.tags_accumulated_time[tag] *= self.stickyness_factor
+
+        # Determine since timestamp
+        if self.state.manual_tracking:
+            since = event["timestamp"] - self.state.stats.known_events_time + event["duration"]
+        else:
+            since = self.state.last_known_tick
+
+        return True, tags, since
+
+    def _handle_tag_result(
+        self,
+        tag_result: TagResult,
+        event: dict,
+        num_skipped_events: int,
+        total_time_skipped_events: timedelta,
+    ) -> tuple[int, timedelta]:
+        """Handle the tag extraction result and update counters.
+
+        Args:
+            tag_result: The tag extraction result
+            event: The event being processed
+            num_skipped_events: Current count of skipped events
+            total_time_skipped_events: Total duration of skipped events
+
+        Returns:
+            Tuple of (num_skipped_events, total_time_skipped_events) after reset/update
+        """
+        # Handle different tag extraction results
+        if tag_result.result == EventMatchResult.IGNORED:
+            num_skipped_events += 1
+            total_time_skipped_events += event["duration"]
+            if total_time_skipped_events.total_seconds() > self.min_recording_interval:
+                self.breakpoint()
+            return num_skipped_events, total_time_skipped_events
+
+        if tag_result.result == EventMatchResult.NO_MATCH:
+            self.state.stats.unknown_events_time += event["duration"]
+            # Track unmatched event if requested
+            if self.show_unmatched:
+                self.unmatched_events.append(event)
+            if self.state.stats.unknown_events_time.total_seconds() > self.max_mixed_interval * 2:
+                # Significant unknown activity - tag it as UNKNOWN
+                self.log(
+                    f"Significant unknown activity ({self.state.stats.unknown_events_time.total_seconds()}s), tagging as UNKNOWN",
+                    event=event,
+                )
+                self.ensure_tag_exported({"UNKNOWN", "not-afk"}, event)
+                self.state.stats.unknown_events_time = timedelta(0)
+            else:
+                self.log(
+                    f"{self.state.stats.unknown_events_time.total_seconds()}s unknown events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)",
+                    event=event,
+                )
+        else:
+            # EventMatchResult.MATCHED
+            self.log(
+                f"{event['data']} - tags found: {tag_result.tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)"
+            )
+
+        # Reset counters after handling non-IGNORED events
+        return 0, timedelta(0)
+
+    def _update_tag_accumulator(self, tag_result: TagResult, event: dict) -> None:
+        """Update the tag accumulator with tags from the event.
+
+        Args:
+            tag_result: The tag extraction result
+            event: The event being processed
+        """
+        if tag_result:
+            tags = retag_by_rules(tag_result.tags, self.config)
+            for tag in tags:
+                self.state.stats.tags_accumulated_time[tag] += event["duration"]
+
+    def find_next_activity(self):
         ## TODO: move all statistics from internal counters and up to the object
 
         ## Skipped events are events that takes so little time that we ignore it completely.
@@ -1149,56 +1353,17 @@ class Exporter:
 
         total_time_skipped_events = timedelta(0)
 
-        ## just to make sure we won't lose any events
-        # self.state.last_tick = self.state.last_tick - timedelta(1)
-
-        afk_events = self.event_fetcher.get_events(
-            afk_id, start=self.state.last_tick, end=self.end_time
-        )
-
-        # Apply workaround if enabled in config
-        if self.config.get("enable_afk_gap_workaround", True):
-            afk_events = self._apply_afk_gap_workaround(afk_events)
-
-        ## The afk tracker is not reliable.  Sometimes it shows me
-        ## being afk even when I've been sitting constantly by the
-        ## computer, working most of the time, perhaps spending a
-        ## minute reading something?
-        afk_events = [
-            x for x in afk_events if x["duration"] > timedelta(seconds=self.max_mixed_interval)
-        ]
-
-        ## afk and window_events
-        afk_window_events = (
-            self.event_fetcher.get_events(window_id, start=self.state.last_tick, end=self.end_time)
-            + afk_events
-        )
-        afk_window_events.sort(key=lambda x: x["timestamp"])
-        if len(afk_window_events) == 0:
+        # Fetch and prepare events
+        completed_events, current_event = self._fetch_and_prepare_events()
+        if not completed_events and not current_event:
             return False
-
-        ## Separate the current ongoing event from completed events
-        ## The last event is the "current" event still in progress
-        current_event = afk_window_events[-1] if len(afk_window_events) > 0 else None
-        completed_events = afk_window_events[:-1] if len(afk_window_events) > 1 else []
 
         cnt = 0
         for event in completed_events:
-            if (
-                event["timestamp"] < self.state.last_tick
-                or event["timestamp"] < self.state.last_known_tick
-            ):
-                if event["data"] == {"status": "not-afk"}:
-                    continue
-                if (
-                    event["data"] != {"status": "afk"}
-                    and event["timestamp"] > self.state.last_start_time
-                ):
-                    if event["duration"] > timedelta(seconds=30):
-                        self.breakpoint()
-                    ## Do we need an exception here for afk events?
-                    self.log(f"skipping event as the timestamp is too old - {event}", event=event)
-                    continue
+            # Skip events with old timestamps
+            if self._should_skip_event(event):
+                continue
+
             tag_result = self.find_tags_from_event(event)
 
             ## Handling afk/not-afk
@@ -1220,43 +1385,18 @@ class Exporter:
             if tag_result and "status" not in event["data"]:
                 self.state.stats.known_events_time += event["duration"]
 
-            # Handle different tag extraction results
+            # Handle the tag result and update counters
+            num_skipped_events, total_time_skipped_events = self._handle_tag_result(
+                tag_result, event, num_skipped_events, total_time_skipped_events
+            )
+
+            # Continue to next event if this was IGNORED
             if tag_result.result == EventMatchResult.IGNORED:
-                num_skipped_events += 1
-                total_time_skipped_events += event["duration"]
-                if total_time_skipped_events.total_seconds() > self.min_recording_interval:
-                    self.breakpoint()
                 continue
 
+            # Track unknown events count
             if tag_result.result == EventMatchResult.NO_MATCH:
                 num_unknown_events += 1
-                self.state.stats.unknown_events_time += event["duration"]
-                # Track unmatched event if requested
-                if self.show_unmatched:
-                    self.unmatched_events.append(event)
-                if (
-                    self.state.stats.unknown_events_time.total_seconds()
-                    > self.max_mixed_interval * 2
-                ):
-                    # Significant unknown activity - tag it as UNKNOWN
-                    self.log(
-                        f"Significant unknown activity ({self.state.stats.unknown_events_time.total_seconds()}s), tagging as UNKNOWN",
-                        event=event,
-                    )
-                    self.ensure_tag_exported({"UNKNOWN", "not-afk"}, event)
-                    self.state.stats.unknown_events_time = timedelta(0)
-                else:
-                    self.log(
-                        f"{self.state.stats.unknown_events_time.total_seconds()}s unknown events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)",
-                        event=event,
-                    )
-            else:
-                # EventMatchResult.MATCHED
-                self.log(
-                    f"{event['data']} - tags found: {tag_result.tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)"
-                )
-            num_skipped_events = 0
-            total_time_skipped_events = timedelta(0)
 
             ## Ref README, if self.max_mixed_interval is met, ignore accumulated minor activity
             ## (the mixed time will be attributed to the previous work task)
@@ -1274,72 +1414,23 @@ class Exporter:
             assert interval_since_last_known_tick >= timedelta(0)
 
             ## Track things in internal accumulator if the focus between windows changes often
-            if tag_result:
-                tags = retag_by_rules(tag_result.tags, self.config)
-                for tag in tags:
-                    self.state.stats.tags_accumulated_time[tag] += event["duration"]
+            self._update_tag_accumulator(tag_result, event)
 
             ## Check - if `timew start` was run manually since last "known tick", then reset everything
             # Only update timew_info if not in dry-run mode
             if not self.dry_run:
                 self.set_timew_info(self.retag_current_interval())
-            if (
-                interval_since_last_known_tick.total_seconds() > self.min_recording_interval_adj
-                and any(
-                    x
-                    for x in self.state.stats.tags_accumulated_time
-                    if x not in SPECIAL_TAGS
-                    and self.state.stats.tags_accumulated_time[x].total_seconds()
-                    > self.min_recording_interval_adj
-                )
-            ):
-                self.log("Emptying the accumulator!")
-                tags = set()
-                ## TODO: This looks like a bug - we reset tags, and then assert that they are not overlapping?
-                assert not exclusive_overlapping(tags, self.config)
-                min_tag_recording_interval = self.min_tag_recording_interval
-                while exclusive_overlapping(
-                    {
-                        tag
-                        for tag in self.state.stats.tags_accumulated_time
-                        if self.state.stats.tags_accumulated_time[tag].total_seconds()
-                        > min_tag_recording_interval
-                    },
-                    self.config,
-                ):
-                    min_tag_recording_interval += 1
-                for tag in self.state.stats.tags_accumulated_time:
-                    if (
-                        self.state.stats.tags_accumulated_time[tag].total_seconds()
-                        > min_tag_recording_interval
-                    ):
-                        tags.add(tag)
-                    self.state.stats.tags_accumulated_time[tag] *= self.stickyness_factor
-                if self.state.manual_tracking:
-                    since = (
-                        event["timestamp"] - self.state.stats.known_events_time + event["duration"]
-                    )
-                else:
-                    since = self.state.last_known_tick
-                self.log(f"Ensuring tags export, tags={tags}")
-                self.ensure_tag_exported(tags, event, since)
+
+            # Check if we should export the accumulated tags
+            should_export, tags_to_export, since = self._should_export_accumulator(
+                interval_since_last_known_tick, event
+            )
+            if should_export:
+                self.log(f"Ensuring tags export, tags={tags_to_export}")
+                self.ensure_tag_exported(tags_to_export, event, since)
 
             self.state.last_tick = event["timestamp"] + event["duration"]
             cnt += 1
-
-            if tags is not False:
-                pass
-
-            elif event["data"].get("app", "").lower() in self.terminal_apps:
-                self.log(
-                    f"Unknown terminal event {event['data']['title']}",
-                    event=event,
-                    level=logging.WARNING,
-                )
-            else:
-                self.log(
-                    f"No rules found for event {event['data']}", event=event, level=logging.WARNING
-                )
 
         ## Process the current ongoing event incrementally (idempotent)
         if current_event:

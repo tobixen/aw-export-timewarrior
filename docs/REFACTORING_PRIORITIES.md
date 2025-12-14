@@ -8,40 +8,6 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
 
 ### 🟠 **HIGH PRIORITY (Schedule Soon)**
 
-5. **Break up God Class: Exporter (1475 lines)**
-   - Location: `src/aw_export_timewarrior/main.py:207-1475`
-   - Issue: Single class with 60+ attributes handling everything
-   - Action: Extract into:
-     - `EventFetcher`: Fetch data from ActivityWatch
-     - `TagExtractor`: Extract tags from events using rules
-     - `StateManager`: Manage last_tick, counters, afk state
-     - `TimewManager`: All TimeWarrior interactions
-     - `Exporter`: Orchestrator coordinating the above
-   - Impact: Maintainability, testability, comprehension
-   - Effort: High (2-3 weeks)
-
-6. **Move hard-coded constants to config**
-   - Location: `src/aw_export_timewarrior/main.py:178-192`
-   - Issue: Configuration loaded from environment variables instead of config file
-   - Action: Move to `config.toml` with `[tuning]` section
-   - Constants: `AW_WARN_THRESHOLD`, `SLEEP_INTERVAL`, `IGNORE_INTERVAL`, etc.
-   - Impact: User configurability, cleaner code
-   - Effort: Low (4-6 hours)
-
-7. **Fix confusing return types**
-   - Location: `find_tags_from_event()` in `main.py:1060-1071`
-   - Issue: Returns `None` OR `False` OR `Set[str]` (three different types!)
-   - Action: Use enum/dataclass for clear semantics:
-     ```python
-     @dataclass
-     class TagResult:
-         result: EventMatchResult  # IGNORED, NO_MATCH, MATCHED
-         tags: Set[str] = field(default_factory=set)
-         reason: str = ""
-     ```
-   - Impact: Clarity, fewer bugs in calling code
-   - Effort: Medium (1 day)
-
 8. **Add comprehensive type annotations**
    - Location: Throughout codebase
    - Issue: Missing return types on many functions
@@ -50,13 +16,6 @@ Based on comprehensive codebase analysis performed on 2025-12-10.
    - Effort: Medium (2-3 days)
 
 ### 🟡 **MEDIUM PRIORITY (Plan & Execute)**
-
-9. **Reduce code duplication in tag matching**
-   - Location: `_match_project()`, `_match_path_regexp()`, `_match_url_regexp()` in `main.py`
-   - Issue: Similar methods with duplicated logic
-   - Action: Consolidate using strategy pattern
-   - Impact: DRY principle, easier to extend with new matchers
-   - Effort: Medium (1-2 days)
 
 10. **Simplify `find_next_activity()` method**
     - Location: `main.py:1073-1239` (166 lines)
