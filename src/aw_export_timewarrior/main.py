@@ -766,7 +766,13 @@ class Exporter:
         if "afk" in tags:
             self.state.set_afk_state(AfkState.AFK)
 
-        self.set_known_tick_stats(event=event, start=since)
+        # For AFK events, only advance last_known_tick to the START of the interval,
+        # not the END. This prevents skipping window events that occurred during AFK.
+        # AFK events overlap with window events (user AFK while window active).
+        if "afk" in tags:
+            self.set_known_tick_stats(start=since, end=since)
+        else:
+            self.set_known_tick_stats(event=event, start=since)
 
         # Reset statistics counters at the start of new tracking cycle
         # This ensures known_events_time only tracks events since the last export
