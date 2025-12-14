@@ -10,6 +10,11 @@ default_config = """
 # Set to false if the upstream issue is fixed or if this causes problems
 enable_afk_gap_workaround = true
 
+# Enable lid event tracking from aw-watcher-lid
+# When enabled, lid closure and suspend events will be treated as AFK
+# Set to false to ignore lid events even if aw-watcher-lid is running
+enable_lid_events = true
+
 # Terminal applications - used to suppress warnings for unknown terminal events
 terminal_apps = [
     "alacritty",
@@ -62,6 +67,11 @@ min_tag_recording_interval = 50.0
 # Stickyness factor for tag retention (0.0 to 1.0, default: 0.1)
 # How much time tags should "stick" across activity changes
 stickyness_factor = 0.1
+
+# Minimum duration for lid events (seconds, default: 10)
+# Lid close/open cycles shorter than this are ignored to filter out accidental bumps
+# and brief lid checks (e.g., looking at notifications)
+min_lid_duration = 10.0
 
 [tags.housework]
 source_tags = [ "housework", "dishwash" ]

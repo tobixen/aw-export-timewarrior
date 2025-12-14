@@ -55,6 +55,9 @@ class FixtureDataBuilder:
         """
         self.start_time = start_time or datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
         self.current_time = self.start_time
+        self.last_window_event_start = (
+            self.start_time
+        )  # Track last window event start for AFK event overlap
         self.buckets = {}
         self.events = {}
         self._init_buckets()
@@ -100,6 +103,15 @@ class FixtureDataBuilder:
                 "created": current_time_iso,
                 "last_updated": current_time_iso,
             },
+            "aw-watcher-lid_test": {
+                "id": "aw-watcher-lid_test",
+                "name": "aw-watcher-lid_test",
+                "type": "systemafkstatus",
+                "client": "aw-watcher-lid",
+                "hostname": "test-host",
+                "created": current_time_iso,
+                "last_updated": current_time_iso,
+            },
         }
 
         # Initialize empty event lists for each bucket
@@ -134,6 +146,7 @@ class FixtureDataBuilder:
         }
 
         self.events["aw-watcher-window_test"].append(event)
+        self.last_window_event_start = event_time  # Save for AFK event overlap
         self.current_time = event_time + duration
 
         return self
@@ -147,6 +160,121 @@ class FixtureDataBuilder:
         Args:
             status: "afk" or "not-afk"
             duration: Duration in seconds or timedelta
+            timestamp: Event timestamp (uses last_window_event_start if not specified, for overlap)
+
+        Returns:
+            Self for chaining
+        """
+        if isinstance(duration, int):
+            duration = timedelta(seconds=duration)
+
+        # Default to last_window_event_start for overlap with window events
+        event_time = timestamp or self.last_window_event_start
+
+        event = {
+            "id": len(self.events["aw-watcher-afk_test"]) + 1,
+            "timestamp": event_time.isoformat(),
+            "duration": duration.total_seconds(),
+            "data": {"status": status},
+        }
+
+        self.events["aw-watcher-afk_test"].append(event)
+
+        return self
+
+    def add_lid_event(
+        self,
+        lid_state: str,
+        duration: int | timedelta,
+        timestamp: datetime | None = None,
+        suspend_state: str | None = None,
+    ) -> "FixtureDataBuilder":
+        """
+        Add a lid event.
+
+        Args:
+            lid_state: "closed" or "open"
+            duration: Duration in seconds or timedelta
+            timestamp: Event timestamp (uses current_time if not specified)
+            suspend_state: Optional "suspended" or "resumed" state
+
+        Returns:
+            Self for chaining
+        """
+        if isinstance(duration, int):
+            duration = timedelta(seconds=duration)
+
+        event_time = timestamp or self.current_time
+
+        # Determine status based on lid state
+        status = "system-afk" if lid_state == "closed" else "not-afk"
+
+        event = {
+            "id": len(self.events["aw-watcher-lid_test"]) + 1,
+            "timestamp": event_time.isoformat(),
+            "duration": duration.total_seconds(),
+            "data": {
+                "status": status,
+                "lid_state": lid_state,
+                "suspend_state": suspend_state,
+                "boot_gap": False,
+                "event_source": "lid",
+            },
+        }
+
+        self.events["aw-watcher-lid_test"].append(event)
+        self.current_time = event_time + duration
+
+        return self
+
+    def add_suspend_event(
+        self, suspend_state: str, duration: int | timedelta, timestamp: datetime | None = None
+    ) -> "FixtureDataBuilder":
+        """
+        Add a suspend/resume event.
+
+        Args:
+            suspend_state: "suspended" or "resumed"
+            duration: Duration in seconds or timedelta
+            timestamp: Event timestamp (uses current_time if not specified)
+
+        Returns:
+            Self for chaining
+        """
+        if isinstance(duration, int):
+            duration = timedelta(seconds=duration)
+
+        event_time = timestamp or self.current_time
+
+        # Suspended = AFK, resumed = not-afk
+        status = "system-afk" if suspend_state == "suspended" else "not-afk"
+
+        event = {
+            "id": len(self.events["aw-watcher-lid_test"]) + 1,
+            "timestamp": event_time.isoformat(),
+            "duration": duration.total_seconds(),
+            "data": {
+                "status": status,
+                "lid_state": None,
+                "suspend_state": suspend_state,
+                "boot_gap": False,
+                "event_source": "suspend",
+            },
+        }
+
+        self.events["aw-watcher-lid_test"].append(event)
+        self.current_time = event_time + duration
+
+        return self
+
+    def add_boot_gap_event(
+        self, duration: int | timedelta, timestamp: datetime | None = None
+    ) -> "FixtureDataBuilder":
+        """
+        Add a boot gap event (system downtime).
+
+        Args:
+            duration: Duration in seconds or timedelta
             timestamp: Event timestamp (uses current_time if not specified)
 
         Returns:
@@ -158,13 +286,20 @@ class FixtureDataBuilder:
         event_time = timestamp or self.current_time
 
         event = {
-            "id": len(self.events["aw-watcher-afk_test"]) + 1,
+            "id": len(self.events["aw-watcher-lid_test"]) + 1,
             "timestamp": event_time.isoformat(),
             "duration": duration.total_seconds(),
-            "data": {"status": status},
+            "data": {
+                "status": "system-afk",
+                "lid_state": None,
+                "suspend_state": None,
+                "boot_gap": True,
+                "event_source": "boot",
+            },
         }
 
-        self.events["aw-watcher-afk_test"].append(event)
+        self.events["aw-watcher-lid_test"].append(event)
+        self.current_time = event_time + duration
 
         return self
 

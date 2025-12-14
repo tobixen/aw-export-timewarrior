@@ -321,6 +321,16 @@ class Exporter:
         # Convert terminal_apps list to lowercase set for efficient lookups
         self.terminal_apps = {app.lower() for app in self.config.get("terminal_apps", [])}
 
+        # When using test data, automatically set start_time and end_time from metadata if not already set
+        if self.test_data:
+            metadata = self.test_data.get("metadata", {})
+            if not self.start_time and "start_time" in metadata:
+                start_time_str = metadata["start_time"]
+                self.start_time = datetime.fromisoformat(start_time_str)
+            if not self.end_time and "end_time" in metadata:
+                end_time_str = metadata["end_time"]
+                self.end_time = datetime.fromisoformat(end_time_str)
+
         ## Initialize EventFetcher for all ActivityWatch data access
         client_name = "timewarrior_test_export" if self.dry_run else "timewarrior_export"
         self.event_fetcher = EventFetcher(
@@ -1157,6 +1167,61 @@ class Exporter:
         # Combine original and synthetic events
         return afk_events + synthetic_afk_events
 
+    def _merge_afk_and_lid_events(self, afk_events: list, lid_events: list) -> list:
+        """
+        Merge lid events with AFK events, giving lid events priority.
+
+        Lid closure and suspend events represent system-level AFK state that
+        should override user-level AFK detection from aw-watcher-afk.
+
+        Strategy:
+        - Lid closed -> ALWAYS system-afk (overrides user activity detection)
+        - Lid open during AFK -> keep AFK state from aw-watcher-afk
+        - Lid events are converted to AFK-compatible format for processing
+        - Original lid data is preserved for debugging
+
+        Args:
+            afk_events: Events from aw-watcher-afk
+            lid_events: Events from aw-watcher-lid
+
+        Returns:
+            Merged list of AFK events (lid events converted to AFK format)
+        """
+        if not lid_events:
+            return afk_events
+
+        # Convert lid events to AFK-compatible format
+        converted_lid_events = []
+        for event in lid_events:
+            data = event["data"]
+
+            # Determine AFK status based on lid/suspend state
+            # Lid closed or suspended -> afk
+            # Lid open or resumed -> not-afk
+            if data.get("lid_state") == "closed" or data.get("suspend_state") == "suspended":
+                status = "afk"
+            else:
+                status = "not-afk"
+
+            converted_event = {
+                "timestamp": event["timestamp"],
+                "duration": event["duration"],
+                "data": {
+                    "status": status,
+                    "source": "lid",  # Mark source for debugging
+                    "original_data": data,  # Preserve original attributes
+                },
+            }
+            converted_lid_events.append(converted_event)
+
+        # For now, simple concatenation - lid events will be processed alongside AFK events
+        # The event processing logic will naturally handle overlaps since events are sorted by timestamp
+        # TODO Phase 4+: Add sophisticated conflict resolution for overlapping periods
+        merged = afk_events + converted_lid_events
+        merged.sort(key=lambda x: x["timestamp"])
+
+        return merged
+
     def _fetch_and_prepare_events(self) -> tuple[list, dict | None]:
         """Fetch, filter, merge, and sort events from ActivityWatch.
 
@@ -1186,10 +1251,35 @@ class Exporter:
             x for x in afk_events if x["duration"] > timedelta(seconds=self.max_mixed_interval)
         ]
 
-        # Fetch window events and merge with AFK events
+        # Fetch lid events if available and enabled
+        lid_events = []
+        if self.config.get("enable_lid_events", True):
+            lid_bucket = self.event_fetcher.get_lid_bucket()
+            if lid_bucket:
+                lid_events = self.event_fetcher.get_events(
+                    lid_bucket, start=self.state.last_tick, end=self.end_time
+                )
+
+                # Filter out short lid cycles (except boot gaps which should always be kept)
+                min_lid_duration = self.config.get("min_lid_duration", 10.0)
+                lid_events = [
+                    e
+                    for e in lid_events
+                    if e["duration"] > timedelta(seconds=min_lid_duration)
+                    or e["data"].get("boot_gap", False)
+                ]
+
+                if lid_events:
+                    logger.info(f"Fetched {len(lid_events)} lid events (after filtering)")
+
+        # Merge lid events with AFK events
+        # Lid events take priority (system-level AFK overrides user AFK)
+        merged_afk_events = self._merge_afk_and_lid_events(afk_events, lid_events)
+
+        # Fetch window events and merge with merged AFK events
         afk_window_events = (
             self.event_fetcher.get_events(window_id, start=self.state.last_tick, end=self.end_time)
-            + afk_events
+            + merged_afk_events
         )
         afk_window_events.sort(key=lambda x: x["timestamp"])
 

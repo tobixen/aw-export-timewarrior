@@ -280,6 +280,16 @@ class EventFetcher:
         """
         return self.bucket_by_client["aw-watcher-afk"][0]
 
+    def get_lid_bucket(self) -> str | None:
+        """Get lid watcher bucket ID.
+
+        Returns:
+            Bucket ID for aw-watcher-lid, or None if not available
+        """
+        if self.has_bucket_client("aw-watcher-lid"):
+            return self.bucket_by_client["aw-watcher-lid"][0]
+        return None
+
     def has_bucket_client(self, client_type: str) -> bool:
         """Check if a bucket client type exists.
 
