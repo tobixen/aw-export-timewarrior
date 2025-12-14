@@ -224,7 +224,7 @@ class TestBucketUpdated:
 
     @patch('aw_export_timewarrior.main.time')
     @patch('aw_export_timewarrior.main.logger')
-    @patch('aw_export_timewarrior.main.AW_WARN_THRESHOLD', 300)
+    @patch.dict('os.environ', {'AW2TW_AW_WARN_THRESHOLD': '300'})
     def test_stale_bucket_triggers_warning(self, mock_logger: Mock, mock_time: Mock) -> None:
         """Test that stale buckets trigger warnings."""
         mock_time.return_value = 1000.0
@@ -302,12 +302,12 @@ class TestExporterSetKnownTickStats:
         assert len(exporter.state.stats.tags_accumulated_time) == 0
 
 
-    @patch('aw_export_timewarrior.main.STICKYNESS_FACTOR', 0.2)
-    @patch('aw_export_timewarrior.main.MIN_RECORDING_INTERVAL', 60)
     def test_set_known_tick_retains_accumulator(self, mock_aw_client: Mock) -> None:
         """Test that retain_accumulator keeps tags with sticky factor."""
 
         exporter = Exporter()
+        exporter.stickyness_factor = 0.2
+        exporter.min_recording_interval = 60
 
         tags = ['work', 'coding']
         exporter.set_known_tick_stats(
@@ -317,10 +317,10 @@ class TestExporterSetKnownTickStats:
             tags=tags
         )
 
-        # Should have retained tags with STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL
+        # Should have retained tags with stickyness_factor * min_recording_interval
         assert 'work' in exporter.state.stats.tags_accumulated_time
         assert 'coding' in exporter.state.stats.tags_accumulated_time
-        expected_duration = timedelta(seconds=0.2 * 60)  # STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL
+        expected_duration = timedelta(seconds=0.2 * 60)  # stickyness_factor * min_recording_interval
         assert exporter.state.stats.tags_accumulated_time['work'] == expected_duration
         assert exporter.state.stats.tags_accumulated_time['coding'] == expected_duration
 
@@ -329,15 +329,15 @@ class TestExporterFindTagsFromEvent:
     """Tests for find_tags_from_event method."""
 
 
-    @patch('aw_export_timewarrior.main.IGNORE_INTERVAL', 3)
     def test_short_event_returns_none(self, mock_aw_client: Mock) -> None:
-        """Test that events shorter than IGNORE_INTERVAL return None."""
+        """Test that events shorter than ignore_interval return None."""
 
         exporter = Exporter()
+        exporter.ignore_interval = 3
 
         event = {
             'timestamp': datetime.now(UTC),
-            'duration': timedelta(seconds=2),  # Less than IGNORE_INTERVAL
+            'duration': timedelta(seconds=2),  # Less than ignore_interval
             'data': {'app': 'TestApp'}
         }
 
@@ -345,11 +345,11 @@ class TestExporterFindTagsFromEvent:
         assert result is None
 
 
-    @patch('aw_export_timewarrior.main.IGNORE_INTERVAL', 3)
     def test_afk_event_returns_afk_tag(self, mock_aw_client: Mock) -> None:
         """Test that AFK events return afk tag."""
 
         exporter = Exporter()
+        exporter.ignore_interval = 3
 
         event = {
             'timestamp': datetime.now(UTC),
@@ -422,11 +422,11 @@ class TestExporterPrettyAccumulatorString:
     """Tests for pretty_accumulator_string method."""
 
 
-    @patch('aw_export_timewarrior.main.MIN_TAG_RECORDING_INTERVAL', 30)
     def test_pretty_accumulator_string_formatting(self, mock_aw_client: Mock) -> None:
         """Test accumulator string formatting."""
 
         exporter = Exporter()
+        exporter.min_tag_recording_interval = 30
 
         exporter.state.stats.tags_accumulated_time['work'] = timedelta(seconds=120)
         exporter.state.stats.tags_accumulated_time['coding'] = timedelta(seconds=60)
@@ -435,7 +435,7 @@ class TestExporterPrettyAccumulatorString:
 
         result = exporter.pretty_accumulator_string()
 
-        # Should include tags above MIN_TAG_RECORDING_INTERVAL
+        # Should include tags above min_tag_recording_interval
         assert 'work' in result
         assert 'coding' in result
         assert 'python' in result

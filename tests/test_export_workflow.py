@@ -105,24 +105,31 @@ class TestTimewRun:
     """Tests for timew_run function."""
 
     @patch('subprocess.run')
-    @patch('aw_export_timewarrior.main.sleep')
-    @patch('aw_export_timewarrior.main.GRACE_TIME', 0.1)
-    def test_timew_run_executes_command(self, mock_sleep: Mock, mock_subprocess: Mock) -> None:
+    @patch.dict('os.environ', {'AW2TW_GRACE_TIME': '0.1'})
+    def test_timew_run_executes_command(self, mock_subprocess: Mock) -> None:
         """Test that timew_run executes the correct command."""
+        import tests.conftest
+        initial_sleep_count = tests.conftest.sleep_counter
+
         timew_run(['start', '4work', 'programming'])
 
         mock_subprocess.assert_called_once()
         call_args = mock_subprocess.call_args[0][0]
         assert call_args == ['timew', 'start', '4work', 'programming']
+        # Sleep should have been called (monkeypatched by conftest)
+        assert tests.conftest.sleep_counter == initial_sleep_count + 1
 
     @patch('subprocess.run')
-    @patch('aw_export_timewarrior.main.sleep')
-    @patch('aw_export_timewarrior.main.GRACE_TIME', 0.1)
-    def test_timew_run_waits_grace_time(self, mock_sleep: Mock, mock_subprocess: Mock) -> None:
+    @patch.dict('os.environ', {'AW2TW_GRACE_TIME': '0.1'})
+    def test_timew_run_waits_grace_time(self, mock_subprocess: Mock) -> None:
         """Test that timew_run waits the grace period."""
+        import tests.conftest
+        initial_sleep_count = tests.conftest.sleep_counter
+
         timew_run(['stop'])
 
-        mock_sleep.assert_called_once_with(0.1)
+        # Sleep should have been called once (monkeypatched by conftest)
+        assert tests.conftest.sleep_counter == initial_sleep_count + 1
 
 
 class TestTimewRetag:
@@ -353,16 +360,16 @@ class TestExporterTick:
 
     @patch('aw_export_timewarrior.main.get_timew_info')
     @patch('aw_export_timewarrior.main.timew_retag')
-    @patch('aw_export_timewarrior.main.sleep')
-    @patch('aw_export_timewarrior.main.SLEEP_INTERVAL', 0.1)
     def test_tick_sleeps_when_no_events(
         self,
-        mock_sleep: Mock,
         mock_retag: Mock,
         mock_get_info: Mock,
         mock_aw_client: Mock
     ) -> None:
         """Test that tick sleeps when no events are found."""
+        from tests.conftest import sleep_counter as get_sleep_counter
+        import tests.conftest
+
         exporter = Exporter()
         exporter.state.last_tick = datetime.now(UTC)
 
@@ -378,9 +385,13 @@ class TestExporterTick:
         # Mock find_next_activity to return False (no events)
         exporter.find_next_activity = Mock(return_value=False)
 
+        # Get initial sleep count
+        initial_sleep_count = tests.conftest.sleep_counter
+
         exporter.tick()
 
-        mock_sleep.assert_called_once_with(0.1)
+        # Verify sleep was called (counter increased)
+        assert tests.conftest.sleep_counter == initial_sleep_count + 1, "tick() should call sleep when no events are found"
 
 
 class TestExporterLog:

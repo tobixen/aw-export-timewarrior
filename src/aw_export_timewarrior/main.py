@@ -175,21 +175,41 @@ def user_output(msg: str, color: str = None, attrs: list = None) -> None:
     else:
         print(msg)
 
-## Those should be moved to config.py before releasing.  Possibly renamed.
-AW_WARN_THRESHOLD=float(os.environ.get('AW2TW_AW_WARN_THRESHOLD') or 300) ## the recent data from activity watch should not be elder than this
-SLEEP_INTERVAL=float(os.environ.get('AW2TW_SLEEP_INTERVAL') or 30) ## Sleeps between each run when the program is run in real-time
-IGNORE_INTERVAL=float(os.environ.get('AW2TW_IGNORE_INTERVAL') or 3) ## ignore any window visits lasting for less than five seconds (TODO: may need tuning if terminal windows change title for every command run)
-MIN_RECORDING_INTERVAL=float(os.environ.get('AW2TW_MIN_RECORDING_INTERVAL') or 90) ## Never record an activities more frequently than once per minute.
-MIN_TAG_RECORDING_INTERVAL=float(os.environ.get('AW2TW_MIN_TAG_RECORDING_INTERVAL') or 50) ## When recording something, include every tag that has been observed for more than 50s
-STICKYNESS_FACTOR=float(os.environ.get('AW2TW_STICKYNESS_FACTOR') or 0.1) ## Don't reset everything on each "tick".
-MAX_MIXED_INTERVAL=float(os.environ.get('AW2TW_MAX_MIXED_INTERVAL') or 240) ## Any window event lasting for more than four minutes should be considered independently from what you did before and after
+def get_tuning_param(config: dict, param_name: str, env_var: str, default: float) -> float:
+    """Get a tuning parameter from config or environment variable.
 
-GRACE_TIME=float(os.environ.get('AW2TW_GRACE_TIME') or 10)
+    Priority order (highest to lowest):
+    1. Environment variable (allows temporary override)
+    2. config['tuning'][param_name] (persistent configuration)
+    3. default value
 
-SPECIAL_TAGS={'manual', 'override', 'not-afk'}
+    This allows users to temporarily override via env vars (e.g., for testing)
+    while having persistent defaults in config.
 
-MIN_RECORDING_INTERVAL_ADJ=MIN_RECORDING_INTERVAL*(1+STICKYNESS_FACTOR)
-MIN_TAG_RECORDING_INTERVAL_ADJ=MIN_TAG_RECORDING_INTERVAL*(1+STICKYNESS_FACTOR)
+    Args:
+        config: Configuration dictionary
+        param_name: Name in config['tuning'] section
+        env_var: Environment variable name (e.g., 'AW2TW_SLEEP_INTERVAL')
+        default: Default value if neither config nor env var is set
+
+    Returns:
+        The parameter value as float
+    """
+    # Environment variable takes highest priority for temporary overrides
+    env_value = os.environ.get(env_var)
+    if env_value:
+        return float(env_value)
+
+    # Then check config file
+    if 'tuning' in config and param_name in config['tuning']:
+        return float(config['tuning'][param_name])
+
+    # Fall back to default
+    return default
+
+
+# Special tags that have specific meanings
+SPECIAL_TAGS = {'manual', 'override', 'not-afk'}
 
 def ts2str(ts, format="%FT%H:%M:%S"):
     return(ts.astimezone().strftime(format))
@@ -282,6 +302,19 @@ class Exporter:
                 capture_commands=self.captured_commands,
                 hide_output=self.hide_processing_output
             )
+
+        # Initialize tuning parameters from config (with env var override support)
+        self.aw_warn_threshold = get_tuning_param(self.config, 'aw_warn_threshold', 'AW2TW_AW_WARN_THRESHOLD', 300.0)
+        self.sleep_interval = get_tuning_param(self.config, 'sleep_interval', 'AW2TW_SLEEP_INTERVAL', 30.0)
+        self.ignore_interval = get_tuning_param(self.config, 'ignore_interval', 'AW2TW_IGNORE_INTERVAL', 3.0)
+        self.min_recording_interval = get_tuning_param(self.config, 'min_recording_interval', 'AW2TW_MIN_RECORDING_INTERVAL', 90.0)
+        self.min_tag_recording_interval = get_tuning_param(self.config, 'min_tag_recording_interval', 'AW2TW_MIN_TAG_RECORDING_INTERVAL', 50.0)
+        self.stickyness_factor = get_tuning_param(self.config, 'stickyness_factor', 'AW2TW_STICKYNESS_FACTOR', 0.1)
+        self.max_mixed_interval = get_tuning_param(self.config, 'max_mixed_interval', 'AW2TW_MAX_MIXED_INTERVAL', 240.0)
+
+        # Derived values
+        self.min_recording_interval_adj = self.min_recording_interval * (1 + self.stickyness_factor)
+        self.min_tag_recording_interval_adj = self.min_tag_recording_interval * (1 + self.stickyness_factor)
 
         # Only check bucket freshness when using real ActivityWatch data
         if not self.test_data:
@@ -569,17 +602,17 @@ class Exporter:
             manual=manual,
             reset_stats=reset_accumulator,
             retain_tags=tags if (reset_accumulator and retain_accumulator) else None,
-            stickyness_factor=STICKYNESS_FACTOR if (reset_accumulator and retain_accumulator) else 0.0
+            stickyness_factor=self.stickyness_factor if (reset_accumulator and retain_accumulator) else 0.0
         )
 
         # Handle the special case where retain_accumulator adds initial time to tags
-        # This matches the old behavior: self.tags_accumulated_time[tag] = STICKYNESS_FACTOR*MIN_RECORDING_INTERVAL
+        # This matches the old behavior: self.tags_accumulated_time[tag] = self.stickyness_factor*self.min_recording_interval
         if reset_accumulator and retain_accumulator and tags:
             for tag in tags:
                 # If tag wasn't in accumulator before (so it has 0 time after reset),
-                # initialize it with STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL
+                # initialize it with self.stickyness_factor * self.min_recording_interval
                 if self.state.stats.tags_accumulated_time[tag] == timedelta(0):
-                    self.state.stats.tags_accumulated_time[tag] = timedelta(seconds=STICKYNESS_FACTOR * MIN_RECORDING_INTERVAL)
+                    self.state.stats.tags_accumulated_time[tag] = timedelta(seconds=self.stickyness_factor * self.min_recording_interval)
 
 
     ## TODO: move all dealings with statistics to explicit statistics-handling methods
@@ -602,8 +635,8 @@ class Exporter:
             ## if the time tracked is significantly less than the minimum
             ## time we're supposed to track, something is also probably
             ## wrong and should be investigated
-            if tags != { 'afk' } and not self.state.is_afk() and not self.state.manual_tracking and last_activity_run_time.total_seconds() < MIN_RECORDING_INTERVAL-3:
-                self.breakpoint(f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < MIN_RECORDING_INTERVAL-3 ({MIN_RECORDING_INTERVAL-3}s), last_start_time={self.state.last_start_time}, since={since}")
+            if tags != { 'afk' } and not self.state.is_afk() and not self.state.manual_tracking and last_activity_run_time.total_seconds() < self.min_recording_interval-3:
+                self.breakpoint(f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < self.min_recording_interval-3 ({self.min_recording_interval-3}s), last_start_time={self.state.last_start_time}, since={since}")
 
             ## If the tracked time is less than the known events time we've counted
             ## then something is a little bit wrong.
@@ -612,7 +645,7 @@ class Exporter:
 
             ## If the time tracked is way longer than the known events time we've counted
             ## then we have too much unknown activity - tag it as UNKNOWN
-            if tags != { 'afk' } and tracked_gap.total_seconds()>MAX_MIXED_INTERVAL and self.state.stats.known_events_time/tracked_gap < 0.3 and not self.state.manual_tracking:
+            if tags != { 'afk' } and tracked_gap.total_seconds()>self.max_mixed_interval and self.state.stats.known_events_time/tracked_gap < 0.3 and not self.state.manual_tracking:
                 self.log(f"Large gap ({tracked_gap.total_seconds()}s) with low known activity ({(self.state.stats.known_events_time/tracked_gap):.1%}), tagging as UNKNOWN", event=event, level=logging.WARNING)
                 tags = {'UNKNOWN', 'not-afk'}
 
@@ -663,7 +696,7 @@ class Exporter:
 
     def pretty_accumulator_string(self) -> str:
         a = self.state.stats.tags_accumulated_time
-        tags = [x for x in a if a[x].total_seconds() > MIN_TAG_RECORDING_INTERVAL]
+        tags = [x for x in a if a[x].total_seconds() > self.min_tag_recording_interval]
         tags.sort(key=lambda x: -a[x])
         return "\n".join([f"{x}: {a[x].total_seconds():5.1f}s" for x in tags])
 
@@ -830,7 +863,7 @@ class Exporter:
     ## enough to be found "ignorable" and False if no tags are found
     ## Otherwise a set of tags
     def find_tags_from_event(self, event):
-        if event['duration'].total_seconds() < IGNORE_INTERVAL:
+        if event['duration'].total_seconds() < self.ignore_interval:
             return None
 
         # Delegate to TagExtractor for all tag matching logic
@@ -937,7 +970,7 @@ class Exporter:
                  between "not-afk" events that should be treated as AFK periods.
 
         This workaround fills gaps between consecutive AFK events with synthetic
-        AFK events, assuming that any gap longer than MIN_RECORDING_INTERVAL
+        AFK events, assuming that any gap longer than self.min_recording_interval
         should be treated as an AFK period.
 
         Args:
@@ -968,7 +1001,7 @@ class Exporter:
             gap_duration = gap_end - gap_start
 
             # Only create synthetic AFK event if gap is significant
-            if gap_duration.total_seconds() >= MIN_RECORDING_INTERVAL:
+            if gap_duration.total_seconds() >= self.min_recording_interval:
                 synthetic_afk_events.append({
                     'data': {'status': 'afk'},
                     'timestamp': gap_start,
@@ -1010,7 +1043,7 @@ class Exporter:
         ## being afk even when I've been sitting constantly by the
         ## computer, working most of the time, perhaps spending a
         ## minute reading something?
-        afk_events = [ x for x in afk_events if x['duration'] > timedelta(seconds=MAX_MIXED_INTERVAL) ]
+        afk_events = [ x for x in afk_events if x['duration'] > timedelta(seconds=self.max_mixed_interval) ]
 
         ## afk and window_events
         afk_window_events = self.event_fetcher.get_events(window_id, start=self.state.last_tick, end=self.end_time) + afk_events
@@ -1061,7 +1094,7 @@ class Exporter:
             if tags is None:
                 num_skipped_events += 1
                 total_time_skipped_events += event['duration']
-                if total_time_skipped_events.total_seconds()>MIN_RECORDING_INTERVAL:
+                if total_time_skipped_events.total_seconds()>self.min_recording_interval:
                     self.breakpoint()
                 continue
 
@@ -1071,7 +1104,7 @@ class Exporter:
                 # Track unmatched event if requested
                 if self.show_unmatched:
                     self.unmatched_events.append(event)
-                if self.state.stats.unknown_events_time.total_seconds()>MAX_MIXED_INTERVAL*2:
+                if self.state.stats.unknown_events_time.total_seconds()>self.max_mixed_interval*2:
                     # Significant unknown activity - tag it as UNKNOWN
                     self.log(f"Significant unknown activity ({self.state.stats.unknown_events_time.total_seconds()}s), tagging as UNKNOWN", event=event)
                     self.ensure_tag_exported({'UNKNOWN', 'not-afk'}, event)
@@ -1083,9 +1116,9 @@ class Exporter:
             num_skipped_events = 0
             total_time_skipped_events = timedelta(0)
 
-            ## Ref README, if MAX_MIXED_INTERVAL is met, ignore accumulated minor activity
+            ## Ref README, if self.max_mixed_interval is met, ignore accumulated minor activity
             ## (the mixed time will be attributed to the previous work task)
-            if tags and event['duration'].total_seconds() > MAX_MIXED_INTERVAL:
+            if tags and event['duration'].total_seconds() > self.max_mixed_interval:
                 ## Theoretically, we may do lots of different things causing hundred of different independent tags to collect less than the minimum needed to record something.  In practice that doesn't happen.
                 #print(f"We're tossing data: {self.tags_accumulated_time}")
                 self.ensure_tag_exported(tags, event)
@@ -1106,18 +1139,18 @@ class Exporter:
             # Only update timew_info if not in dry-run mode
             if not self.dry_run:
                 self.set_timew_info(self.retag_current_interval())
-            if interval_since_last_known_tick.total_seconds() > MIN_RECORDING_INTERVAL_ADJ and any(x for x in self.state.stats.tags_accumulated_time if x not in SPECIAL_TAGS and self.state.stats.tags_accumulated_time[x].total_seconds()>MIN_RECORDING_INTERVAL_ADJ):
+            if interval_since_last_known_tick.total_seconds() > self.min_recording_interval_adj and any(x for x in self.state.stats.tags_accumulated_time if x not in SPECIAL_TAGS and self.state.stats.tags_accumulated_time[x].total_seconds()>self.min_recording_interval_adj):
                 self.log("Emptying the accumulator!")
                 tags = set()
                 ## TODO: This looks like a bug - we reset tags, and then assert that they are not overlapping?
                 assert not exclusive_overlapping(tags, self.config)
-                min_tag_recording_interval=MIN_TAG_RECORDING_INTERVAL
+                min_tag_recording_interval=self.min_tag_recording_interval
                 while exclusive_overlapping({tag for tag in self.state.stats.tags_accumulated_time if  self.state.stats.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval}, self.config):
                     min_tag_recording_interval += 1
                 for tag in self.state.stats.tags_accumulated_time:
                     if self.state.stats.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval:
                         tags.add(tag)
-                    self.state.stats.tags_accumulated_time[tag] *= STICKYNESS_FACTOR
+                    self.state.stats.tags_accumulated_time[tag] *= self.stickyness_factor
                 if self.state.manual_tracking:
                     since = event['timestamp']-self.state.stats.known_events_time+event['duration']
                 else:
@@ -1250,12 +1283,13 @@ class Exporter:
 
                 self.log("sleeping, because no events found")
                 if not self.dry_run:  # Don't sleep in dry-run mode
-                    sleep(SLEEP_INTERVAL)
+                    sleep(self.sleep_interval)
 
             return True
 
 def check_bucket_updated(bucket: dict) -> None:
-    if not bucket['last_updated_dt'] or time()-bucket['last_updated_dt'].timestamp() > AW_WARN_THRESHOLD:
+    aw_warn_threshold = float(os.environ.get('AW2TW_AW_WARN_THRESHOLD', 300))
+    if not bucket['last_updated_dt'] or time()-bucket['last_updated_dt'].timestamp() > aw_warn_threshold:
         logger.warning(f"Bucket {bucket['id']} seems not to have recent data!")
 
 ## TODO: none of this has anything to do with ActivityWatch and can be moved to a separate module
@@ -1301,8 +1335,9 @@ def timew_run(commands, dry_run=False, capture_to=None, hide_output=False):
     if not hide_output:
         user_output(f"Running: {' '.join(commands)}")
     subprocess.run(commands)
-    user_output(f"Use timew undo if you don't agree!  You have {GRACE_TIME} seconds to press ctrl^c", attrs=["bold"])
-    sleep(GRACE_TIME)
+    grace_time = float(os.environ.get('AW2TW_GRACE_TIME', 10))
+    user_output(f"Use timew undo if you don't agree!  You have {grace_time} seconds to press ctrl^c", attrs=["bold"])
+    sleep(grace_time)
 
 ## TODO: do we need this?
 def exclusive_overlapping(tags, cfg=None):

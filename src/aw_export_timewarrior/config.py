@@ -31,6 +31,38 @@ terminal_apps = [
     "terminal",
 ]
 
+# Tuning parameters - adjust these to customize behavior
+[tuning]
+# Warn if ActivityWatch data is older than this many seconds (default: 300 = 5 minutes)
+aw_warn_threshold = 300.0
+
+# Sleep interval between polls in real-time sync mode (seconds, default: 30)
+sleep_interval = 30.0
+
+# Ignore window visits shorter than this (seconds, default: 3)
+# Useful to filter out very brief window switches
+ignore_interval = 3.0
+
+# Minimum interval between recording the same activity (seconds, default: 90)
+# Prevents creating too many tiny intervals for the same ongoing activity
+min_recording_interval = 90.0
+
+# Window events longer than this are treated independently (seconds, default: 240 = 4 minutes)
+# Helps segment long activities into discrete intervals
+max_mixed_interval = 240.0
+
+# Grace period after timew commands (seconds, default: 10)
+# Time to press Ctrl+C if you disagree with a timew command
+grace_time = 10.0
+
+# Minimum interval for recording a specific tag (seconds, default: 50)
+# Tags observed for less than this duration may not be recorded
+min_tag_recording_interval = 50.0
+
+# Stickyness factor for tag retention (0.0 to 1.0, default: 0.1)
+# How much time tags should "stick" across activity changes
+stickyness_factor = 0.1
+
 [tags.housework]
 source_tags = [ "housework", "dishwash" ]
 prepend = [ "4chores", "afk" ]

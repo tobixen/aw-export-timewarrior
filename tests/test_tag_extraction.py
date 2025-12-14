@@ -501,7 +501,7 @@ class TestGetCorrespondingEvent:
 
         assert result == long_event
 
-    @patch('aw_export_timewarrior.main.IGNORE_INTERVAL', 3)
+    @patch('aw_export_timewarrior.aw_client.IGNORE_INTERVAL', 3)
     def test_corresponding_event_not_found_ignorable(self, mock_aw_client: Mock) -> None:
         """Test ignorable event returns None without warning."""
         exporter = Exporter()
@@ -510,7 +510,7 @@ class TestGetCorrespondingEvent:
 
         window_event = {
             'timestamp': datetime.now(UTC),
-            'duration': timedelta(seconds=2),  # Less than IGNORE_INTERVAL
+            'duration': timedelta(seconds=2),  # Less than IGNORE_INTERVAL (in aw_client)
             'data': {'app': 'emacs', 'title': '*scratch*'}
         }
 
