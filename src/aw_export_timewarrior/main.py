@@ -6,6 +6,7 @@ import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from enum import Enum, auto
 from time import sleep, time
 
 from termcolor import cprint
@@ -18,6 +19,33 @@ from .timew_tracker import TimewTracker
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
+
+
+class EventMatchResult(Enum):
+    """Result of matching an event to tags."""
+
+    IGNORED = auto()  # Event too short to process
+    NO_MATCH = auto()  # Event processed but no tags found
+    MATCHED = auto()  # Tags found
+
+
+@dataclass
+class TagResult:
+    """Result of tag extraction from an event.
+
+    Attributes:
+        result: The match result (IGNORED, NO_MATCH, or MATCHED)
+        tags: Set of extracted tags (empty if no match)
+        reason: Optional explanation (useful for debugging/logging)
+    """
+
+    result: EventMatchResult
+    tags: set[str] = field(default_factory=set)
+    reason: str = ""
+
+    def __bool__(self) -> bool:
+        """Allow boolean checks: if tag_result: ..."""
+        return self.result == EventMatchResult.MATCHED
 
 
 class StructuredFormatter(logging.Formatter):
@@ -932,12 +960,19 @@ class Exporter:
 
         return False
 
-    ## TODO: this is a bit messy - this will return None if the event is small
-    ## enough to be found "ignorable" and False if no tags are found
-    ## Otherwise a set of tags
-    def find_tags_from_event(self, event):
+    def find_tags_from_event(self, event) -> TagResult:
+        """Extract tags from an event.
+
+        Returns:
+            TagResult with:
+            - IGNORED if event too short
+            - NO_MATCH if event processed but no tags found
+            - MATCHED if tags were extracted
+        """
         if event["duration"].total_seconds() < self.ignore_interval:
-            return None
+            return TagResult(
+                result=EventMatchResult.IGNORED, reason="Event duration below ignore_interval"
+            )
 
         # Delegate to TagExtractor for all tag matching logic
         for method in (
@@ -949,7 +984,15 @@ class Exporter:
             tags = method(event)
             if tags is not False:
                 break
-        return tags
+
+        if tags is False:
+            return TagResult(result=EventMatchResult.NO_MATCH, reason="No tag rules matched")
+
+        # Ensure tags is a set (convert if needed for robustness)
+        if not isinstance(tags, set):
+            tags = set(tags) if tags else set()
+
+        return TagResult(result=EventMatchResult.MATCHED, tags=tags)
 
     def _process_current_event_incrementally(self, event):
         """
@@ -985,15 +1028,17 @@ class Exporter:
             incremental_event["timestamp"] = event_start + already_processed
 
             # Process the incremental part
-            tags = self.find_tags_from_event(incremental_event)
+            tag_result = self.find_tags_from_event(incremental_event)
 
-            if tags and not self.check_and_handle_afk_state_change(tags, incremental_event):
+            if tag_result and not self.check_and_handle_afk_state_change(
+                tag_result.tags, incremental_event
+            ):
                 # Add to known events time (only for non-AFK events to avoid double-counting)
                 if "status" not in incremental_event["data"]:
                     self.state.stats.known_events_time += new_duration
 
                 # Apply retagging rules
-                tags = retag_by_rules(tags, self.config)
+                tags = retag_by_rules(tag_result.tags, self.config)
 
                 # Accumulate tags from the incremental duration
                 for tag in tags:
@@ -1018,15 +1063,15 @@ class Exporter:
             self.state.current_event_processed_duration = timedelta(0)
 
             # Process the entire current event (first time seeing it)
-            tags = self.find_tags_from_event(event)
+            tag_result = self.find_tags_from_event(event)
 
-            if tags and not self.check_and_handle_afk_state_change(tags, event):
+            if tag_result and not self.check_and_handle_afk_state_change(tag_result.tags, event):
                 # Add to known events time (only for non-AFK events to avoid double-counting)
                 if "status" not in event["data"]:
                     self.state.stats.known_events_time += current_duration
 
                 # Apply retagging rules
-                tags = retag_by_rules(tags, self.config)
+                tags = retag_by_rules(tag_result.tags, self.config)
 
                 for tag in tags:
                     self.state.stats.tags_accumulated_time[tag] += current_duration
@@ -1154,10 +1199,10 @@ class Exporter:
                     ## Do we need an exception here for afk events?
                     self.log(f"skipping event as the timestamp is too old - {event}", event=event)
                     continue
-            tags = self.find_tags_from_event(event)
+            tag_result = self.find_tags_from_event(event)
 
             ## Handling afk/not-afk
-            if self.check_and_handle_afk_state_change(tags, event):
+            if self.check_and_handle_afk_state_change(tag_result.tags, event):
                 ## TODO:
                 ## Doh!  Some of the point of moving things to a separate
                 ## function is to avoid the below logic here
@@ -1172,20 +1217,18 @@ class Exporter:
 
             # Only count duration for non-AFK events to avoid double-counting
             # (AFK events overlap with window/browser/editor events)
-            if tags and "status" not in event["data"]:
+            if tag_result and "status" not in event["data"]:
                 self.state.stats.known_events_time += event["duration"]
 
-            ## tags can be False or None and those means different things.
-            ## TODO: Bad design
-            ## TODO: duplicated code
-            if tags is None:
+            # Handle different tag extraction results
+            if tag_result.result == EventMatchResult.IGNORED:
                 num_skipped_events += 1
                 total_time_skipped_events += event["duration"]
                 if total_time_skipped_events.total_seconds() > self.min_recording_interval:
                     self.breakpoint()
                 continue
 
-            if tags is False:
+            if tag_result.result == EventMatchResult.NO_MATCH:
                 num_unknown_events += 1
                 self.state.stats.unknown_events_time += event["duration"]
                 # Track unmatched event if requested
@@ -1208,18 +1251,19 @@ class Exporter:
                         event=event,
                     )
             else:
+                # EventMatchResult.MATCHED
                 self.log(
-                    f"{event['data']} - tags found: {tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)"
+                    f"{event['data']} - tags found: {tag_result.tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)"
                 )
             num_skipped_events = 0
             total_time_skipped_events = timedelta(0)
 
             ## Ref README, if self.max_mixed_interval is met, ignore accumulated minor activity
             ## (the mixed time will be attributed to the previous work task)
-            if tags and event["duration"].total_seconds() > self.max_mixed_interval:
+            if tag_result and event["duration"].total_seconds() > self.max_mixed_interval:
                 ## Theoretically, we may do lots of different things causing hundred of different independent tags to collect less than the minimum needed to record something.  In practice that doesn't happen.
                 # print(f"We're tossing data: {self.tags_accumulated_time}")
-                self.ensure_tag_exported(tags, event)
+                self.ensure_tag_exported(tag_result.tags, event)
 
             interval_since_last_known_tick = (
                 event["timestamp"] + event["duration"] - self.state.last_known_tick
@@ -1230,8 +1274,8 @@ class Exporter:
             assert interval_since_last_known_tick >= timedelta(0)
 
             ## Track things in internal accumulator if the focus between windows changes often
-            if tags:
-                tags = retag_by_rules(tags, self.config)
+            if tag_result:
+                tags = retag_by_rules(tag_result.tags, self.config)
                 for tag in tags:
                     self.state.stats.tags_accumulated_time[tag] += event["duration"]
 

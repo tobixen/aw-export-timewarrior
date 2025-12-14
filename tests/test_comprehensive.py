@@ -6,7 +6,9 @@ from unittest.mock import Mock, patch
 import pytest
 
 from aw_export_timewarrior.main import (
+    EventMatchResult,
     Exporter,
+    TagResult,
     check_bucket_updated,
     exclusive_overlapping,
     retag_by_rules,
@@ -317,8 +319,8 @@ class TestExporterSetKnownTickStats:
 class TestExporterFindTagsFromEvent:
     """Tests for find_tags_from_event method."""
 
-    def test_short_event_returns_none(self, mock_aw_client: Mock) -> None:
-        """Test that events shorter than ignore_interval return None."""
+    def test_short_event_returns_ignored(self, mock_aw_client: Mock) -> None:
+        """Test that events shorter than ignore_interval return IGNORED result."""
 
         exporter = Exporter()
         exporter.ignore_interval = 3
@@ -330,10 +332,13 @@ class TestExporterFindTagsFromEvent:
         }
 
         result = exporter.find_tags_from_event(event)
-        assert result is None
+        assert isinstance(result, TagResult)
+        assert result.result == EventMatchResult.IGNORED
+        assert result.tags == set()
+        assert not result  # Should be falsy
 
     def test_afk_event_returns_afk_tag(self, mock_aw_client: Mock) -> None:
-        """Test that AFK events return afk tag."""
+        """Test that AFK events return MATCHED result with afk tag."""
 
         exporter = Exporter()
         exporter.ignore_interval = 3
@@ -345,7 +350,10 @@ class TestExporterFindTagsFromEvent:
         }
 
         result = exporter.find_tags_from_event(event)
-        assert result == {"afk"}
+        assert isinstance(result, TagResult)
+        assert result.result == EventMatchResult.MATCHED
+        assert result.tags == {"afk"}
+        assert result  # Should be truthy
 
 
 class TestExporterCheckAndHandleAfkStateChange:
