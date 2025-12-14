@@ -136,7 +136,7 @@ def test_browser_scope_bug_multiple_rules(mock_aw_client: Mock) -> None:
         }
     }
 
-    tags = exporter.get_browser_tags(window_event)
+    tags = exporter.tag_extractor.get_browser_tags(window_event)
 
     # With the bug: tags will be [] because regexp_matching gets the wrong rule
     # With the fix: tags will contain the github tags
@@ -197,7 +197,7 @@ def test_editor_scope_bug_projects_then_regexp(mock_aw_client: Mock) -> None:
         }
     }
 
-    tags = exporter.get_editor_tags(window_event)
+    tags = exporter.tag_extractor.get_editor_tags(window_event)
 
     # With the bug: tags will be [] because regexp_matching gets work_projects rule
     # (which doesn't have path_regexp)

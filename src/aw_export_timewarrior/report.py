@@ -64,7 +64,7 @@ def extract_specialized_data(exporter: Exporter, window_event: dict) -> dict[str
                 bucket_id = exporter.bucket_short[bucket_key]['id']
                 ignorable = exporter._is_ignorable_event(app, window_event)
                 # Use the public get_corresponding_event() method
-                sub_event = exporter.get_corresponding_event(window_event, bucket_id, ignorable=ignorable)
+                sub_event = exporter.event_fetcher.get_corresponding_event(window_event, bucket_id, ignorable=ignorable)
 
                 if sub_event:
                     file_path = sub_event['data'].get('file', '')
@@ -87,7 +87,7 @@ def extract_specialized_data(exporter: Exporter, window_event: dict) -> dict[str
             if bucket_key in exporter.bucket_short:
                 bucket_id = exporter.bucket_short[bucket_key]['id']
                 # Use the public get_corresponding_event() method
-                sub_event = exporter.get_corresponding_event(window_event, bucket_id)
+                sub_event = exporter.event_fetcher.get_corresponding_event(window_event, bucket_id)
 
                 if sub_event:
                     url = sub_event['data'].get('url', '')
@@ -122,8 +122,8 @@ def collect_report_data(
     afk_id = exporter.bucket_by_client['aw-watcher-afk'][0]
 
     # Fetch window events
-    window_events = exporter.get_events(window_id, start=start_time, end=end_time)
-    afk_events = exporter.get_events(afk_id, start=start_time, end=end_time)
+    window_events = exporter.event_fetcher.get_events(window_id, start=start_time, end=end_time)
+    afk_events = exporter.event_fetcher.get_events(afk_id, start=start_time, end=end_time)
 
     # Create AFK status lookup
     afk_status_map = {}
@@ -151,10 +151,10 @@ def collect_report_data(
         # Extract specialized data
         specialized = extract_specialized_data(exporter, window_event)
 
-        # Determine tags using exporter's logic
+        # Determine tags using exporter's tag_extractor logic
         tags = set()
-        for method in (exporter.get_afk_tags, exporter.get_app_tags,
-                      exporter.get_browser_tags, exporter.get_editor_tags):
+        for method in (exporter.tag_extractor.get_afk_tags, exporter.tag_extractor.get_app_tags,
+                      exporter.tag_extractor.get_browser_tags, exporter.tag_extractor.get_editor_tags):
             try:
                 result_tags = method(window_event)
                 if result_tags and result_tags is not False:

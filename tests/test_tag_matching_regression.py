@@ -120,7 +120,7 @@ class TestRegexpMatchingBugRegression:
             }
         }
 
-        tags = exporter.get_browser_tags(window_event)
+        tags = exporter.tag_extractor.get_browser_tags(window_event)
 
         # If the bug existed, this would fail because `rule` would be
         # from the wrong iteration (gitlab rule instead of github rule)
@@ -178,7 +178,7 @@ class TestRegexpMatchingBugRegression:
             }
         }
 
-        tags = exporter.get_editor_tags(window_event)
+        tags = exporter.tag_extractor.get_editor_tags(window_event)
 
         # Verify it matched the second rule correctly
         assert '4me' in tags
@@ -226,7 +226,7 @@ class TestRegexpMatchingBugRegression:
             }
         }
 
-        tags = exporter.get_browser_tags(window_event)
+        tags = exporter.tag_extractor.get_browser_tags(window_event)
 
         # Both $1 and $2 should be substituted
         assert '4work' in tags
@@ -297,7 +297,7 @@ class TestBuildTagsEdgeCases:
             }
         }
 
-        tags = exporter.get_app_tags(event)
+        tags = exporter.tag_extractor.get_app_tags(event)
 
         assert '4me' in tags
         assert 'communication' in tags

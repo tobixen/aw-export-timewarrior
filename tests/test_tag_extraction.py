@@ -116,7 +116,7 @@ class TestBrowserTagExtraction:
             }
         }
 
-        tags = exporter.get_browser_tags(window_event)
+        tags = exporter.tag_extractor.get_browser_tags(window_event)
 
         assert '4work' in tags
         assert 'github' in tags
@@ -152,7 +152,7 @@ class TestBrowserTagExtraction:
             }
         }
 
-        tags = exporter.get_browser_tags(window_event)
+        tags = exporter.tag_extractor.get_browser_tags(window_event)
 
         assert tags == []
 
@@ -169,7 +169,7 @@ class TestBrowserTagExtraction:
             }
         }
 
-        tags = exporter.get_browser_tags(window_event)
+        tags = exporter.tag_extractor.get_browser_tags(window_event)
 
         assert tags is False
 
@@ -204,7 +204,7 @@ class TestBrowserTagExtraction:
             }
         }
 
-        tags = exporter.get_browser_tags(window_event)
+        tags = exporter.tag_extractor.get_browser_tags(window_event)
 
         assert tags == []
 
@@ -249,7 +249,7 @@ class TestEditorTagExtraction:
             }
         }
 
-        tags = exporter.get_editor_tags(window_event)
+        tags = exporter.tag_extractor.get_editor_tags(window_event)
 
         assert '4work' in tags
         assert 'caldav' in tags
@@ -293,7 +293,7 @@ class TestEditorTagExtraction:
             }
         }
 
-        tags = exporter.get_editor_tags(window_event)
+        tags = exporter.tag_extractor.get_editor_tags(window_event)
 
         assert '4me' in tags
         assert 'config' in tags
@@ -313,7 +313,7 @@ class TestEditorTagExtraction:
             }
         }
 
-        tags = exporter.get_editor_tags(window_event)
+        tags = exporter.tag_extractor.get_editor_tags(window_event)
 
         assert tags is False
 
@@ -346,7 +346,7 @@ class TestAppTagExtraction:
             }
         }
 
-        tags = exporter.get_app_tags(event)
+        tags = exporter.tag_extractor.get_app_tags(event)
 
         assert '4me' in tags
         assert 'communication' in tags
@@ -379,7 +379,7 @@ class TestAppTagExtraction:
             }
         }
 
-        tags = exporter.get_app_tags(event)
+        tags = exporter.tag_extractor.get_app_tags(event)
 
         assert '4work' in tags
         assert 'ssh' in tags
@@ -412,7 +412,7 @@ class TestAppTagExtraction:
             }
         }
 
-        tags = exporter.get_app_tags(event)
+        tags = exporter.tag_extractor.get_app_tags(event)
 
         # Should return False because title doesn't match regexp
         assert tags is False
@@ -437,7 +437,7 @@ class TestAppTagExtraction:
             }
         }
 
-        tags = exporter.get_app_tags(event)
+        tags = exporter.tag_extractor.get_app_tags(event)
 
         assert tags is False
 
@@ -463,7 +463,7 @@ class TestGetCorrespondingEvent:
             'data': {'app': 'chrome', 'title': 'Example'}
         }
 
-        result = exporter.get_corresponding_event(
+        result = exporter.event_fetcher.get_corresponding_event(
             window_event,
             'aw-watcher-web-chrome_test'
         )
@@ -494,7 +494,7 @@ class TestGetCorrespondingEvent:
             'data': {'app': 'chrome', 'title': 'Example'}
         }
 
-        result = exporter.get_corresponding_event(
+        result = exporter.event_fetcher.get_corresponding_event(
             window_event,
             'aw-watcher-web-chrome_test'
         )
@@ -514,7 +514,7 @@ class TestGetCorrespondingEvent:
             'data': {'app': 'emacs', 'title': '*scratch*'}
         }
 
-        result = exporter.get_corresponding_event(
+        result = exporter.event_fetcher.get_corresponding_event(
             window_event,
             'aw-watcher-emacs_test',
             ignorable=True
@@ -536,7 +536,7 @@ class TestGetAfkTags:
             'data': {'status': 'afk'}
         }
 
-        tags = exporter.get_afk_tags(event)
+        tags = exporter.tag_extractor.get_afk_tags(event)
 
         assert tags == {'afk'}
 
@@ -550,7 +550,7 @@ class TestGetAfkTags:
             'data': {'status': 'not-afk'}
         }
 
-        tags = exporter.get_afk_tags(event)
+        tags = exporter.tag_extractor.get_afk_tags(event)
 
         assert tags == {'not-afk'}
 
@@ -564,7 +564,7 @@ class TestGetAfkTags:
             'data': {'app': 'chrome', 'title': 'Example'}
         }
 
-        tags = exporter.get_afk_tags(event)
+        tags = exporter.tag_extractor.get_afk_tags(event)
 
         assert tags is False
 

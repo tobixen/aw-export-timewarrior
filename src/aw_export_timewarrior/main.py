@@ -268,13 +268,20 @@ class Exporter:
         )
 
         # Initialize TimeTracker for time tracking backend
-        # Use TimewTracker even in dry-run mode to capture commands for testing
-        # TimewTracker will use grace_time=0 to avoid sleeping in tests
-        self.tracker = TimewTracker(
-            grace_time=0 if self.dry_run else None,
-            capture_commands=self.captured_commands,
-            hide_output=self.hide_processing_output
-        )
+        # Use DryRunTracker in dry-run mode to prevent actual command execution
+        # DryRunTracker will still capture commands for testing
+        if self.dry_run:
+            from .time_tracker import DryRunTracker
+            self.tracker = DryRunTracker(
+                capture_commands=self.captured_commands,
+                hide_output=self.hide_processing_output
+            )
+        else:
+            self.tracker = TimewTracker(
+                grace_time=None,
+                capture_commands=self.captured_commands,
+                hide_output=self.hide_processing_output
+            )
 
         # Only check bucket freshness when using real ActivityWatch data
         if not self.test_data:
@@ -525,13 +532,6 @@ class Exporter:
 
         print("\n" + "=" * 80 + "\n")
 
-    def get_events(self, bucket_id, start=None, end=None):
-        """Get events from ActivityWatch or test data.
-
-        Delegates to EventFetcher for all event retrieval.
-        """
-        return self.event_fetcher.get_events(bucket_id, start=start, end=end)
-
     def set_known_tick_stats(self, event=None, start=None, end=None, manual=False, tags=None, reset_accumulator=False, retain_accumulator=True):
         """
         Set statistics after exporting tags.
@@ -702,53 +702,6 @@ class Exporter:
         # Log with appropriate level
         logger.log(level, msg, extra=extra)
 
-    def get_editor_tags(self, window_event):
-        """Get tags for editor events.
-
-        Delegates to TagExtractor.
-        """
-        return self.tag_extractor.get_editor_tags(window_event)
-
-    def get_browser_tags(self, window_event):
-        """Get tags for browser events.
-
-        Delegates to TagExtractor.
-        """
-        return self.tag_extractor.get_browser_tags(window_event)
-
-    ## TODO - remove hard coded constants!
-    def get_corresponding_event(self, window_event, event_type_id, ignorable=False, retry=6):
-        """Find corresponding sub-event (browser URL, editor file).
-
-        Delegates to EventFetcher for specialized event matching.
-        """
-        return self.event_fetcher.get_corresponding_event(
-            window_event,
-            event_type_id,
-            ignorable=ignorable,
-            retry=retry
-        )
-
-    def get_app_tags(self, event):
-        """Get tags for app events (doesn't need sub-events).
-
-        Delegates to TagExtractor.
-
-        Args:
-            event: The window event
-
-        Returns:
-            Set of tags, or False if no rules matched
-        """
-        return self.tag_extractor.get_app_tags(event)
-
-    def get_afk_tags(self, event):
-        """Get AFK status tags.
-
-        Delegates to TagExtractor.
-        """
-        return self.tag_extractor.get_afk_tags(event)
-
     def retag_current_interval(self) -> dict | None:
         """Get current tracking and apply retag rules if needed.
 
@@ -880,7 +833,13 @@ class Exporter:
         if event['duration'].total_seconds() < IGNORE_INTERVAL:
             return None
 
-        for method in (self.get_afk_tags, self.get_app_tags, self.get_browser_tags, self.get_editor_tags):
+        # Delegate to TagExtractor for all tag matching logic
+        for method in (
+            self.tag_extractor.get_afk_tags,
+            self.tag_extractor.get_app_tags,
+            self.tag_extractor.get_browser_tags,
+            self.tag_extractor.get_editor_tags
+        ):
             tags = method(event)
             if tags is not False:
                 break
@@ -1041,7 +1000,7 @@ class Exporter:
         ## just to make sure we won't lose any events
         #self.state.last_tick = self.state.last_tick - timedelta(1)
 
-        afk_events = self.get_events(afk_id, start=self.state.last_tick, end=self.end_time)
+        afk_events = self.event_fetcher.get_events(afk_id, start=self.state.last_tick, end=self.end_time)
 
         # Apply workaround if enabled in config
         if self.config.get('enable_afk_gap_workaround', True):
@@ -1054,7 +1013,7 @@ class Exporter:
         afk_events = [ x for x in afk_events if x['duration'] > timedelta(seconds=MAX_MIXED_INTERVAL) ]
 
         ## afk and window_events
-        afk_window_events = self.get_events(window_id, start=self.state.last_tick, end=self.end_time) + afk_events
+        afk_window_events = self.event_fetcher.get_events(window_id, start=self.state.last_tick, end=self.end_time) + afk_events
         afk_window_events.sort(key=lambda x: x['timestamp'])
         if len(afk_window_events) == 0:
             return False

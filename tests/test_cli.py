@@ -495,5 +495,85 @@ class TestEndToEndCLI:
         assert result == 1  # Error exit code
 
 
+class TestDiffModeReadOnly:
+    """Test that diff mode is read-only and doesn't execute timew commands."""
+
+    def test_diff_without_apply_doesnt_execute_commands(self) -> None:
+        """Test that diff mode without --apply doesn't execute timew start commands."""
+        from aw_export_timewarrior.cli import create_exporter_from_args
+
+        # Use real test data
+        test_data_path = Path(__file__).parent / 'fixtures' / 'sample_15min.json'
+        config_path = Path(__file__).parent / 'fixtures' / 'test_config.toml'
+
+        args = argparse.Namespace(
+            day=None,
+            start='2025-01-01T00:00:00',
+            end='2025-01-01T01:00:00',
+            test_data=test_data_path,
+            apply=False,  # No --apply flag
+            show_commands=False,
+            timeline=False,
+            hide_report=False,
+            config=config_path,
+            verbose=False,
+            enable_pdb=False,
+            enable_assert=True
+        )
+
+        # Create exporter with diff mode settings
+        exporter = create_exporter_from_args(args, 'diff',
+            dry_run=not args.apply,  # Should be True
+            show_diff=True,
+            show_fix_commands=False
+        )
+
+        # Verify dry_run is True
+        assert exporter.dry_run is True, "diff mode without --apply should have dry_run=True"
+
+        # Process all events
+        exporter.tick(process_all=True)
+
+        # Get captured commands
+        commands = exporter.get_captured_commands()
+
+        # Check that NO timew start commands were captured
+        start_commands = [cmd for cmd in commands if 'start' in cmd]
+
+        assert len(start_commands) == 0, f"diff mode should not execute 'timew start' commands, but got: {start_commands}"
+
+    def test_diff_with_apply_allows_execution(self) -> None:
+        """Test that diff mode with --apply allows command execution."""
+        from aw_export_timewarrior.cli import create_exporter_from_args
+
+        test_data_path = Path(__file__).parent / 'fixtures' / 'sample_15min.json'
+        config_path = Path(__file__).parent / 'fixtures' / 'test_config.toml'
+
+        args = argparse.Namespace(
+            day=None,
+            start='2025-01-01T00:00:00',
+            end='2025-01-01T01:00:00',
+            test_data=test_data_path,
+            apply=True,  # --apply flag set
+            show_commands=True,
+            timeline=False,
+            hide_report=False,
+            config=config_path,
+            verbose=False,
+            enable_pdb=False,
+            enable_assert=True
+        )
+
+        # Create exporter with diff mode settings
+        exporter = create_exporter_from_args(args, 'diff',
+            dry_run=not args.apply,  # Should be False
+            show_diff=True,
+            show_fix_commands=True
+        )
+
+        # Verify dry_run is False
+        assert exporter.dry_run is False, "diff mode with --apply should have dry_run=False"
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
