@@ -308,9 +308,9 @@ class Exporter:
     test_data: dict = None  # Optional test data instead of querying AW
     start_time: datetime = None  # Optional start time for processing window
     end_time: datetime = None  # Optional end time for processing window
-    captured_commands: list = field(
-        default_factory=list
-    )  # Captures timew commands in dry-run mode for testing
+    captured_commands: list | None = (
+        None  # Captures timew commands when set to a list (for testing)
+    )
     unmatched_events: list = field(
         default_factory=list
     )  # Tracks events that didn't match any rules
@@ -349,10 +349,16 @@ class Exporter:
         if self.dry_run:
             from .time_tracker import DryRunTracker
 
+            # Initialize captured_commands list for dry-run mode if not already set
+            if self.captured_commands is None:
+                self.captured_commands = []
+
             self.tracker = DryRunTracker(
                 capture_commands=self.captured_commands, hide_output=self.hide_processing_output
             )
         else:
+            # Pass captured_commands (None in normal operation, list in tests)
+            # When None, timew output goes to terminal; when list, output is captured
             self.tracker = TimewTracker(
                 grace_time=None,
                 capture_commands=self.captured_commands,
@@ -415,18 +421,19 @@ class Exporter:
         # Reinitialize with test data
         self.__post_init__()
 
-    def get_captured_commands(self):
+    def get_captured_commands(self) -> list:
         """
         Get the list of captured timew commands.
 
         Returns:
             List of command lists, e.g. [['timew', 'start', 'tag1', 'tag2', '2025-01-01T10:00:00'], ...]
         """
-        return self.captured_commands
+        return self.captured_commands if self.captured_commands is not None else []
 
-    def clear_captured_commands(self):
+    def clear_captured_commands(self) -> None:
         """Clear the captured commands list."""
-        self.captured_commands.clear()
+        if self.captured_commands is not None:
+            self.captured_commands.clear()
 
     def get_suggested_intervals(self):
         """
@@ -436,6 +443,9 @@ class Exporter:
             List of SuggestedInterval objects
         """
         from .compare import SuggestedInterval
+
+        if self.captured_commands is None:
+            return []
 
         intervals = []
         current_start = None

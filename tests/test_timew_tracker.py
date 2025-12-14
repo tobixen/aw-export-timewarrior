@@ -333,6 +333,43 @@ class TestRunTimew:
             mock_sleep.assert_called_once_with(0.01)
 
 
+class TestOutputVisibility:
+    """Test that timew output is visible in normal mode."""
+
+    def test_output_not_captured_when_capture_commands_is_none(self) -> None:
+        """Test that timew output goes to terminal when capture_commands is None."""
+        tracker = TimewTracker(grace_time=0, capture_commands=None, hide_output=True)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            tracker._run_timew(["test"])
+
+            # Verify subprocess.run was called with capture_output=False
+            mock_run.assert_called_once()
+            call_kwargs = mock_run.call_args[1]
+            assert (
+                call_kwargs["capture_output"] is False
+            ), "Output should not be captured in normal mode (capture_commands=None)"
+
+    def test_output_captured_when_capture_commands_is_list(self) -> None:
+        """Test that timew output is captured when capture_commands is a list."""
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+            tracker._run_timew(["test", "arg"])
+
+            # Verify subprocess.run was called with capture_output=True
+            mock_run.assert_called_once()
+            call_kwargs = mock_run.call_args[1]
+            assert (
+                call_kwargs["capture_output"] is True
+            ), "Output should be captured when capture_commands is a list (test mode)"
+            # Verify command was captured
+            assert captured == [["timew", "test", "arg"]]
+
+
 class TestTimewTrackerInterface:
     """Test that TimewTracker properly implements TimeTracker interface."""
 
