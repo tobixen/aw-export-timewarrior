@@ -12,8 +12,9 @@ from dataclasses import fields
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .export import load_test_data, parse_datetime
+from .export import load_test_data
 from .main import Exporter, load_config, setup_logging
+from .utils import parse_datetime
 
 
 def create_exporter_from_args(

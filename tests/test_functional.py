@@ -36,8 +36,9 @@ class TestSyncWithRealDataHS:
         # Load sample data
         from pathlib import Path
 
-        from aw_export_timewarrior.export import load_test_data, parse_datetime
+        from aw_export_timewarrior.export import load_test_data
         from aw_export_timewarrior.main import Exporter
+        from aw_export_timewarrior.utils import parse_datetime
 
         sample_file = Path(__file__).parent / 'fixtures' / 'sample_15min.json'
         config_file = Path(__file__).parent / 'fixtures' / 'test_config.toml'
