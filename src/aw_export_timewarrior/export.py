@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import aw_client
-from dateutil import parser as date_parser
+import dateparser
 
 
 def parse_datetime(dt_string: str) -> datetime:
@@ -20,25 +20,26 @@ def parse_datetime(dt_string: str) -> datetime:
 
     Supports:
     - ISO format: "2025-01-01T09:00:00Z"
-    - Natural language: "2 hours ago", "yesterday"
+    - Relative dates: "yesterday", "today", "tomorrow", "2 hours ago"
     - Simple format: "2025-01-01 09:00" (interpreted as local time)
 
     Args:
         dt_string: DateTime string to parse
 
     Returns:
-        Timezone-aware datetime object (UTC)
+        Timezone-aware datetime object (local timezone)
     """
-    # Try parsing with dateutil (handles many formats)
-    dt = date_parser.parse(dt_string)
+    # Use dateparser which handles many formats including relative dates
+    dt = dateparser.parse(
+        dt_string,
+        settings={
+            'RETURN_AS_TIMEZONE_AWARE': True,
+            'TIMEZONE': 'local',
+        }
+    )
 
-    # Ensure timezone aware
-    if dt.tzinfo is None:
-        # Treat naive datetime as local time, then convert to UTC
-        dt = dt.astimezone(UTC)
-    elif dt.tzinfo != UTC:
-        # Convert to UTC if it's in a different timezone
-        dt = dt.astimezone(UTC)
+    if dt is None:
+        raise ValueError(f"Unable to parse datetime string: {dt_string}")
 
     return dt
 

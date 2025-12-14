@@ -9,7 +9,8 @@ readme = "README.md"
 requires-python = ">=3.13<4.0"
 dependencies = [
     "termcolor (>=3.1.0,<4.0.0)",
-    "aw-client"
+    "aw-client",
+    "dateparser>=1.0.0"
 ]
 
 [tool.poetry]

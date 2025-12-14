@@ -526,7 +526,10 @@ def _handle_start_stop_testdata_from_args(args, exporter_args, method):
 
     if args.day:
         start = parse_datetime(args.day)
-        end = start + timedelta(day=1)
+        # Normalize to start of day (midnight) in local timezone
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        # End is start of next day
+        end = start + timedelta(days=1)
 
     if args.start:
         start = parse_datetime(args.start)
