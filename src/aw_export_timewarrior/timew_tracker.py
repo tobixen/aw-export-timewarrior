@@ -68,9 +68,11 @@ class TimewTracker(TimeTracker):
             from .main import user_output
             user_output(f"Running: {' '.join(cmd)}")
 
+        # Only capture output in test mode (when capture_commands is set)
+        # In normal mode, let timew output go to terminal
         result = subprocess.run(
             cmd,
-            capture_output=True,
+            capture_output=self.capture_commands is not None,
             text=True,
             check=False
         )

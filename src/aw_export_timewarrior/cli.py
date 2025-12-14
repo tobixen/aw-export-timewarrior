@@ -597,6 +597,7 @@ def run_diff(args: argparse.Namespace) -> int:
 
     # Create exporter in dry-run mode (diff doesn't modify unless --apply)
     exporter = create_exporter_from_args(args, 'diff',
+        dry_run=not args.apply,  # Only modify timew if --apply is set
         show_diff=True,
         show_fix_commands=args.show_commands or args.apply,
     )
