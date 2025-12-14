@@ -37,11 +37,7 @@ class TimeTracker(ABC):
         pass
 
     @abstractmethod
-    def start_tracking(
-        self,
-        tags: set[str],
-        start_time: datetime
-    ) -> None:
+    def start_tracking(self, tags: set[str], start_time: datetime) -> None:
         """Start tracking with tags.
 
         Args:
@@ -65,11 +61,7 @@ class TimeTracker(ABC):
         pass
 
     @abstractmethod
-    def get_intervals(
-        self,
-        start: datetime,
-        end: datetime
-    ) -> list[dict[str, Any]]:
+    def get_intervals(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
         """Get tracked intervals in time range.
 
         Args:
@@ -82,12 +74,7 @@ class TimeTracker(ABC):
         pass
 
     @abstractmethod
-    def track_interval(
-        self,
-        start: datetime,
-        end: datetime,
-        tags: set[str]
-    ) -> None:
+    def track_interval(self, start: datetime, end: datetime, tags: set[str]) -> None:
         """Record a past interval (for diff/fix mode).
 
         Args:
@@ -132,17 +119,15 @@ class DryRunTracker(TimeTracker):
             tags: Tags to track
             start_time: When to start tracking from
         """
-        self.current_tracking = {
-            'id': len(self.intervals) + 1,
-            'start': start_time,
-            'tags': tags
-        }
+        self.current_tracking = {"id": len(self.intervals) + 1, "start": start_time, "tags": tags}
 
         # Capture command in same format as TimewTracker
         if self.capture_commands is not None:
-            cmd = ['timew', 'start'] + sorted(tags) + [
-                start_time.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
-            ]
+            cmd = (
+                ["timew", "start"]
+                + sorted(tags)
+                + [start_time.astimezone().strftime("%Y-%m-%dT%H:%M:%S")]
+            )
             self.capture_commands.append(cmd)
 
         if not self.hide_output:
@@ -152,7 +137,7 @@ class DryRunTracker(TimeTracker):
         """Stop simulated tracking."""
         if self.current_tracking:
             if self.capture_commands is not None:
-                self.capture_commands.append(['timew', 'stop'])
+                self.capture_commands.append(["timew", "stop"])
 
             if not self.hide_output:
                 print(f"DRY RUN: Would stop tracking {self.current_tracking['tags']}")
@@ -166,11 +151,11 @@ class DryRunTracker(TimeTracker):
         """
         if self.current_tracking:
             if self.capture_commands is not None:
-                self.capture_commands.append(['timew', 'tag', '@1'] + sorted(tags))
+                self.capture_commands.append(["timew", "tag", "@1"] + sorted(tags))
 
             if not self.hide_output:
                 print(f"DRY RUN: Would retag to {tags}")
-            self.current_tracking['tags'] = tags
+            self.current_tracking["tags"] = tags
 
     def get_intervals(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
         """Get simulated tracked intervals in time range.
@@ -182,17 +167,9 @@ class DryRunTracker(TimeTracker):
         Returns:
             List of intervals with 'start', 'end', 'tags'
         """
-        return [
-            i for i in self.intervals
-            if i['start'] >= start and i['end'] <= end
-        ]
+        return [i for i in self.intervals if i["start"] >= start and i["end"] <= end]
 
-    def track_interval(
-        self,
-        start: datetime,
-        end: datetime,
-        tags: set[str]
-    ) -> None:
+    def track_interval(self, start: datetime, end: datetime, tags: set[str]) -> None:
         """Record a simulated past interval.
 
         Args:
@@ -201,15 +178,9 @@ class DryRunTracker(TimeTracker):
             tags: Tags for interval
         """
         if self.capture_commands is not None:
-            start_str = start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
-            end_str = end.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
-            self.capture_commands.append(
-                ['timew', 'track', start_str, '-', end_str] + sorted(tags)
-            )
+            start_str = start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+            end_str = end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+            self.capture_commands.append(["timew", "track", start_str, "-", end_str] + sorted(tags))
 
-        self.intervals.append({
-            'start': start,
-            'end': end,
-            'tags': tags
-        })
+        self.intervals.append({"start": start, "end": end, "tags": tags})
         print(f"DRY RUN: Would track {tags} from {start} to {end}")

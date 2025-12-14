@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import re
 import subprocess
 import sys
 from collections import defaultdict
@@ -9,24 +8,24 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from time import sleep, time
 
-import aw_client
 from termcolor import cprint
 
 from .aw_client import EventFetcher
 from .config import config
 from .state import AfkState, StateManager
 from .tag_extractor import TagExtractor
-from .time_tracker import DryRunTracker
 from .timew_tracker import TimewTracker
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
+
 
 class StructuredFormatter(logging.Formatter):
     """
     Formatter that outputs structured logs with all relevant context.
     Can output in JSON format for analysis/export to OpenSearch.
     """
+
     def __init__(self, use_json: bool = False, run_mode: dict = None) -> None:
         super().__init__()
         self.use_json = use_json
@@ -35,20 +34,20 @@ class StructuredFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         # Build structured log data
         log_data = {
-            'timestamp': datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
-            'level': record.levelname,
-            'message': record.getMessage(),
-            'module': record.module,
-            'function': record.funcName,
-            'line': record.lineno,
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno,
         }
 
         # Add run mode information (for filtering in log analysis)
         if self.run_mode:
-            log_data['run_mode'] = self.run_mode
+            log_data["run_mode"] = self.run_mode
 
         # Add custom fields if present
-        for key in ['event_ts', 'event_duration', 'last_tick', 'tags', 'event_data']:
+        for key in ["event_ts", "event_duration", "last_tick", "tags", "event_data"]:
             if hasattr(record, key):
                 val = getattr(record, key)
                 # Convert datetime and timedelta to strings
@@ -69,22 +68,22 @@ class StructuredFormatter(logging.Formatter):
 
     def _format_human(self, log_data: dict, level: int) -> str:
         """Format log data in a human-readable way with optional colors."""
-        now = datetime.now().strftime('%H:%M:%S')
-        last_tick = log_data.get('last_tick', 'XX:XX:XX')
-        event_ts = log_data.get('event_ts', '')
+        now = datetime.now().strftime("%H:%M:%S")
+        last_tick = log_data.get("last_tick", "XX:XX:XX")
+        event_ts = log_data.get("event_ts", "")
 
         # Build timestamp prefix
         ts_prefix = f"{now} / {last_tick} / {event_ts}" if event_ts else f"{now} / {last_tick}"
 
         # Add duration if present
-        if 'event_duration' in log_data:
-            ts_prefix += log_data['event_duration']
+        if "event_duration" in log_data:
+            ts_prefix += log_data["event_duration"]
 
         # Build message with context
-        msg = log_data['message']
-        if 'tags' in log_data:
+        msg = log_data["message"]
+        if "tags" in log_data:
             msg = f"{msg} (tags: {log_data['tags']})"
-        if 'event_data' in log_data:
+        if "event_data" in log_data:
             msg = f"{msg} (data: {log_data['event_data']})"
 
         full_msg = f"{ts_prefix}: {msg}"
@@ -92,11 +91,13 @@ class StructuredFormatter(logging.Formatter):
         # No color formatting here - that's handled by the handler
         return full_msg
 
+
 class ColoredConsoleHandler(logging.StreamHandler):
     """
     Console handler that adds colors based on log level.
     Warnings are bold, errors/criticals are bold and red.
     """
+
     def emit(self, record: logging.LogRecord) -> None:
         try:
             msg = self.format(record)
@@ -105,17 +106,17 @@ class ColoredConsoleHandler(logging.StreamHandler):
 
             # Map log levels to visual attributes
             if record.levelno > logging.ERROR:
-                attrs = ['bold', 'blink']
-                color = 'red'
+                attrs = ["bold", "blink"]
+                color = "red"
             elif record.levelno > logging.WARNING:
-                attrs = ['bold']
-                color = 'red'
+                attrs = ["bold"]
+                color = "red"
             elif record.levelno > logging.INFO:
                 # User-facing output - keep it clean
-                attrs = ['bold']
-                color = 'red'
+                attrs = ["bold"]
+                color = "red"
             elif record.levelno == logging.INFO:
-                color = 'yellow'
+                color = "yellow"
             # DEBUG level gets no special formatting
 
             if color or attrs:
@@ -126,7 +127,14 @@ class ColoredConsoleHandler(logging.StreamHandler):
         except Exception:
             self.handleError(record)
 
-def setup_logging(json_format: bool = False, log_level: int = logging.DEBUG, console_log_level: int = logging.ERROR, log_file: str = None, run_mode: dict = None) -> None:
+
+def setup_logging(
+    json_format: bool = False,
+    log_level: int = logging.DEBUG,
+    console_log_level: int = logging.ERROR,
+    log_file: str = None,
+    run_mode: dict = None,
+) -> None:
     """
     Set up the logging system.
 
@@ -155,10 +163,12 @@ def setup_logging(json_format: bool = False, log_level: int = logging.DEBUG, con
         console_handler.setFormatter(StructuredFormatter(run_mode=run_mode))
         root_logger.addHandler(console_handler)
 
+
 # Initialize logging with defaults
 # This will be reconfigured by CLI with appropriate parameters
 # For direct imports/testing, use basic console logging
 setup_logging(log_file=None)  # Console logging by default until CLI configures it
+
 
 def user_output(msg: str, color: str = None, attrs: list = None) -> None:
     """
@@ -174,6 +184,7 @@ def user_output(msg: str, color: str = None, attrs: list = None) -> None:
         cprint(msg, color=color, attrs=attrs)
     else:
         print(msg)
+
 
 def get_tuning_param(config: dict, param_name: str, env_var: str, default: float) -> float:
     """Get a tuning parameter from config or environment variable.
@@ -201,30 +212,35 @@ def get_tuning_param(config: dict, param_name: str, env_var: str, default: float
         return float(env_value)
 
     # Then check config file
-    if 'tuning' in config and param_name in config['tuning']:
-        return float(config['tuning'][param_name])
+    if "tuning" in config and param_name in config["tuning"]:
+        return float(config["tuning"][param_name])
 
     # Fall back to default
     return default
 
 
 # Special tags that have specific meanings
-SPECIAL_TAGS = {'manual', 'override', 'not-afk'}
+SPECIAL_TAGS = {"manual", "override", "not-afk"}
+
 
 def ts2str(ts, format="%FT%H:%M:%S"):
-    return(ts.astimezone().strftime(format))
+    return ts.astimezone().strftime(format)
+
 
 def ts2strtime(ts):
     if not ts:
         return "XX:XX:XX:"
     return ts2str(ts, "%H:%M:%S")
 
+
 def load_config(config_path):
     # Load custom config if provided
     from . import config as config_module
+
     if config_path:
         config_module.load_custom_config(config_path)
     return config_module.config
+
 
 ## We keep quite some statistics here, all the counters should be documented
 ## TODO: Resetting counters should be done through explicit methods in this class and
@@ -248,27 +264,29 @@ class Exporter:
     show_unmatched: bool = False  # If True, show events that didn't match any rules
     show_timeline: bool = False  # If True, show side-by-side timeline view in diff mode
     enable_pdb: bool = False  # If True, drop into debugger on unexpected states
-    enable_assert: bool = True # If True, assert on unexpected states
+    enable_assert: bool = True  # If True, assert on unexpected states
     config: dict = None  # Configuration
     config_path: str = None  # Configuration file name
     test_data: dict = None  # Optional test data instead of querying AW
     start_time: datetime = None  # Optional start time for processing window
     end_time: datetime = None  # Optional end time for processing window
-    captured_commands: list = field(default_factory=list)  # Captures timew commands in dry-run mode for testing
-    unmatched_events: list = field(default_factory=list)  # Tracks events that didn't match any rules
+    captured_commands: list = field(
+        default_factory=list
+    )  # Captures timew commands in dry-run mode for testing
+    unmatched_events: list = field(
+        default_factory=list
+    )  # Tracks events that didn't match any rules
 
     def __post_init__(self):
         if not self.config:
             self.config = load_config(self.config_path)
         # Convert terminal_apps list to lowercase set for efficient lookups
-        self.terminal_apps = {app.lower() for app in self.config.get('terminal_apps', [])}
+        self.terminal_apps = {app.lower() for app in self.config.get("terminal_apps", [])}
 
         ## Initialize EventFetcher for all ActivityWatch data access
         client_name = "timewarrior_test_export" if self.dry_run else "timewarrior_export"
         self.event_fetcher = EventFetcher(
-            test_data=self.test_data,
-            client_name=client_name,
-            log_callback=self.log
+            test_data=self.test_data, client_name=client_name, log_callback=self.log
         )
 
         ## TODO: we don't need to consider backward compatibility
@@ -284,7 +302,7 @@ class Exporter:
             config=lambda: self.config,
             event_fetcher=self.event_fetcher,
             terminal_apps=self.terminal_apps,
-            log_callback=self.log
+            log_callback=self.log,
         )
 
         # Initialize TimeTracker for time tracking backend
@@ -292,33 +310,49 @@ class Exporter:
         # DryRunTracker will still capture commands for testing
         if self.dry_run:
             from .time_tracker import DryRunTracker
+
             self.tracker = DryRunTracker(
-                capture_commands=self.captured_commands,
-                hide_output=self.hide_processing_output
+                capture_commands=self.captured_commands, hide_output=self.hide_processing_output
             )
         else:
             self.tracker = TimewTracker(
                 grace_time=None,
                 capture_commands=self.captured_commands,
-                hide_output=self.hide_processing_output
+                hide_output=self.hide_processing_output,
             )
 
         # Initialize tuning parameters from config (with env var override support)
-        self.aw_warn_threshold = get_tuning_param(self.config, 'aw_warn_threshold', 'AW2TW_AW_WARN_THRESHOLD', 300.0)
-        self.sleep_interval = get_tuning_param(self.config, 'sleep_interval', 'AW2TW_SLEEP_INTERVAL', 30.0)
-        self.ignore_interval = get_tuning_param(self.config, 'ignore_interval', 'AW2TW_IGNORE_INTERVAL', 3.0)
-        self.min_recording_interval = get_tuning_param(self.config, 'min_recording_interval', 'AW2TW_MIN_RECORDING_INTERVAL', 90.0)
-        self.min_tag_recording_interval = get_tuning_param(self.config, 'min_tag_recording_interval', 'AW2TW_MIN_TAG_RECORDING_INTERVAL', 50.0)
-        self.stickyness_factor = get_tuning_param(self.config, 'stickyness_factor', 'AW2TW_STICKYNESS_FACTOR', 0.1)
-        self.max_mixed_interval = get_tuning_param(self.config, 'max_mixed_interval', 'AW2TW_MAX_MIXED_INTERVAL', 240.0)
+        self.aw_warn_threshold = get_tuning_param(
+            self.config, "aw_warn_threshold", "AW2TW_AW_WARN_THRESHOLD", 300.0
+        )
+        self.sleep_interval = get_tuning_param(
+            self.config, "sleep_interval", "AW2TW_SLEEP_INTERVAL", 30.0
+        )
+        self.ignore_interval = get_tuning_param(
+            self.config, "ignore_interval", "AW2TW_IGNORE_INTERVAL", 3.0
+        )
+        self.min_recording_interval = get_tuning_param(
+            self.config, "min_recording_interval", "AW2TW_MIN_RECORDING_INTERVAL", 90.0
+        )
+        self.min_tag_recording_interval = get_tuning_param(
+            self.config, "min_tag_recording_interval", "AW2TW_MIN_TAG_RECORDING_INTERVAL", 50.0
+        )
+        self.stickyness_factor = get_tuning_param(
+            self.config, "stickyness_factor", "AW2TW_STICKYNESS_FACTOR", 0.1
+        )
+        self.max_mixed_interval = get_tuning_param(
+            self.config, "max_mixed_interval", "AW2TW_MAX_MIXED_INTERVAL", 240.0
+        )
 
         # Derived values
         self.min_recording_interval_adj = self.min_recording_interval * (1 + self.stickyness_factor)
-        self.min_tag_recording_interval_adj = self.min_tag_recording_interval * (1 + self.stickyness_factor)
+        self.min_tag_recording_interval_adj = self.min_tag_recording_interval * (
+            1 + self.stickyness_factor
+        )
 
         # Only check bucket freshness when using real ActivityWatch data
         if not self.test_data:
-            for bucketclient in ('aw-watcher-window', 'aw-watcher-afk'):
+            for bucketclient in ("aw-watcher-window", "aw-watcher-afk"):
                 assert bucketclient in self.bucket_by_client
             self.event_fetcher.check_bucket_freshness()
 
@@ -338,6 +372,7 @@ class Exporter:
     def load_test_data(self, file_path):
         """Load test data from a JSON/YAML file."""
         from .export import load_test_data as load_file
+
         self.test_data = load_file(file_path)
         # Reinitialize with test data
         self.__post_init__()
@@ -374,7 +409,7 @@ class Exporter:
 
             command = cmd[1]  # 'start', 'stop', etc.
 
-            if command == 'start':
+            if command == "start":
                 # Extract tags and timestamp
                 # Format: ['timew', 'start', 'tag1', 'tag2', ..., '2025-01-01T10:00:00']
                 tags = set(cmd[2:-1])  # All elements between 'start' and timestamp
@@ -382,39 +417,33 @@ class Exporter:
 
                 # Parse timestamp - timestamps in commands are in local timezone
                 # (because they're generated with since.astimezone().strftime())
-                start = datetime.fromisoformat(timestamp_str.replace('T', ' ', 1).rstrip('Z'))
+                start = datetime.fromisoformat(timestamp_str.replace("T", " ", 1).rstrip("Z"))
                 if start.tzinfo is None:
                     # Assume local timezone, then convert to UTC
                     start = start.astimezone(UTC)
 
                 # If there was a previous interval, close it
                 if current_start:
-                    intervals.append(SuggestedInterval(
-                        start=current_start,
-                        end=start,
-                        tags=current_tags
-                    ))
+                    intervals.append(
+                        SuggestedInterval(start=current_start, end=start, tags=current_tags)
+                    )
 
                 # Start new interval
                 current_start = start
                 current_tags = tags
 
-            elif command == 'stop' and current_start:
+            elif command == "stop" and current_start:
                 # Close current interval
                 # May have timestamp as last arg
-                if len(cmd) > 2 and cmd[-1].count('T') == 1:
-                    end = datetime.fromisoformat(cmd[-1].replace('T', ' ', 1).rstrip('Z'))
+                if len(cmd) > 2 and cmd[-1].count("T") == 1:
+                    end = datetime.fromisoformat(cmd[-1].replace("T", " ", 1).rstrip("Z"))
                     if end.tzinfo is None:
                         # Assume local timezone, then convert to UTC
                         end = end.astimezone(UTC)
                 else:
                     end = datetime.now(UTC)
 
-                intervals.append(SuggestedInterval(
-                    start=current_start,
-                    end=end,
-                    tags=current_tags
-                ))
+                intervals.append(SuggestedInterval(start=current_start, end=end, tags=current_tags))
 
                 current_start = None
                 current_tags = set()
@@ -452,7 +481,9 @@ class Exporter:
 
         # Display timeline view if requested
         if self.show_timeline:
-            timeline_output = format_timeline(timew_intervals, suggested_intervals, self.start_time, self.end_time)
+            timeline_output = format_timeline(
+                timew_intervals, suggested_intervals, self.start_time, self.end_time
+            )
             print(timeline_output)
 
         # Display comparison report (unless hidden or showing timeline)
@@ -472,21 +503,19 @@ class Exporter:
 
                     for cmd in fix_commands:
                         # Skip commented-out commands (manually-entered events)
-                        if cmd.startswith('#'):
+                        if cmd.startswith("#"):
                             print(f"Skipping (manual entry): {cmd}")
                             continue
 
                         print(f"Executing: {cmd}")
                         # Parse and execute the command (strip comment part)
                         import subprocess
+
                         try:
                             # Remove comment part if present (e.g., "  # 2025-12-10 - old tags: ...")
-                            command_part = cmd.split('  #')[0].strip()
+                            command_part = cmd.split("  #")[0].strip()
                             subprocess.run(
-                                command_part.split(),
-                                capture_output=True,
-                                text=True,
-                                check=True
+                                command_part.split(), capture_output=True, text=True, check=True
                             )
                             print("  ✓ Success")
                         except subprocess.CalledProcessError as e:
@@ -520,20 +549,25 @@ class Exporter:
         print("=" * 80)
 
         # Calculate total unmatched time
-        total_unmatched_seconds = sum((e['duration'].total_seconds() for e in self.unmatched_events), 0)
-        print(f"\nFound {len(self.unmatched_events)} unmatched events, {total_unmatched_seconds/60:.1f} min total:\n")
+        total_unmatched_seconds = sum(
+            (e["duration"].total_seconds() for e in self.unmatched_events), 0
+        )
+        print(
+            f"\nFound {len(self.unmatched_events)} unmatched events, {total_unmatched_seconds/60:.1f} min total:\n"
+        )
 
         # Group by app and title for easier analysis
-        from collections import defaultdict
         by_app = defaultdict(list)
 
         for event in self.unmatched_events:
-            app = event['data'].get('app', 'unknown')
+            app = event["data"].get("app", "unknown")
             by_app[app].append(event)
 
         # Sort apps by total duration (descending)
-        app_durations = [(app, sum(e['duration'].total_seconds() for e in events))
-                         for app, events in by_app.items()]
+        app_durations = [
+            (app, sum(e["duration"].total_seconds() for e in events))
+            for app, events in by_app.items()
+        ]
         app_durations.sort(key=lambda x: x[1], reverse=True)
 
         for app, app_total_seconds in app_durations:
@@ -544,8 +578,8 @@ class Exporter:
             title_durations = defaultdict(float)
             title_count = defaultdict(int)
             for event in events:
-                title = event['data'].get('title', '(no title)')
-                title_durations[title] += event['duration'].total_seconds()
+                title = event["data"].get("title", "(no title)")
+                title_durations[title] += event["duration"].total_seconds()
                 title_count[title] += 1
 
             # Sort titles by duration (descending) and show top 5
@@ -561,11 +595,22 @@ class Exporter:
                 remaining_count = len(sorted_titles) - 5
                 remaining_time = sum(duration for _, duration in sorted_titles[5:])
                 remaining_events = sum(title_count[title] for title, _ in sorted_titles[5:])
-                print(f"  {remaining_time/60:5.1f}min ({remaining_events:2d}x) - ... and {remaining_count} other titles")
+                print(
+                    f"  {remaining_time/60:5.1f}min ({remaining_events:2d}x) - ... and {remaining_count} other titles"
+                )
 
         print("\n" + "=" * 80 + "\n")
 
-    def set_known_tick_stats(self, event=None, start=None, end=None, manual=False, tags=None, reset_accumulator=False, retain_accumulator=True):
+    def set_known_tick_stats(
+        self,
+        event=None,
+        start=None,
+        end=None,
+        manual=False,
+        tags=None,
+        reset_accumulator=False,
+        retain_accumulator=True,
+    ):
         """
         Set statistics after exporting tags.
 
@@ -580,9 +625,9 @@ class Exporter:
         """
         # Extract timestamps
         if event and not start:
-            start = event['timestamp']
+            start = event["timestamp"]
         if event and not end:
-            end = event['timestamp'] + event['duration']
+            end = event["timestamp"] + event["duration"]
         if start and not end:
             end = start
 
@@ -602,7 +647,9 @@ class Exporter:
             manual=manual,
             reset_stats=reset_accumulator,
             retain_tags=tags if (reset_accumulator and retain_accumulator) else None,
-            stickyness_factor=self.stickyness_factor if (reset_accumulator and retain_accumulator) else 0.0
+            stickyness_factor=self.stickyness_factor
+            if (reset_accumulator and retain_accumulator)
+            else 0.0,
         )
 
         # Handle the special case where retain_accumulator adds initial time to tags
@@ -612,16 +659,17 @@ class Exporter:
                 # If tag wasn't in accumulator before (so it has 0 time after reset),
                 # initialize it with self.stickyness_factor * self.min_recording_interval
                 if self.state.stats.tags_accumulated_time[tag] == timedelta(0):
-                    self.state.stats.tags_accumulated_time[tag] = timedelta(seconds=self.stickyness_factor * self.min_recording_interval)
-
+                    self.state.stats.tags_accumulated_time[tag] = timedelta(
+                        seconds=self.stickyness_factor * self.min_recording_interval
+                    )
 
     ## TODO: move all dealings with statistics to explicit statistics-handling methods
     def ensure_tag_exported(self, tags, event, since=None):
         if since is None:
-            since = event['timestamp']
+            since = event["timestamp"]
 
         if isinstance(tags, str):
-            tags = { tags }
+            tags = {tags}
 
         # Only perform validation checks if state has been initialized
         if self.state.last_start_time is not None and self.state.last_known_tick is not None:
@@ -630,26 +678,44 @@ class Exporter:
             last_activity_run_time = since - self.state.last_start_time
 
             ## We'd like to compare with self.total_time_known_event, but it's counted from the end of the previous event to the end of the current event
-            tracked_gap = event['timestamp'] + event['duration'] - self.state.last_known_tick
+            tracked_gap = event["timestamp"] + event["duration"] - self.state.last_known_tick
 
             ## if the time tracked is significantly less than the minimum
             ## time we're supposed to track, something is also probably
             ## wrong and should be investigated
-            if tags != { 'afk' } and not self.state.is_afk() and not self.state.manual_tracking and last_activity_run_time.total_seconds() < self.min_recording_interval-3:
-                self.breakpoint(f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < self.min_recording_interval-3 ({self.min_recording_interval-3}s), last_start_time={self.state.last_start_time}, since={since}")
+            if (
+                tags != {"afk"}
+                and not self.state.is_afk()
+                and not self.state.manual_tracking
+                and last_activity_run_time.total_seconds() < self.min_recording_interval - 3
+            ):
+                self.breakpoint(
+                    f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < self.min_recording_interval-3 ({self.min_recording_interval-3}s), last_start_time={self.state.last_start_time}, since={since}"
+                )
 
             ## If the tracked time is less than the known events time we've counted
             ## then something is a little bit wrong.
-            if tags != { 'afk' } and tracked_gap < self.state.stats.known_events_time:
-                self.breakpoint(f"tracked_gap ({tracked_gap.total_seconds()}s) < known_events_time ({self.state.stats.known_events_time.total_seconds()}s) for event {event['data']}, last_known_tick={self.state.last_known_tick}, event_start={event['timestamp']}, event_end={event['timestamp'] + event['duration']}")
+            if tags != {"afk"} and tracked_gap < self.state.stats.known_events_time:
+                self.breakpoint(
+                    f"tracked_gap ({tracked_gap.total_seconds()}s) < known_events_time ({self.state.stats.known_events_time.total_seconds()}s) for event {event['data']}, last_known_tick={self.state.last_known_tick}, event_start={event['timestamp']}, event_end={event['timestamp'] + event['duration']}"
+                )
 
             ## If the time tracked is way longer than the known events time we've counted
             ## then we have too much unknown activity - tag it as UNKNOWN
-            if tags != { 'afk' } and tracked_gap.total_seconds()>self.max_mixed_interval and self.state.stats.known_events_time/tracked_gap < 0.3 and not self.state.manual_tracking:
-                self.log(f"Large gap ({tracked_gap.total_seconds()}s) with low known activity ({(self.state.stats.known_events_time/tracked_gap):.1%}), tagging as UNKNOWN", event=event, level=logging.WARNING)
-                tags = {'UNKNOWN', 'not-afk'}
+            if (
+                tags != {"afk"}
+                and tracked_gap.total_seconds() > self.max_mixed_interval
+                and self.state.stats.known_events_time / tracked_gap < 0.3
+                and not self.state.manual_tracking
+            ):
+                self.log(
+                    f"Large gap ({tracked_gap.total_seconds()}s) with low known activity ({(self.state.stats.known_events_time/tracked_gap):.1%}), tagging as UNKNOWN",
+                    event=event,
+                    level=logging.WARNING,
+                )
+                tags = {"UNKNOWN", "not-afk"}
 
-        if 'afk' in tags:
+        if "afk" in tags:
             self.state.set_afk_state(AfkState.AFK)
 
         self.set_known_tick_stats(event=event, start=since)
@@ -665,19 +731,19 @@ class Exporter:
 
         ## Special logic with 'override', 'manual' and 'unknown' should be documented or removed!
         if self.timew_info is not None:
-            if 'override' in self.timew_info['tags']:
+            if "override" in self.timew_info["tags"]:
                 return
-            if 'manual' in self.timew_info['tags'] and 'unknown' in tags:
+            if "manual" in self.timew_info["tags"] and "unknown" in tags:
                 return
-            if set(tags).issubset(self.timew_info['tags']):
+            if set(tags).issubset(self.timew_info["tags"]):
                 return
         tags = retag_by_rules(tags, self.config)
         assert not exclusive_overlapping(tags, self.config)
 
         # Check if tags are exactly the same as current tags (after rule application)
         # This prevents redundant timew start commands when tags haven't changed
-        final_tags = tags | {'~aw'}  # Add ~aw tag as it's always added
-        if self.timew_info is not None and final_tags == self.timew_info['tags']:
+        final_tags = tags | {"~aw"}  # Add ~aw tag as it's always added
+        if self.timew_info is not None and final_tags == self.timew_info["tags"]:
             return
 
         # Start tracking with the final tags
@@ -688,11 +754,9 @@ class Exporter:
             self.set_timew_info(self.retag_current_interval())
         else:
             # In dry-run mode, simulate the timew_info state as if the command was executed
-            self.set_timew_info({
-                'start': since.strftime("%Y%m%dT%H%M%SZ"),
-                'start_dt': since,
-                'tags': final_tags
-            })
+            self.set_timew_info(
+                {"start": since.strftime("%Y%m%dT%H%M%SZ"), "start_dt": since, "tags": final_tags}
+            )
 
     def pretty_accumulator_string(self) -> str:
         a = self.state.stats.tags_accumulated_time
@@ -700,7 +764,9 @@ class Exporter:
         tags.sort(key=lambda x: -a[x])
         return "\n".join([f"{x}: {a[x].total_seconds():5.1f}s" for x in tags])
 
-    def log(self, msg: str, tags=None, event=None, ts=None, level: int = logging.INFO, extra=None) -> None:
+    def log(
+        self, msg: str, tags=None, event=None, ts=None, level: int = logging.INFO, extra=None
+    ) -> None:
         """
         Log a message with context about the current event and state.
 
@@ -715,22 +781,26 @@ class Exporter:
             extra = {}
 
         # Build extra context for structured logging
-        extra.update({
-            'last_tick': ts2strtime(self.state.last_tick) if self.state.last_tick else 'XX:XX:XX',
-        })
+        extra.update(
+            {
+                "last_tick": ts2strtime(self.state.last_tick)
+                if self.state.last_tick
+                else "XX:XX:XX",
+            }
+        )
 
         if ts:
-            extra['ts'] = ts2strtime(ts)
+            extra["ts"] = ts2strtime(ts)
 
         if event:
-            extra['event_start'] = event['timestamp']
-            extra['event_stop'] = event['timestamp'] + event['duration']
-            extra['event_duration'] = f"+ {event['duration'].total_seconds():6.1f}s"
-            if event.get('data'):
-                extra['event_data'] = event['data']
+            extra["event_start"] = event["timestamp"]
+            extra["event_stop"] = event["timestamp"] + event["duration"]
+            extra["event_duration"] = f"+ {event['duration'].total_seconds():6.1f}s"
+            if event.get("data"):
+                extra["event_data"] = event["data"]
 
         if tags:
-            extra['tags'] = tags
+            extra["tags"] = tags
 
         # Log with appropriate level
         logger.log(level, msg, extra=extra)
@@ -748,7 +818,7 @@ class Exporter:
             return None
 
         # Apply retag rules
-        source_tags = set(timew_info['tags'])
+        source_tags = set(timew_info["tags"])
         new_tags = self.tag_extractor.apply_retag_rules(source_tags)
 
         # Retag if tags changed
@@ -758,7 +828,9 @@ class Exporter:
             if not self.dry_run:
                 timew_info = self.tracker.get_current_tracking()
                 if timew_info:  # Check if still active
-                    assert set(timew_info['tags']) == new_tags, f"Expected {new_tags}, got {timew_info['tags']}"
+                    assert (
+                        set(timew_info["tags"]) == new_tags
+                    ), f"Expected {new_tags}, got {timew_info['tags']}"
 
         return timew_info
 
@@ -768,9 +840,9 @@ class Exporter:
         Reset statistics counters when coming/going afk.
         """
         # Determine new AFK state
-        if afk == 'afk':
+        if afk == "afk":
             new_state = AfkState.AFK
-        elif afk == 'not-afk':
+        elif afk == "not-afk":
             new_state = AfkState.ACTIVE
         else:
             # Handle unexpected states - default to UNKNOWN->ACTIVE transition
@@ -778,13 +850,13 @@ class Exporter:
             new_state = AfkState.ACTIVE
 
         # Calculate event end time
-        event_end = event['timestamp'] + event['duration']
+        event_end = event["timestamp"] + event["duration"]
 
         # Delegate to StateManager
         self.state.handle_afk_transition(
             new_state=new_state,
-            current_time=event_end if tags == {'afk'} else event['timestamp'],
-            reason=f"AFK change: {afk}, tags: {tags}"
+            current_time=event_end if tags == {"afk"} else event["timestamp"],
+            reason=f"AFK change: {afk}, tags: {tags}",
         )
 
     def check_and_handle_afk_state_change(self, tags, event=None):
@@ -795,60 +867,63 @@ class Exporter:
         * Returns False if the event/tags needs further handling
         * Returns True if all logic has been handled in this function, meaning that the event/tags does not need further handling
         """
-        if not tags: ## Not much to do here.  Except, we could verify that the event is compatible with the afk setting
+        if not tags:  ## Not much to do here.  Except, we could verify that the event is compatible with the afk setting
             return False
-        if 'afk' in tags and 'not-afk' in tags:
+        if "afk" in tags and "not-afk" in tags:
             ## Those are exclusive, should not happen!
             self.breakpoint()
         if self.state.afk_state == AfkState.UNKNOWN:
             ## Program has just been started, and we don't know if we're afk or not
-            if 'afk' in tags:
+            if "afk" in tags:
                 self.state.set_afk_state(AfkState.AFK)
-            if 'not-afk' in tags:
+            if "not-afk" in tags:
                 self.state.set_afk_state(AfkState.ACTIVE)
             ## unless tags are { 'afk' } or { 'non-afk' } we'll return False
             ## to indicate that we haven't handled any state change, and that
             ## the tags still needs handling
             return self.state.afk_state != AfkState.UNKNOWN and len(tags) == 1
         if self.state.is_afk():
-            if tags == { 'afk' }:
+            if tags == {"afk"}:
                 ## This should probably be checked up ... we're already afk, but now
                 ## we got a new afk tag?
                 ## (possible reason: we had some few tags in between the afk runs, but without any tags)
                 self.breakpoint()
-                self._afk_change_stats('afk', tags, event)
+                self._afk_change_stats("afk", tags, event)
                 return True
-            if 'afk' not in self.timew_info['tags']:
+            if "afk" not in self.timew_info["tags"]:
                 ## I'm apparently afk, but we're not tracking it in timew?
                 ## Something must have gone wrong somewhere?
                 self.breakpoint()
-            if 'not-afk' in tags:
-                self._afk_change_stats('not-afk', tags, event)
-                self.log(f"You have returned to the keyboard after {(event['timestamp']-self.state.last_start_time).total_seconds()}s absence", event=event)
+            if "not-afk" in tags:
+                self._afk_change_stats("not-afk", tags, event)
+                self.log(
+                    f"You have returned to the keyboard after {(event['timestamp']-self.state.last_start_time).total_seconds()}s absence",
+                    event=event,
+                )
                 ## Some possibilities when tags != {'not-afk'}:
                 ## 1) We have returned from the keyboard without the 'not-afk' special event triggered?
                 ## 2) We're catching up some "ghost tracking" of window events while we're afk?
                 ## 3) The 'not-afk' special event is not in the right order in the event queue?
                 ## 4) The data from the afk/not-afk watcher is unreliable
                 ## I think I found out that 3 is normal, but we may want to investigate TODO
-                return tags == { 'not-afk' }
-        else: ## We're not afk
-            if tags == { 'not-afk' }:
+                return tags == {"not-afk"}
+        else:  ## We're not afk
+            if tags == {"not-afk"}:
                 ## Check this up manually.  Possibilities:
                 ## 1) We're wrongly marked as 'not-afk' while we've actually been afk
                 ## 2) The 'not-afk' special event is not in the right order in the event queue?
                 ## 3) The data from the afk/not-afk watcher is unreliable
                 ## I think I found 2 is normal, but we may want to investigate TODO
                 return True
-            elif tags == { 'afk' }:
+            elif tags == {"afk"}:
                 ## Meaning we've just gone afk.
                 self.ensure_tag_exported(tags, event)
-                self._afk_change_stats('afk', tags, event)
+                self._afk_change_stats("afk", tags, event)
                 self.log(f"You're going to be afk for at least {event['duration']}s", event=event)
                 return True
-            elif 'afk' in tags:
+            elif "afk" in tags:
                 ## We've gone afk ... in some weird way?
-                self._afk_change_stats('afk', tags, event)
+                self._afk_change_stats("afk", tags, event)
                 self.breakpoint()
                 return False
             else:
@@ -857,13 +932,11 @@ class Exporter:
 
         return False
 
-
-
     ## TODO: this is a bit messy - this will return None if the event is small
     ## enough to be found "ignorable" and False if no tags are found
     ## Otherwise a set of tags
     def find_tags_from_event(self, event):
-        if event['duration'].total_seconds() < self.ignore_interval:
+        if event["duration"].total_seconds() < self.ignore_interval:
             return None
 
         # Delegate to TagExtractor for all tag matching logic
@@ -871,7 +944,7 @@ class Exporter:
             self.tag_extractor.get_afk_tags,
             self.tag_extractor.get_app_tags,
             self.tag_extractor.get_browser_tags,
-            self.tag_extractor.get_editor_tags
+            self.tag_extractor.get_editor_tags,
         ):
             tags = method(event)
             if tags is not False:
@@ -892,8 +965,8 @@ class Exporter:
         Args:
             event: The current ongoing event from ActivityWatch
         """
-        event_start = event['timestamp']
-        current_duration = event['duration']
+        event_start = event["timestamp"]
+        current_duration = event["duration"]
 
         # Check if this is the same ongoing event as last time
         if self.state.current_event_timestamp == event_start:
@@ -908,15 +981,15 @@ class Exporter:
             # Create a synthetic event with just the new duration
             # The timestamp is adjusted to start where we left off
             incremental_event = event.copy()
-            incremental_event['duration'] = new_duration
-            incremental_event['timestamp'] = event_start + already_processed
+            incremental_event["duration"] = new_duration
+            incremental_event["timestamp"] = event_start + already_processed
 
             # Process the incremental part
             tags = self.find_tags_from_event(incremental_event)
 
             if tags and not self.check_and_handle_afk_state_change(tags, incremental_event):
                 # Add to known events time (only for non-AFK events to avoid double-counting)
-                if 'status' not in incremental_event['data']:
+                if "status" not in incremental_event["data"]:
                     self.state.stats.known_events_time += new_duration
 
                 # Apply retagging rules
@@ -926,7 +999,9 @@ class Exporter:
                 for tag in tags:
                     self.state.stats.tags_accumulated_time[tag] += new_duration
 
-                self.log(f"Processed incremental {new_duration.total_seconds()}s of current event with tags: {tags}")
+                self.log(
+                    f"Processed incremental {new_duration.total_seconds()}s of current event with tags: {tags}"
+                )
 
             # Update the processed duration
             self.state.current_event_processed_duration = current_duration
@@ -947,7 +1022,7 @@ class Exporter:
 
             if tags and not self.check_and_handle_afk_state_change(tags, event):
                 # Add to known events time (only for non-AFK events to avoid double-counting)
-                if 'status' not in event['data']:
+                if "status" not in event["data"]:
                     self.state.stats.known_events_time += current_duration
 
                 # Apply retagging rules
@@ -956,7 +1031,9 @@ class Exporter:
                 for tag in tags:
                     self.state.stats.tags_accumulated_time[tag] += current_duration
 
-                self.log(f"Started tracking new current event ({current_duration.total_seconds()}s) with tags: {tags}")
+                self.log(
+                    f"Started tracking new current event ({current_duration.total_seconds()}s) with tags: {tags}"
+                )
 
             # Record what we've processed
             self.state.current_event_processed_duration = current_duration
@@ -987,7 +1064,7 @@ class Exporter:
             return afk_events
 
         # Sort events by timestamp to find gaps
-        sorted_events = sorted(afk_events, key=lambda x: x['timestamp'])
+        sorted_events = sorted(afk_events, key=lambda x: x["timestamp"])
 
         # Find gaps between consecutive events and fill with synthetic AFK events
         synthetic_afk_events = []
@@ -996,27 +1073,24 @@ class Exporter:
             curr_event = sorted_events[i]
 
             # Calculate gap between end of previous event and start of current
-            gap_start = prev_event['timestamp'] + prev_event['duration']
-            gap_end = curr_event['timestamp']
+            gap_start = prev_event["timestamp"] + prev_event["duration"]
+            gap_end = curr_event["timestamp"]
             gap_duration = gap_end - gap_start
 
             # Only create synthetic AFK event if gap is significant
             if gap_duration.total_seconds() >= self.min_recording_interval:
-                synthetic_afk_events.append({
-                    'data': {'status': 'afk'},
-                    'timestamp': gap_start,
-                    'duration': gap_duration
-                })
+                synthetic_afk_events.append(
+                    {"data": {"status": "afk"}, "timestamp": gap_start, "duration": gap_duration}
+                )
 
         # Combine original and synthetic events
         return afk_events + synthetic_afk_events
 
     def find_next_activity(self):
-        afk_id = self.bucket_by_client['aw-watcher-afk'][0]
-        window_id = self.bucket_by_client['aw-watcher-window'][0]
+        afk_id = self.bucket_by_client["aw-watcher-afk"][0]
+        window_id = self.bucket_by_client["aw-watcher-window"][0]
 
         ## TODO: move all statistics from internal counters and up to the object
-
 
         ## Skipped events are events that takes so little time that we ignore it completely.
         ## The counter is nulled out when some non-skipped event comes in.
@@ -1031,23 +1105,30 @@ class Exporter:
         total_time_skipped_events = timedelta(0)
 
         ## just to make sure we won't lose any events
-        #self.state.last_tick = self.state.last_tick - timedelta(1)
+        # self.state.last_tick = self.state.last_tick - timedelta(1)
 
-        afk_events = self.event_fetcher.get_events(afk_id, start=self.state.last_tick, end=self.end_time)
+        afk_events = self.event_fetcher.get_events(
+            afk_id, start=self.state.last_tick, end=self.end_time
+        )
 
         # Apply workaround if enabled in config
-        if self.config.get('enable_afk_gap_workaround', True):
+        if self.config.get("enable_afk_gap_workaround", True):
             afk_events = self._apply_afk_gap_workaround(afk_events)
 
         ## The afk tracker is not reliable.  Sometimes it shows me
         ## being afk even when I've been sitting constantly by the
         ## computer, working most of the time, perhaps spending a
         ## minute reading something?
-        afk_events = [ x for x in afk_events if x['duration'] > timedelta(seconds=self.max_mixed_interval) ]
+        afk_events = [
+            x for x in afk_events if x["duration"] > timedelta(seconds=self.max_mixed_interval)
+        ]
 
         ## afk and window_events
-        afk_window_events = self.event_fetcher.get_events(window_id, start=self.state.last_tick, end=self.end_time) + afk_events
-        afk_window_events.sort(key=lambda x: x['timestamp'])
+        afk_window_events = (
+            self.event_fetcher.get_events(window_id, start=self.state.last_tick, end=self.end_time)
+            + afk_events
+        )
+        afk_window_events.sort(key=lambda x: x["timestamp"])
         if len(afk_window_events) == 0:
             return False
 
@@ -1058,11 +1139,17 @@ class Exporter:
 
         cnt = 0
         for event in completed_events:
-            if event['timestamp'] < self.state.last_tick or event['timestamp'] < self.state.last_known_tick:
-                if event['data'] == {'status': 'not-afk'}:
+            if (
+                event["timestamp"] < self.state.last_tick
+                or event["timestamp"] < self.state.last_known_tick
+            ):
+                if event["data"] == {"status": "not-afk"}:
                     continue
-                if event['data'] != {'status': 'afk'} and event['timestamp'] > self.state.last_start_time:
-                    if event['duration']>timedelta(seconds=30):
+                if (
+                    event["data"] != {"status": "afk"}
+                    and event["timestamp"] > self.state.last_start_time
+                ):
+                    if event["duration"] > timedelta(seconds=30):
                         self.breakpoint()
                     ## Do we need an exception here for afk events?
                     self.log(f"skipping event as the timestamp is too old - {event}", event=event)
@@ -1085,95 +1172,136 @@ class Exporter:
 
             # Only count duration for non-AFK events to avoid double-counting
             # (AFK events overlap with window/browser/editor events)
-            if tags and 'status' not in event['data']:
-                self.state.stats.known_events_time += event['duration']
+            if tags and "status" not in event["data"]:
+                self.state.stats.known_events_time += event["duration"]
 
             ## tags can be False or None and those means different things.
             ## TODO: Bad design
             ## TODO: duplicated code
             if tags is None:
                 num_skipped_events += 1
-                total_time_skipped_events += event['duration']
-                if total_time_skipped_events.total_seconds()>self.min_recording_interval:
+                total_time_skipped_events += event["duration"]
+                if total_time_skipped_events.total_seconds() > self.min_recording_interval:
                     self.breakpoint()
                 continue
 
             if tags is False:
                 num_unknown_events += 1
-                self.state.stats.unknown_events_time += event['duration']
+                self.state.stats.unknown_events_time += event["duration"]
                 # Track unmatched event if requested
                 if self.show_unmatched:
                     self.unmatched_events.append(event)
-                if self.state.stats.unknown_events_time.total_seconds()>self.max_mixed_interval*2:
+                if (
+                    self.state.stats.unknown_events_time.total_seconds()
+                    > self.max_mixed_interval * 2
+                ):
                     # Significant unknown activity - tag it as UNKNOWN
-                    self.log(f"Significant unknown activity ({self.state.stats.unknown_events_time.total_seconds()}s), tagging as UNKNOWN", event=event)
-                    self.ensure_tag_exported({'UNKNOWN', 'not-afk'}, event)
+                    self.log(
+                        f"Significant unknown activity ({self.state.stats.unknown_events_time.total_seconds()}s), tagging as UNKNOWN",
+                        event=event,
+                    )
+                    self.ensure_tag_exported({"UNKNOWN", "not-afk"}, event)
                     self.state.stats.unknown_events_time = timedelta(0)
                 else:
-                    self.log(f"{self.state.stats.unknown_events_time.total_seconds()}s unknown events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)", event=event)
+                    self.log(
+                        f"{self.state.stats.unknown_events_time.total_seconds()}s unknown events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)",
+                        event=event,
+                    )
             else:
-                self.log(f"{event['data']} - tags found: {tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)")
+                self.log(
+                    f"{event['data']} - tags found: {tags} ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)"
+                )
             num_skipped_events = 0
             total_time_skipped_events = timedelta(0)
 
             ## Ref README, if self.max_mixed_interval is met, ignore accumulated minor activity
             ## (the mixed time will be attributed to the previous work task)
-            if tags and event['duration'].total_seconds() > self.max_mixed_interval:
+            if tags and event["duration"].total_seconds() > self.max_mixed_interval:
                 ## Theoretically, we may do lots of different things causing hundred of different independent tags to collect less than the minimum needed to record something.  In practice that doesn't happen.
-                #print(f"We're tossing data: {self.tags_accumulated_time}")
+                # print(f"We're tossing data: {self.tags_accumulated_time}")
                 self.ensure_tag_exported(tags, event)
 
-            interval_since_last_known_tick = event['timestamp'] + event['duration'] - self.state.last_known_tick
-            if (interval_since_last_known_tick < timedelta(0)):
+            interval_since_last_known_tick = (
+                event["timestamp"] + event["duration"] - self.state.last_known_tick
+            )
+            if interval_since_last_known_tick < timedelta(0):
                 ## Something is very wrong here, it needs investigation.
                 self.breakpoint()
-            assert(interval_since_last_known_tick >= timedelta(0))
+            assert interval_since_last_known_tick >= timedelta(0)
 
             ## Track things in internal accumulator if the focus between windows changes often
             if tags:
                 tags = retag_by_rules(tags, self.config)
                 for tag in tags:
-                    self.state.stats.tags_accumulated_time[tag] += event['duration']
+                    self.state.stats.tags_accumulated_time[tag] += event["duration"]
 
             ## Check - if `timew start` was run manually since last "known tick", then reset everything
             # Only update timew_info if not in dry-run mode
             if not self.dry_run:
                 self.set_timew_info(self.retag_current_interval())
-            if interval_since_last_known_tick.total_seconds() > self.min_recording_interval_adj and any(x for x in self.state.stats.tags_accumulated_time if x not in SPECIAL_TAGS and self.state.stats.tags_accumulated_time[x].total_seconds()>self.min_recording_interval_adj):
+            if (
+                interval_since_last_known_tick.total_seconds() > self.min_recording_interval_adj
+                and any(
+                    x
+                    for x in self.state.stats.tags_accumulated_time
+                    if x not in SPECIAL_TAGS
+                    and self.state.stats.tags_accumulated_time[x].total_seconds()
+                    > self.min_recording_interval_adj
+                )
+            ):
                 self.log("Emptying the accumulator!")
                 tags = set()
                 ## TODO: This looks like a bug - we reset tags, and then assert that they are not overlapping?
                 assert not exclusive_overlapping(tags, self.config)
-                min_tag_recording_interval=self.min_tag_recording_interval
-                while exclusive_overlapping({tag for tag in self.state.stats.tags_accumulated_time if  self.state.stats.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval}, self.config):
+                min_tag_recording_interval = self.min_tag_recording_interval
+                while exclusive_overlapping(
+                    {
+                        tag
+                        for tag in self.state.stats.tags_accumulated_time
+                        if self.state.stats.tags_accumulated_time[tag].total_seconds()
+                        > min_tag_recording_interval
+                    },
+                    self.config,
+                ):
                     min_tag_recording_interval += 1
                 for tag in self.state.stats.tags_accumulated_time:
-                    if self.state.stats.tags_accumulated_time[tag].total_seconds() > min_tag_recording_interval:
+                    if (
+                        self.state.stats.tags_accumulated_time[tag].total_seconds()
+                        > min_tag_recording_interval
+                    ):
                         tags.add(tag)
                     self.state.stats.tags_accumulated_time[tag] *= self.stickyness_factor
                 if self.state.manual_tracking:
-                    since = event['timestamp']-self.state.stats.known_events_time+event['duration']
+                    since = (
+                        event["timestamp"] - self.state.stats.known_events_time + event["duration"]
+                    )
                 else:
                     since = self.state.last_known_tick
                 self.log(f"Ensuring tags export, tags={tags}")
                 self.ensure_tag_exported(tags, event, since)
 
-            self.state.last_tick = event['timestamp'] + event['duration']
+            self.state.last_tick = event["timestamp"] + event["duration"]
             cnt += 1
 
             if tags is not False:
                 pass
 
-            elif event['data'].get('app', '').lower() in self.terminal_apps:
-                self.log(f"Unknown terminal event {event['data']['title']}", event=event, level=logging.WARNING)
+            elif event["data"].get("app", "").lower() in self.terminal_apps:
+                self.log(
+                    f"Unknown terminal event {event['data']['title']}",
+                    event=event,
+                    level=logging.WARNING,
+                )
             else:
-                self.log(f"No rules found for event {event['data']}", event=event, level=logging.WARNING)
+                self.log(
+                    f"No rules found for event {event['data']}", event=event, level=logging.WARNING
+                )
 
         ## Process the current ongoing event incrementally (idempotent)
         if current_event:
             self._process_current_event_incrementally(current_event)
 
-        return cnt>1
+        return cnt > 1
 
     def set_timew_info(self, timew_info):
         """Set the current TimeWarrior tracking info.
@@ -1186,17 +1314,24 @@ class Exporter:
             self.timew_info = None
             return
 
-        if self.state.afk_state == AfkState.UNKNOWN and 'afk' in timew_info['tags']:
+        if self.state.afk_state == AfkState.UNKNOWN and "afk" in timew_info["tags"]:
             self.state.set_afk_state(AfkState.AFK)
-        if self.state.afk_state == AfkState.UNKNOWN and 'not-afk' in timew_info['tags']:
+        if self.state.afk_state == AfkState.UNKNOWN and "not-afk" in timew_info["tags"]:
             self.state.set_afk_state(AfkState.ACTIVE)
 
         foo = self.timew_info
         self.timew_info = timew_info
-        if foo != self.timew_info: ## timew has been run since last
-            self.log(f"tracking from {ts2strtime(self.timew_info['start_dt'])}: {self.timew_info['tags']}")
-            if not self.state.last_known_tick or timew_info['start_dt'] > self.state.last_known_tick:
-                self.set_known_tick_stats(start=timew_info['start_dt'], manual=True, tags=timew_info['tags'])
+        if foo != self.timew_info:  ## timew has been run since last
+            self.log(
+                f"tracking from {ts2strtime(self.timew_info['start_dt'])}: {self.timew_info['tags']}"
+            )
+            if (
+                not self.state.last_known_tick
+                or timew_info["start_dt"] > self.state.last_known_tick
+            ):
+                self.set_known_tick_stats(
+                    start=timew_info["start_dt"], manual=True, tags=timew_info["tags"]
+                )
 
     def tick(self, process_all: bool = False) -> bool:
         """
@@ -1214,9 +1349,9 @@ class Exporter:
             if not self.timew_info:
                 mock_start = self.start_time or datetime.now(UTC)
                 self.timew_info = {
-                    'start': mock_start.strftime('%Y%m%dT%H%M%SZ'),
-                    'start_dt': mock_start,
-                    'tags': set()
+                    "start": mock_start.strftime("%Y%m%dT%H%M%SZ"),
+                    "start_dt": mock_start,
+                    "tags": set(),
                 }
         elif not self.timew_info:
             # Normal mode or dry-run without start_time - get current timew tracking state
@@ -1227,9 +1362,9 @@ class Exporter:
                 if self.dry_run:
                     mock_start = self.start_time or datetime.now(UTC)
                     self.timew_info = {
-                        'start': mock_start.strftime('%Y%m%dT%H%M%SZ'),
-                        'start_dt': mock_start,
-                        'tags': set()
+                        "start": mock_start.strftime("%Y%m%dT%H%M%SZ"),
+                        "start_dt": mock_start,
+                        "tags": set(),
                     }
                 else:
                     raise
@@ -1240,7 +1375,7 @@ class Exporter:
             if self.start_time:
                 self.state.last_tick = self.start_time
             else:
-                self.state.last_tick = self.timew_info['start_dt']
+                self.state.last_tick = self.timew_info["start_dt"]
             self.state.last_known_tick = self.state.last_tick
             self.state.last_start_time = self.state.last_tick
 
@@ -1279,7 +1414,9 @@ class Exporter:
                 # In dry-run mode without end_time, we can't continue (would loop forever)
                 if self.dry_run and not self.end_time:
                     self.breakpoint()
-                    raise ValueError("dry-run mode without end_time would loop forever - this should be prevented by CLI validation")
+                    raise ValueError(
+                        "dry-run mode without end_time would loop forever - this should be prevented by CLI validation"
+                    )
 
                 self.log("sleeping, because no events found")
                 if not self.dry_run:  # Don't sleep in dry-run mode
@@ -1287,10 +1424,15 @@ class Exporter:
 
             return True
 
+
 def check_bucket_updated(bucket: dict) -> None:
-    aw_warn_threshold = float(os.environ.get('AW2TW_AW_WARN_THRESHOLD', 300))
-    if not bucket['last_updated_dt'] or time()-bucket['last_updated_dt'].timestamp() > aw_warn_threshold:
+    aw_warn_threshold = float(os.environ.get("AW2TW_AW_WARN_THRESHOLD", 300))
+    if (
+        not bucket["last_updated_dt"]
+        or time() - bucket["last_updated_dt"].timestamp() > aw_warn_threshold
+    ):
         logger.warning(f"Bucket {bucket['id']} seems not to have recent data!")
+
 
 ## TODO: none of this has anything to do with ActivityWatch and can be moved to a separate module
 def get_timew_info():
@@ -1300,18 +1442,18 @@ def get_timew_info():
         dict: Information about the active interval, or None if there's no active tracking
     """
     try:
-        current_timew = json.loads(subprocess.check_output(
-            ["timew", "get", "dom.active.json"],
-            stderr=subprocess.DEVNULL
-        ))
-        dt = datetime.strptime(current_timew['start'], "%Y%m%dT%H%M%SZ")
+        current_timew = json.loads(
+            subprocess.check_output(["timew", "get", "dom.active.json"], stderr=subprocess.DEVNULL)
+        )
+        dt = datetime.strptime(current_timew["start"], "%Y%m%dT%H%M%SZ")
         dt = dt.replace(tzinfo=UTC)
-        current_timew['start_dt'] = dt
-        current_timew['tags'] = set(current_timew['tags'])
+        current_timew["start_dt"] = dt
+        current_timew["tags"] = set(current_timew["tags"])
         return current_timew
     except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
         # No active tracking, empty database, or invalid data
         return None
+
 
 def timew_run(commands, dry_run=False, capture_to=None, hide_output=False):
     """
@@ -1323,11 +1465,13 @@ def timew_run(commands, dry_run=False, capture_to=None, hide_output=False):
         capture_to: Optional list to append commands to (for testing)
         hide_output: If True, don't print the "DRY RUN" or "Running" messages
     """
-    commands = ['timew'] + commands
+    commands = ["timew"] + commands
 
     if dry_run:
         if not hide_output:
-            user_output(f"DRY RUN: Would execute: {' '.join(commands)}", color="yellow", attrs=["bold"])
+            user_output(
+                f"DRY RUN: Would execute: {' '.join(commands)}", color="yellow", attrs=["bold"]
+            )
         if capture_to is not None:
             capture_to.append(commands)
         return
@@ -1335,9 +1479,13 @@ def timew_run(commands, dry_run=False, capture_to=None, hide_output=False):
     if not hide_output:
         user_output(f"Running: {' '.join(commands)}")
     subprocess.run(commands)
-    grace_time = float(os.environ.get('AW2TW_GRACE_TIME', 10))
-    user_output(f"Use timew undo if you don't agree!  You have {grace_time} seconds to press ctrl^c", attrs=["bold"])
+    grace_time = float(os.environ.get("AW2TW_GRACE_TIME", 10))
+    user_output(
+        f"Use timew undo if you don't agree!  You have {grace_time} seconds to press ctrl^c",
+        attrs=["bold"],
+    )
     sleep(grace_time)
+
 
 ## TODO: do we need this?
 def exclusive_overlapping(tags, cfg=None):
@@ -1356,9 +1504,9 @@ def exclusive_overlapping(tags, cfg=None):
     if cfg is None:
         cfg = config
     # Create a temporary TagExtractor to use the logic
-    from .aw_client import EventFetcher
     temp_extractor = TagExtractor(config=cfg, event_fetcher=None)
     return temp_extractor.check_exclusive_groups(tags)
+
 
 ## TODO: do we need this backward compatibility function?
 ## not really retag, more like expand tags?  But it's my plan to allow replacement and not only addings
@@ -1378,9 +1526,9 @@ def retag_by_rules(source_tags, cfg=None):
     if cfg is None:
         cfg = config
     # Create a temporary TagExtractor to use the logic
-    from .aw_client import EventFetcher
     temp_extractor = TagExtractor(config=cfg, event_fetcher=None)
     return temp_extractor.apply_retag_rules(source_tags)
+
 
 def timew_retag(timew_info, dry_run=False, capture_to=None):
     """Retag the current TimeWarrior interval according to rules.
@@ -1397,21 +1545,23 @@ def timew_retag(timew_info, dry_run=False, capture_to=None):
         # No active tracking, nothing to retag
         return None
 
-    source_tags = set(timew_info['tags'])
+    source_tags = set(timew_info["tags"])
     new_tags = retag_by_rules(source_tags)
     if new_tags != source_tags:
         timew_run(["retag"] + list(new_tags), dry_run=dry_run, capture_to=capture_to)
         if not dry_run:
             timew_info = get_timew_info()
             if timew_info:  # Check if still active
-                assert set(timew_info['tags']) == new_tags
+                assert set(timew_info["tags"]) == new_tags
         return timew_info
     return timew_info
+
 
 def main():
     exporter = Exporter()
     while True:
         exporter.tick()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

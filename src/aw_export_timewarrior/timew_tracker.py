@@ -31,7 +31,7 @@ class TimewTracker(TimeTracker):
         self,
         grace_time: float | None = None,
         capture_commands: list | None = None,
-        hide_output: bool = False
+        hide_output: bool = False,
     ) -> None:
         """Initialize TimeWarrior tracker.
 
@@ -41,13 +41,15 @@ class TimewTracker(TimeTracker):
             hide_output: If True, don't print "Running" messages
         """
         if grace_time is None:
-            grace_time = float(os.environ.get('AW2TW_GRACE_TIME', 10))
+            grace_time = float(os.environ.get("AW2TW_GRACE_TIME", 10))
         self.grace_time = grace_time
         self.capture_commands = capture_commands
         self.hide_output = hide_output
         self._current_cache: dict[str, Any] | None = None
 
-    def _run_timew(self, args: list[str], show_undo_message: bool = True) -> subprocess.CompletedProcess:
+    def _run_timew(
+        self, args: list[str], show_undo_message: bool = True
+    ) -> subprocess.CompletedProcess:
         """Execute a timew command.
 
         Args:
@@ -57,7 +59,7 @@ class TimewTracker(TimeTracker):
         Returns:
             Completed process
         """
-        cmd = ['timew'] + args
+        cmd = ["timew"] + args
 
         # Capture for testing
         if self.capture_commands is not None:
@@ -66,22 +68,21 @@ class TimewTracker(TimeTracker):
         if not self.hide_output:
             # Import here to avoid circular dependency
             from .main import user_output
+
             user_output(f"Running: {' '.join(cmd)}")
 
         # Only capture output in test mode (when capture_commands is set)
         # In normal mode, let timew output go to terminal
         result = subprocess.run(
-            cmd,
-            capture_output=self.capture_commands is not None,
-            text=True,
-            check=False
+            cmd, capture_output=self.capture_commands is not None, text=True, check=False
         )
 
         if show_undo_message and not self.hide_output:
             from .main import user_output
+
             user_output(
                 f"Use timew undo if you don't agree! You have {self.grace_time} seconds to press ctrl^c",
-                attrs=["bold"]
+                attrs=["bold"],
             )
 
         # Wait grace period for timew to settle
@@ -108,21 +109,20 @@ class TimewTracker(TimeTracker):
 
         try:
             result = subprocess.check_output(
-                ['timew', 'get', 'dom.active.json'],
-                stderr=subprocess.DEVNULL
+                ["timew", "get", "dom.active.json"], stderr=subprocess.DEVNULL
             )
             data = json.loads(result)
 
             # Parse start time
-            start_dt = datetime.strptime(data['start'], '%Y%m%dT%H%M%SZ')
+            start_dt = datetime.strptime(data["start"], "%Y%m%dT%H%M%SZ")
             start_dt = start_dt.replace(tzinfo=UTC)
 
             # Build tracking info in format compatible with existing code
             tracking = {
-                'id': data.get('id'),
-                'start': data['start'],  # Keep original string format
-                'start_dt': start_dt,     # Parsed datetime
-                'tags': set(data.get('tags', []))
+                "id": data.get("id"),
+                "start": data["start"],  # Keep original string format
+                "start_dt": start_dt,  # Parsed datetime
+                "tags": set(data.get("tags", [])),
             }
 
             self._current_cache = tracking
@@ -140,14 +140,12 @@ class TimewTracker(TimeTracker):
             start_time: When to start from
         """
         # Convert to local time for timew
-        args = ['start'] + sorted(tags) + [
-            start_time.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
-        ]
+        args = ["start"] + sorted(tags) + [start_time.astimezone().strftime("%Y-%m-%dT%H:%M:%S")]
         self._run_timew(args)
 
     def stop_tracking(self) -> None:
         """Stop TimeWarrior tracking."""
-        self._run_timew(['stop'])
+        self._run_timew(["stop"])
 
     def retag(self, tags: set[str]) -> None:
         """Retag current TimeWarrior interval.
@@ -155,14 +153,10 @@ class TimewTracker(TimeTracker):
         Args:
             tags: New tags to apply (replaces all existing tags)
         """
-        args = ['tag', '@1'] + sorted(tags)
+        args = ["tag", "@1"] + sorted(tags)
         self._run_timew(args)
 
-    def get_intervals(
-        self,
-        start: datetime,
-        end: datetime
-    ) -> list[dict[str, Any]]:
+    def get_intervals(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
         """Get TimeWarrior intervals in time range.
 
         Args:
@@ -173,15 +167,15 @@ class TimewTracker(TimeTracker):
             List of intervals with 'start', 'end', 'tags', 'id'
         """
         # Format times for timew export (timew expects local time)
-        start_str = start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
-        end_str = end.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
+        start_str = start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+        end_str = end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
 
         try:
             result = subprocess.run(
-                ['timew', 'export', start_str, '-', end_str],
+                ["timew", "export", start_str, "-", end_str],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
             )
 
             data = json.loads(result.stdout)
@@ -190,21 +184,23 @@ class TimewTracker(TimeTracker):
             intervals = []
             for entry in data:
                 # Parse start time
-                interval_start = datetime.strptime(entry['start'], '%Y%m%dT%H%M%SZ')
+                interval_start = datetime.strptime(entry["start"], "%Y%m%dT%H%M%SZ")
                 interval_start = interval_start.replace(tzinfo=UTC)
 
                 # Parse end time (may not exist for ongoing intervals)
                 interval_end = None
-                if 'end' in entry:
-                    interval_end = datetime.strptime(entry['end'], '%Y%m%dT%H%M%SZ')
+                if "end" in entry:
+                    interval_end = datetime.strptime(entry["end"], "%Y%m%dT%H%M%SZ")
                     interval_end = interval_end.replace(tzinfo=UTC)
 
-                intervals.append({
-                    'id': entry.get('id', 0),
-                    'start': interval_start,
-                    'end': interval_end,
-                    'tags': set(entry.get('tags', []))
-                })
+                intervals.append(
+                    {
+                        "id": entry.get("id", 0),
+                        "start": interval_start,
+                        "end": interval_end,
+                        "tags": set(entry.get("tags", [])),
+                    }
+                )
 
             return intervals
 
@@ -212,12 +208,7 @@ class TimewTracker(TimeTracker):
             # timew export failed
             raise RuntimeError(f"Failed to fetch TimeWarrior intervals: {e}") from e
 
-    def track_interval(
-        self,
-        start: datetime,
-        end: datetime,
-        tags: set[str]
-    ) -> None:
+    def track_interval(self, start: datetime, end: datetime, tags: set[str]) -> None:
         """Record a past interval in TimeWarrior.
 
         Args:
@@ -226,9 +217,9 @@ class TimewTracker(TimeTracker):
             tags: Tags for interval
         """
         # Format times for timew track command
-        start_str = start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
-        end_str = end.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
+        start_str = start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+        end_str = end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
 
-        args = ['track', start_str, '-', end_str] + sorted(tags)
+        args = ["track", start_str, "-", end_str] + sorted(tags)
 
         self._run_timew(args)

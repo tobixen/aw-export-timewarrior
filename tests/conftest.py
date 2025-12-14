@@ -10,21 +10,27 @@ from typing import Any
 
 import pytest
 
-sleep_counter=0
+sleep_counter = 0
+
+
 @pytest.fixture(autouse=True)  # Applies to all tests automatically
 def no_sleep(monkeypatch):
     global sleep_counter
     sleep_counter = 0
+
     def fake_sleep(seconds):
         global sleep_counter
         sleep_counter += 1
-        assert sleep_counter<200
+        assert sleep_counter < 200
         print(f"SLEEP requested for {seconds}seconds")
+
     import time
 
     from aw_export_timewarrior import main
-    monkeypatch.setattr(time, 'sleep', fake_sleep)
-    monkeypatch.setattr(main, 'sleep', fake_sleep)
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+    monkeypatch.setattr(main, "sleep", fake_sleep)
+
 
 class FixtureDataBuilder:
     """
@@ -58,42 +64,42 @@ class FixtureDataBuilder:
         current_time_iso = self.current_time.isoformat()
 
         self.buckets = {
-            'aw-watcher-window_test': {
-                'id': 'aw-watcher-window_test',
-                'name': 'aw-watcher-window_test',
-                'type': 'currentwindow',
-                'client': 'aw-watcher-window',
-                'hostname': 'test-host',
-                'created': current_time_iso,
-                'last_updated': current_time_iso
+            "aw-watcher-window_test": {
+                "id": "aw-watcher-window_test",
+                "name": "aw-watcher-window_test",
+                "type": "currentwindow",
+                "client": "aw-watcher-window",
+                "hostname": "test-host",
+                "created": current_time_iso,
+                "last_updated": current_time_iso,
             },
-            'aw-watcher-afk_test': {
-                'id': 'aw-watcher-afk_test',
-                'name': 'aw-watcher-afk_test',
-                'type': 'afkstatus',
-                'client': 'aw-watcher-afk',
-                'hostname': 'test-host',
-                'created': current_time_iso,
-                'last_updated': current_time_iso
+            "aw-watcher-afk_test": {
+                "id": "aw-watcher-afk_test",
+                "name": "aw-watcher-afk_test",
+                "type": "afkstatus",
+                "client": "aw-watcher-afk",
+                "hostname": "test-host",
+                "created": current_time_iso,
+                "last_updated": current_time_iso,
             },
-            'aw-watcher-web-chrome_test': {
-                'id': 'aw-watcher-web-chrome_test',
-                'name': 'aw-watcher-web-chrome_test',
-                'type': 'web.tab.current',
-                'client': 'aw-watcher-web-chrome',
-                'hostname': 'test-host',
-                'created': current_time_iso,
-                'last_updated': current_time_iso
+            "aw-watcher-web-chrome_test": {
+                "id": "aw-watcher-web-chrome_test",
+                "name": "aw-watcher-web-chrome_test",
+                "type": "web.tab.current",
+                "client": "aw-watcher-web-chrome",
+                "hostname": "test-host",
+                "created": current_time_iso,
+                "last_updated": current_time_iso,
             },
-            'aw-watcher-emacs_test': {
-                'id': 'aw-watcher-emacs_test',
-                'name': 'aw-watcher-emacs_test',
-                'type': 'app.editor.activity',
-                'client': 'aw-watcher-emacs',
-                'hostname': 'test-host',
-                'created': current_time_iso,
-                'last_updated': current_time_iso
-            }
+            "aw-watcher-emacs_test": {
+                "id": "aw-watcher-emacs_test",
+                "name": "aw-watcher-emacs_test",
+                "type": "app.editor.activity",
+                "client": "aw-watcher-emacs",
+                "hostname": "test-host",
+                "created": current_time_iso,
+                "last_updated": current_time_iso,
+            },
         }
 
         # Initialize empty event lists for each bucket
@@ -101,12 +107,8 @@ class FixtureDataBuilder:
             self.events[bucket_id] = []
 
     def add_window_event(
-        self,
-        app: str,
-        title: str,
-        duration: int | timedelta,
-        timestamp: datetime | None = None
-    ) -> 'FixtureDataBuilder':
+        self, app: str, title: str, duration: int | timedelta, timestamp: datetime | None = None
+    ) -> "FixtureDataBuilder":
         """
         Add a window event.
 
@@ -125,26 +127,20 @@ class FixtureDataBuilder:
         event_time = timestamp or self.current_time
 
         event = {
-            'id': len(self.events['aw-watcher-window_test']) + 1,
-            'timestamp': event_time.isoformat(),
-            'duration': duration.total_seconds(),
-            'data': {
-                'app': app,
-                'title': title
-            }
+            "id": len(self.events["aw-watcher-window_test"]) + 1,
+            "timestamp": event_time.isoformat(),
+            "duration": duration.total_seconds(),
+            "data": {"app": app, "title": title},
         }
 
-        self.events['aw-watcher-window_test'].append(event)
+        self.events["aw-watcher-window_test"].append(event)
         self.current_time = event_time + duration
 
         return self
 
     def add_afk_event(
-        self,
-        status: str,
-        duration: int | timedelta,
-        timestamp: datetime | None = None
-    ) -> 'FixtureDataBuilder':
+        self, status: str, duration: int | timedelta, timestamp: datetime | None = None
+    ) -> "FixtureDataBuilder":
         """
         Add an AFK status event.
 
@@ -162,25 +158,19 @@ class FixtureDataBuilder:
         event_time = timestamp or self.current_time
 
         event = {
-            'id': len(self.events['aw-watcher-afk_test']) + 1,
-            'timestamp': event_time.isoformat(),
-            'duration': duration.total_seconds(),
-            'data': {
-                'status': status
-            }
+            "id": len(self.events["aw-watcher-afk_test"]) + 1,
+            "timestamp": event_time.isoformat(),
+            "duration": duration.total_seconds(),
+            "data": {"status": status},
         }
 
-        self.events['aw-watcher-afk_test'].append(event)
+        self.events["aw-watcher-afk_test"].append(event)
 
         return self
 
     def add_browser_event(
-        self,
-        url: str,
-        title: str,
-        duration: int | timedelta,
-        timestamp: datetime | None = None
-    ) -> 'FixtureDataBuilder':
+        self, url: str, title: str, duration: int | timedelta, timestamp: datetime | None = None
+    ) -> "FixtureDataBuilder":
         """
         Add a browser event.
 
@@ -199,16 +189,13 @@ class FixtureDataBuilder:
         event_time = timestamp or self.current_time
 
         event = {
-            'id': len(self.events['aw-watcher-web-chrome_test']) + 1,
-            'timestamp': event_time.isoformat(),
-            'duration': duration.total_seconds(),
-            'data': {
-                'url': url,
-                'title': title
-            }
+            "id": len(self.events["aw-watcher-web-chrome_test"]) + 1,
+            "timestamp": event_time.isoformat(),
+            "duration": duration.total_seconds(),
+            "data": {"url": url, "title": title},
         }
 
-        self.events['aw-watcher-web-chrome_test'].append(event)
+        self.events["aw-watcher-web-chrome_test"].append(event)
 
         return self
 
@@ -216,10 +203,10 @@ class FixtureDataBuilder:
         self,
         file_path: str,
         project: str,
-        language: str = 'python',
+        language: str = "python",
         duration: int | timedelta = 0,
-        timestamp: datetime | None = None
-    ) -> 'FixtureDataBuilder':
+        timestamp: datetime | None = None,
+    ) -> "FixtureDataBuilder":
         """
         Add an editor event.
 
@@ -239,21 +226,17 @@ class FixtureDataBuilder:
         event_time = timestamp or self.current_time
 
         event = {
-            'id': len(self.events['aw-watcher-emacs_test']) + 1,
-            'timestamp': event_time.isoformat(),
-            'duration': duration.total_seconds(),
-            'data': {
-                'file': file_path,
-                'project': project,
-                'language': language
-            }
+            "id": len(self.events["aw-watcher-emacs_test"]) + 1,
+            "timestamp": event_time.isoformat(),
+            "duration": duration.total_seconds(),
+            "data": {"file": file_path, "project": project, "language": language},
         }
 
-        self.events['aw-watcher-emacs_test'].append(event)
+        self.events["aw-watcher-emacs_test"].append(event)
 
         return self
 
-    def set_time(self, new_time: datetime) -> 'FixtureDataBuilder':
+    def set_time(self, new_time: datetime) -> "FixtureDataBuilder":
         """
         Set the current time for subsequent events.
 
@@ -266,7 +249,7 @@ class FixtureDataBuilder:
         self.current_time = new_time
         return self
 
-    def advance_time(self, delta: int | timedelta) -> 'FixtureDataBuilder':
+    def advance_time(self, delta: int | timedelta) -> "FixtureDataBuilder":
         """
         Advance the current time by a delta.
 
@@ -290,16 +273,16 @@ class FixtureDataBuilder:
             Dictionary with buckets and events suitable for loading
         """
         return {
-            'metadata': {
-                'export_time': datetime.now(UTC).isoformat(),
-                'start_time': self.start_time.isoformat(),
-                'end_time': self.current_time.isoformat(),
-                'duration_seconds': (self.current_time - self.start_time).total_seconds(),
-                'anonymized': False,
-                'test_data': True
+            "metadata": {
+                "export_time": datetime.now(UTC).isoformat(),
+                "start_time": self.start_time.isoformat(),
+                "end_time": self.current_time.isoformat(),
+                "duration_seconds": (self.current_time - self.start_time).total_seconds(),
+                "anonymized": False,
+                "test_data": True,
             },
-            'buckets': self.buckets,
-            'events': self.events
+            "buckets": self.buckets,
+            "events": self.events,
         }
 
 
@@ -310,14 +293,19 @@ def create_simple_work_session():
     Returns:
         Test data for a typical work session
     """
-    return (FixtureDataBuilder()
-        .add_afk_event('not-afk', 600)
-        .add_window_event('vscode', 'main.py - Visual Studio Code', 600)
-        .add_editor_event('/home/user/project/main.py', 'project', 'python', 600)
-        .add_browser_event('https://docs.python.org/3/library/datetime.html',
-                          'datetime — Python Documentation', 300)
-        .add_window_event('chrome', 'datetime — Python Documentation', 300)
-        .build())
+    return (
+        FixtureDataBuilder()
+        .add_afk_event("not-afk", 600)
+        .add_window_event("vscode", "main.py - Visual Studio Code", 600)
+        .add_editor_event("/home/user/project/main.py", "project", "python", 600)
+        .add_browser_event(
+            "https://docs.python.org/3/library/datetime.html",
+            "datetime — Python Documentation",
+            300,
+        )
+        .add_window_event("chrome", "datetime — Python Documentation", 300)
+        .build()
+    )
 
 
 def create_afk_transition_fixture():
@@ -327,9 +315,11 @@ def create_afk_transition_fixture():
     Returns:
         Test data for AFK transition scenario
     """
-    return (FixtureDataBuilder()
-        .add_window_event('vscode', 'main.py', 300)  # 5 min work
-        .add_afk_event('not-afk', 300)
+    return (
+        FixtureDataBuilder()
+        .add_window_event("vscode", "main.py", 300)  # 5 min work
+        .add_afk_event("not-afk", 300)
         .advance_time(0)  # Reset to same time for AFK event
-        .add_afk_event('afk', 300)  # Goes AFK after 5 min
-        .build())
+        .add_afk_event("afk", 300)  # Goes AFK after 5 min
+        .build()
+    )

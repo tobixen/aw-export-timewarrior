@@ -175,7 +175,7 @@ class TestStateManagerInitialization:
             afk_state=AfkState.ACTIVE,
             manual_tracking=False,
             stats=stats,
-            enable_validation=False
+            enable_validation=False,
         )
 
         assert sm.last_tick == now
@@ -295,7 +295,7 @@ class TestTimeBounds:
         sm.update_time_bounds(
             last_tick=now,
             last_known_tick=now - timedelta(minutes=5),
-            last_start_time=now - timedelta(minutes=10)
+            last_start_time=now - timedelta(minutes=10),
         )
 
         assert sm.last_tick == now
@@ -308,10 +308,7 @@ class TestTimeBounds:
         now = datetime.now(UTC)
 
         with pytest.raises(ValueError, match="last_start_time.*last_known_tick"):
-            sm.update_time_bounds(
-                last_start_time=now,
-                last_known_tick=now - timedelta(seconds=10)
-            )
+            sm.update_time_bounds(last_start_time=now, last_known_tick=now - timedelta(seconds=10))
 
     def test_time_bounds_validation_known_before_tick(self) -> None:
         """Test that last_known_tick must be <= last_tick."""
@@ -319,10 +316,7 @@ class TestTimeBounds:
         now = datetime.now(UTC)
 
         with pytest.raises(ValueError, match="last_known_tick.*last_tick"):
-            sm.update_time_bounds(
-                last_known_tick=now,
-                last_tick=now - timedelta(seconds=10)
-            )
+            sm.update_time_bounds(last_known_tick=now, last_tick=now - timedelta(seconds=10))
 
     def test_time_bounds_validation_all_in_order(self) -> None:
         """Test validation of complete time ordering."""
@@ -333,7 +327,7 @@ class TestTimeBounds:
             sm.update_time_bounds(
                 last_start_time=now,
                 last_known_tick=now - timedelta(minutes=5),
-                last_tick=now - timedelta(minutes=10)
+                last_tick=now - timedelta(minutes=10),
             )
 
     def test_valid_time_bounds_accepted(self) -> None:
@@ -345,7 +339,7 @@ class TestTimeBounds:
         sm.update_time_bounds(
             last_start_time=now - timedelta(minutes=10),
             last_known_tick=now - timedelta(minutes=5),
-            last_tick=now
+            last_tick=now,
         )
 
         assert sm.last_start_time == now - timedelta(minutes=10)
@@ -358,10 +352,7 @@ class TestTimeBounds:
         now = datetime.now(UTC)
 
         # This would normally raise, but validation is disabled
-        sm.update_time_bounds(
-            last_start_time=now,
-            last_known_tick=now - timedelta(seconds=10)
-        )
+        sm.update_time_bounds(last_start_time=now, last_known_tick=now - timedelta(seconds=10))
 
         assert sm.last_start_time == now
         assert sm.last_known_tick == now - timedelta(seconds=10)
@@ -392,10 +383,7 @@ class TestTimeQueries:
         sm = StateManager()
         now = datetime.now(UTC)
 
-        sm.update_time_bounds(
-            last_known_tick=now - timedelta(minutes=10),
-            last_tick=now
-        )
+        sm.update_time_bounds(last_known_tick=now - timedelta(minutes=10), last_tick=now)
 
         assert sm.time_since_last_export() == timedelta(minutes=10)
 
@@ -409,10 +397,7 @@ class TestTimeQueries:
         sm = StateManager()
         now = datetime.now(UTC)
 
-        sm.update_time_bounds(
-            last_start_time=now - timedelta(minutes=15),
-            last_tick=now
-        )
+        sm.update_time_bounds(last_start_time=now - timedelta(minutes=15), last_tick=now)
 
         assert sm.time_since_last_start() == timedelta(minutes=15)
 
@@ -512,12 +497,7 @@ class TestRecordExport:
         sm.stats.add_tag_time("work", timedelta(minutes=5))
 
         # Record export without resetting stats
-        sm.record_export(
-            now - timedelta(minutes=10),
-            now,
-            {"work"},
-            reset_stats=False
-        )
+        sm.record_export(now - timedelta(minutes=10), now, {"work"}, reset_stats=False)
 
         # Stats should NOT be reset
         assert sm.stats.tags_accumulated_time["work"] == timedelta(minutes=5)
@@ -538,7 +518,7 @@ class TestRecordExport:
             now,
             {"work", "coding"},
             retain_tags={"work", "coding"},
-            stickyness_factor=0.5
+            stickyness_factor=0.5,
         )
 
         # Retained tags should have half their time
@@ -556,21 +536,11 @@ class TestRecordExport:
         assert sm.manual_tracking is True
 
         # Set to False
-        sm.record_export(
-            now - timedelta(minutes=10),
-            now,
-            {"work"},
-            manual=False
-        )
+        sm.record_export(now - timedelta(minutes=10), now, {"work"}, manual=False)
         assert sm.manual_tracking is False
 
         # Set back to True
-        sm.record_export(
-            now - timedelta(minutes=5),
-            now,
-            {"work"},
-            manual=True
-        )
+        sm.record_export(now - timedelta(minutes=5), now, {"work"}, manual=True)
         assert sm.manual_tracking is True
 
 
@@ -697,7 +667,7 @@ class TestStateSummary:
         sm.update_time_bounds(
             last_tick=now,
             last_known_tick=now - timedelta(minutes=10),
-            last_start_time=now - timedelta(minutes=15)
+            last_start_time=now - timedelta(minutes=15),
         )
         sm.stats.add_tag_time("work", timedelta(minutes=5))
         sm.stats.add_tag_time("coding", timedelta(minutes=3))
@@ -744,11 +714,7 @@ class TestEdgeCases:
         now = datetime.now(UTC)
 
         # Record export with very long interval (30 days)
-        sm.record_export(
-            now - timedelta(days=30),
-            now,
-            {"work"}
-        )
+        sm.record_export(now - timedelta(days=30), now, {"work"})
 
         assert sm.time_since_last_start() == timedelta(days=30)
 
@@ -780,5 +746,5 @@ class TestEdgeCases:
         assert summary["accumulated_tags"]["work"] == "0:05:00"
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

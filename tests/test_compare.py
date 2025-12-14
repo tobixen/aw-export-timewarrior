@@ -21,13 +21,13 @@ class TestTimewInterval:
             id=1,
             start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
             end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-            tags={'tag1'}
+            tags={"tag1"},
         )
         int2 = TimewInterval(
             id=2,
             start=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
             end=datetime(2025, 1, 1, 11, 30, 0, tzinfo=UTC),
-            tags={'tag2'}
+            tags={"tag2"},
         )
         assert int1.overlaps(int2)
         assert int2.overlaps(int1)
@@ -38,13 +38,13 @@ class TestTimewInterval:
             id=1,
             start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
             end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-            tags={'tag1'}
+            tags={"tag1"},
         )
         int2 = TimewInterval(
             id=2,
             start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
             end=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
-            tags={'tag2'}
+            tags={"tag2"},
         )
         assert not int1.overlaps(int2)
         assert not int2.overlaps(int1)
@@ -55,7 +55,7 @@ class TestTimewInterval:
             id=1,
             start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
             end=datetime(2025, 1, 1, 11, 30, 0, tzinfo=UTC),
-            tags={'tag1'}
+            tags={"tag1"},
         )
         assert interval.duration() == timedelta(hours=1, minutes=30)
 
@@ -69,17 +69,17 @@ class TestMergeConsecutiveIntervals:
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
-                tags={'4work', 'python', '~aw'}
+                tags={"4work", "python", "~aw"},
             ),
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
-                tags={'4work', 'python', '~aw'}
+                tags={"4work", "python", "~aw"},
             ),
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC),
-                tags={'4work', 'python', '~aw'}
+                tags={"4work", "python", "~aw"},
             ),
         ]
 
@@ -88,7 +88,7 @@ class TestMergeConsecutiveIntervals:
         assert len(merged) == 1
         assert merged[0].start == datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
         assert merged[0].end == datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC)
-        assert merged[0].tags == {'4work', 'python', '~aw'}
+        assert merged[0].tags == {"4work", "python", "~aw"}
 
     def test_no_merge_different_tags(self) -> None:
         """Test that intervals with different tags are not merged."""
@@ -96,20 +96,20 @@ class TestMergeConsecutiveIntervals:
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
-                tags={'4work', 'python', '~aw'}
+                tags={"4work", "python", "~aw"},
             ),
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
-                tags={'4work', 'java', '~aw'}  # Different tag
+                tags={"4work", "java", "~aw"},  # Different tag
             ),
         ]
 
         merged = merge_consecutive_intervals(intervals)
 
         assert len(merged) == 2
-        assert merged[0].tags == {'4work', 'python', '~aw'}
-        assert merged[1].tags == {'4work', 'java', '~aw'}
+        assert merged[0].tags == {"4work", "python", "~aw"}
+        assert merged[1].tags == {"4work", "java", "~aw"}
 
     def test_no_merge_non_consecutive(self) -> None:
         """Test that non-consecutive intervals are not merged."""
@@ -117,12 +117,12 @@ class TestMergeConsecutiveIntervals:
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
-                tags={'4work', 'python', '~aw'}
+                tags={"4work", "python", "~aw"},
             ),
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 20, 0, tzinfo=UTC),  # Gap of 5 minutes
                 end=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
-                tags={'4work', 'python', '~aw'}
+                tags={"4work", "python", "~aw"},
             ),
         ]
 
@@ -137,29 +137,29 @@ class TestMergeConsecutiveIntervals:
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
-                tags={'4work', 'python', '~aw'}
+                tags={"4work", "python", "~aw"},
             ),
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 15, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
-                tags={'4work', 'python', '~aw'}
+                tags={"4work", "python", "~aw"},
             ),
             # This one has different tags, so starts a new group
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC),
-                tags={'4work', 'java', '~aw'}
+                tags={"4work", "java", "~aw"},
             ),
             # These two should merge with each other
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                tags={'4me', 'browsing', '~aw'}
+                tags={"4me", "browsing", "~aw"},
             ),
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 15, 0, tzinfo=UTC),
-                tags={'4me', 'browsing', '~aw'}
+                tags={"4me", "browsing", "~aw"},
             ),
         ]
 
@@ -169,15 +169,15 @@ class TestMergeConsecutiveIntervals:
         # First merged interval: 10:00 - 10:30
         assert merged[0].start == datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
         assert merged[0].end == datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC)
-        assert merged[0].tags == {'4work', 'python', '~aw'}
+        assert merged[0].tags == {"4work", "python", "~aw"}
         # Second interval: 10:30 - 10:45 (different tags)
         assert merged[1].start == datetime(2025, 1, 1, 10, 30, 0, tzinfo=UTC)
         assert merged[1].end == datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC)
-        assert merged[1].tags == {'4work', 'java', '~aw'}
+        assert merged[1].tags == {"4work", "java", "~aw"}
         # Third merged interval: 10:45 - 11:15
         assert merged[2].start == datetime(2025, 1, 1, 10, 45, 0, tzinfo=UTC)
         assert merged[2].end == datetime(2025, 1, 1, 11, 15, 0, tzinfo=UTC)
-        assert merged[2].tags == {'4me', 'browsing', '~aw'}
+        assert merged[2].tags == {"4me", "browsing", "~aw"}
 
     def test_empty_list(self) -> None:
         """Test that an empty list returns an empty list."""
@@ -190,7 +190,7 @@ class TestMergeConsecutiveIntervals:
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                tags={'4work', 'python', '~aw'}
+                tags={"4work", "python", "~aw"},
             )
         ]
 
@@ -212,23 +212,23 @@ class TestCompareIntervals:
                 id=1,
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                tags={'4work', 'python', 'not-afk'}
+                tags={"4work", "python", "not-afk"},
             )
         ]
         suggested_intervals = [
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                tags={'4work', 'python', 'not-afk'}
+                tags={"4work", "python", "not-afk"},
             )
         ]
 
         result = compare_intervals(timew_intervals, suggested_intervals)
 
-        assert len(result['matching']) == 1
-        assert len(result['different_tags']) == 0
-        assert len(result['missing']) == 0
-        assert len(result['extra']) == 0
+        assert len(result["matching"]) == 1
+        assert len(result["different_tags"]) == 0
+        assert len(result["missing"]) == 0
+        assert len(result["extra"]) == 0
 
     def test_different_tags(self) -> None:
         """Test intervals with different tags."""
@@ -237,23 +237,23 @@ class TestCompareIntervals:
                 id=1,
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                tags={'4work', 'python'}
+                tags={"4work", "python"},
             )
         ]
         suggested_intervals = [
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                tags={'4work', 'javascript'}  # Different tag
+                tags={"4work", "javascript"},  # Different tag
             )
         ]
 
         result = compare_intervals(timew_intervals, suggested_intervals)
 
-        assert len(result['matching']) == 0
-        assert len(result['different_tags']) == 1
-        assert len(result['missing']) == 0
-        assert len(result['extra']) == 0
+        assert len(result["matching"]) == 0
+        assert len(result["different_tags"]) == 1
+        assert len(result["missing"]) == 0
+        assert len(result["extra"]) == 0
 
     def test_missing_interval(self) -> None:
         """Test suggested interval missing from timew."""
@@ -262,16 +262,16 @@ class TestCompareIntervals:
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                tags={'4work', 'python'}
+                tags={"4work", "python"},
             )
         ]
 
         result = compare_intervals(timew_intervals, suggested_intervals)
 
-        assert len(result['matching']) == 0
-        assert len(result['different_tags']) == 0
-        assert len(result['missing']) == 1
-        assert len(result['extra']) == 0
+        assert len(result["matching"]) == 0
+        assert len(result["different_tags"]) == 0
+        assert len(result["missing"]) == 1
+        assert len(result["extra"]) == 0
 
     def test_extra_interval(self) -> None:
         """Test interval in timew but not suggested."""
@@ -280,17 +280,17 @@ class TestCompareIntervals:
                 id=1,
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                tags={'4work', 'python'}
+                tags={"4work", "python"},
             )
         ]
         suggested_intervals = []
 
         result = compare_intervals(timew_intervals, suggested_intervals)
 
-        assert len(result['matching']) == 0
-        assert len(result['different_tags']) == 0
-        assert len(result['missing']) == 0
-        assert len(result['extra']) == 1
+        assert len(result["matching"]) == 0
+        assert len(result["different_tags"]) == 0
+        assert len(result["missing"]) == 0
+        assert len(result["extra"]) == 1
 
     def test_complex_scenario(self) -> None:
         """Test a complex scenario with multiple types of differences."""
@@ -300,21 +300,21 @@ class TestCompareIntervals:
                 id=1,
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                tags={'4work', 'python'}
+                tags={"4work", "python"},
             ),
             # This one has different tags
             TimewInterval(
                 id=2,
                 start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
-                tags={'4work', 'java'}
+                tags={"4work", "java"},
             ),
             # This one is extra
             TimewInterval(
                 id=3,
                 start=datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 14, 0, 0, tzinfo=UTC),
-                tags={'manual-entry'}
+                tags={"manual-entry"},
             ),
         ]
 
@@ -323,19 +323,19 @@ class TestCompareIntervals:
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                tags={'4work', 'python'}
+                tags={"4work", "python"},
             ),
             # Different tags from second timew interval
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
-                tags={'4work', 'python'}  # Different from timew
+                tags={"4work", "python"},  # Different from timew
             ),
             # Missing from timew
             SuggestedInterval(
                 start=datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC),
-                tags={'4me', 'browsing'}
+                tags={"4me", "browsing"},
             ),
         ]
 
@@ -346,10 +346,10 @@ class TestCompareIntervals:
         # - Second pair: different tags (11-12)
         # - Third pair: timew (13-14) matches suggested (12-13) due to proximity/overlap
         # So we get 1 matching, 2 different_tags, 0 missing, 0 extra
-        assert len(result['matching']) == 1
-        assert len(result['different_tags']) == 2  # Second and third pairs
-        assert len(result['missing']) == 0
-        assert len(result['extra']) == 0
+        assert len(result["matching"]) == 1
+        assert len(result["different_tags"]) == 2  # Second and third pairs
+        assert len(result["missing"]) == 0
+        assert len(result["extra"]) == 0
 
 
 class TestFormatDiffOutput:
@@ -358,16 +358,16 @@ class TestFormatDiffOutput:
     def test_format_empty_comparison(self) -> None:
         """Test formatting with no differences."""
         comparison = {
-            'matching': [],
-            'different_tags': [],
-            'missing': [],
-            'extra': [],
+            "matching": [],
+            "different_tags": [],
+            "missing": [],
+            "extra": [],
         }
 
         output = format_diff_output(comparison, verbose=False)
 
-        assert 'Summary:' in output
-        assert 'Matching intervals:      0' in output
+        assert "Summary:" in output
+        assert "Matching intervals:      0" in output
 
     def test_format_with_differences(self) -> None:
         """Test formatting with differences."""
@@ -375,34 +375,30 @@ class TestFormatDiffOutput:
         missing_end = datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC)
 
         comparison = {
-            'matching': [(
-                TimewInterval(
-                    id=1,
-                    start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
-                    end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                    tags={'4work'}
-                ),
-                SuggestedInterval(
-                    start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
-                    end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
-                    tags={'4work'}
-                )
-            )],
-            'different_tags': [],
-            'missing': [
-                SuggestedInterval(
-                    start=missing_start,
-                    end=missing_end,
-                    tags={'4me'}
+            "matching": [
+                (
+                    TimewInterval(
+                        id=1,
+                        start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                        tags={"4work"},
+                    ),
+                    SuggestedInterval(
+                        start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                        tags={"4work"},
+                    ),
                 )
             ],
-            'extra': [],
+            "different_tags": [],
+            "missing": [SuggestedInterval(start=missing_start, end=missing_end, tags={"4me"})],
+            "extra": [],
         }
 
         output = format_diff_output(comparison, verbose=False)
 
-        assert 'Matching intervals:      1' in output
-        assert 'Missing from TimeWarrior: 1' in output
+        assert "Matching intervals:      1" in output
+        assert "Missing from TimeWarrior: 1" in output
         # Times are now displayed in local time, so convert for assertion
         expected_time = f"{missing_start.astimezone().strftime('%H:%M:%S')} - {missing_end.astimezone().strftime('%H:%M:%S')}"
         assert expected_time in output  # Missing interval time (in local time)
@@ -414,116 +410,116 @@ class TestGenerateFixCommands:
     def test_generate_track_command_for_missing(self) -> None:
         """Test that missing intervals generate track commands."""
         comparison = {
-            'matching': [],
-            'different_tags': [],
-            'missing': [
+            "matching": [],
+            "different_tags": [],
+            "missing": [
                 SuggestedInterval(
                     start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
                     end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
-                    tags={'4work', 'python', '~aw'}
+                    tags={"4work", "python", "~aw"},
                 )
             ],
-            'extra': [],
+            "extra": [],
         }
 
         commands = generate_fix_commands(comparison)
 
         assert len(commands) == 1
-        assert commands[0].startswith('timew track')
-        assert '4work' in commands[0]
-        assert 'python' in commands[0]
-        assert '~aw' in commands[0]
-        assert ':adjust' in commands[0]
+        assert commands[0].startswith("timew track")
+        assert "4work" in commands[0]
+        assert "python" in commands[0]
+        assert "~aw" in commands[0]
+        assert ":adjust" in commands[0]
 
     def test_generate_retag_command_with_comments(self) -> None:
         """Test that retag commands include timestamp and old tags in comments."""
         comparison = {
-            'matching': [],
-            'different_tags': [
+            "matching": [],
+            "different_tags": [
                 (
                     TimewInterval(
                         id=42,
                         start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
                         end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
-                        tags={'4work', 'java', '~aw'}  # Has ~aw tag (auto-generated)
+                        tags={"4work", "java", "~aw"},  # Has ~aw tag (auto-generated)
                     ),
                     SuggestedInterval(
                         start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
                         end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
-                        tags={'4work', 'python', '~aw'}
-                    )
+                        tags={"4work", "python", "~aw"},
+                    ),
                 )
             ],
-            'missing': [],
-            'extra': [],
+            "missing": [],
+            "extra": [],
         }
 
         commands = generate_fix_commands(comparison)
 
         assert len(commands) == 1
         # Should NOT be commented out (has ~aw tag)
-        assert not commands[0].startswith('#')
-        assert 'timew retag @42' in commands[0]
-        assert '4work' in commands[0]
-        assert 'python' in commands[0]
+        assert not commands[0].startswith("#")
+        assert "timew retag @42" in commands[0]
+        assert "4work" in commands[0]
+        assert "python" in commands[0]
         # Should include comment with timestamp and old tags
-        assert '# 2025-12-10' in commands[0]
-        assert 'old tags:' in commands[0]
-        assert 'java' in commands[0]  # Old tag in comment
+        assert "# 2025-12-10" in commands[0]
+        assert "old tags:" in commands[0]
+        assert "java" in commands[0]  # Old tag in comment
 
     def test_retag_command_commented_for_manual_entries(self) -> None:
         """Test that retag commands for manual entries (no ~aw tag) are commented out."""
         comparison = {
-            'matching': [],
-            'different_tags': [
+            "matching": [],
+            "different_tags": [
                 (
                     TimewInterval(
                         id=99,
                         start=datetime(2025, 12, 10, 14, 30, 0, tzinfo=UTC),
                         end=datetime(2025, 12, 10, 15, 0, 0, tzinfo=UTC),
-                        tags={'manual', 'meeting'}  # NO ~aw tag (manually entered)
+                        tags={"manual", "meeting"},  # NO ~aw tag (manually entered)
                     ),
                     SuggestedInterval(
                         start=datetime(2025, 12, 10, 14, 30, 0, tzinfo=UTC),
                         end=datetime(2025, 12, 10, 15, 0, 0, tzinfo=UTC),
-                        tags={'4work', 'meeting', '~aw'}
-                    )
+                        tags={"4work", "meeting", "~aw"},
+                    ),
                 )
             ],
-            'missing': [],
-            'extra': [],
+            "missing": [],
+            "extra": [],
         }
 
         commands = generate_fix_commands(comparison)
 
         assert len(commands) == 1
         # Should be commented out (no ~aw tag in original)
-        assert commands[0].startswith('# timew retag')
-        assert '@99' in commands[0]
+        assert commands[0].startswith("# timew retag")
+        assert "@99" in commands[0]
         # Should still include the informational comment
-        assert '# 2025-12-10' in commands[0]
-        assert 'old tags:' in commands[0]
-        assert 'manual' in commands[0]
-        assert 'meeting' in commands[0]
+        assert "# 2025-12-10" in commands[0]
+        assert "old tags:" in commands[0]
+        assert "manual" in commands[0]
+        assert "meeting" in commands[0]
 
     def test_multiple_commands_mixed(self) -> None:
         """Test generating multiple commands with both auto and manual entries."""
         comparison = {
-            'matching': [],
-            'different_tags': [
+            "matching": [],
+            "different_tags": [
                 # Auto-generated (has ~aw)
                 (
                     TimewInterval(
                         id=1,
                         start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
                         end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
-                        tags={'old-tag', '~aw'}
+                        tags={"old-tag", "~aw"},
                     ),
                     SuggestedInterval(
                         start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
                         end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
-                        tags={'new-tag', '~aw'}
-                    )
+                        tags={"new-tag", "~aw"},
+                    ),
                 ),
                 # Manual entry (no ~aw)
                 (
@@ -531,48 +527,48 @@ class TestGenerateFixCommands:
                         id=2,
                         start=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
                         end=datetime(2025, 12, 10, 12, 0, 0, tzinfo=UTC),
-                        tags={'manual'}
+                        tags={"manual"},
                     ),
                     SuggestedInterval(
                         start=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
                         end=datetime(2025, 12, 10, 12, 0, 0, tzinfo=UTC),
-                        tags={'auto', '~aw'}
-                    )
+                        tags={"auto", "~aw"},
+                    ),
                 ),
             ],
-            'missing': [
+            "missing": [
                 SuggestedInterval(
                     start=datetime(2025, 12, 10, 12, 0, 0, tzinfo=UTC),
                     end=datetime(2025, 12, 10, 13, 0, 0, tzinfo=UTC),
-                    tags={'missing', '~aw'}
+                    tags={"missing", "~aw"},
                 )
             ],
-            'extra': [],
+            "extra": [],
         }
 
         commands = generate_fix_commands(comparison)
 
         assert len(commands) == 3
         # First should be track command (for missing)
-        assert commands[0].startswith('timew track')
+        assert commands[0].startswith("timew track")
         # Second should be uncommented retag (has ~aw)
-        assert commands[1].startswith('timew retag @1')
-        assert not commands[1].startswith('# timew')
+        assert commands[1].startswith("timew retag @1")
+        assert not commands[1].startswith("# timew")
         # Third should be commented retag (no ~aw)
-        assert commands[2].startswith('# timew retag @2')
+        assert commands[2].startswith("# timew retag @2")
 
     def test_generate_delete_command_for_extra_auto(self) -> None:
         """Test that extra auto-generated intervals get delete commands."""
         comparison = {
-            'matching': [],
-            'different_tags': [],
-            'missing': [],
-            'extra': [
+            "matching": [],
+            "different_tags": [],
+            "missing": [],
+            "extra": [
                 TimewInterval(
                     id=42,
                     start=datetime(2025, 12, 10, 14, 0, 0, tzinfo=UTC),
                     end=datetime(2025, 12, 10, 15, 0, 0, tzinfo=UTC),
-                    tags={'UNKNOWN', 'not-afk', '~aw'}
+                    tags={"UNKNOWN", "not-afk", "~aw"},
                 )
             ],
         }
@@ -581,23 +577,23 @@ class TestGenerateFixCommands:
 
         assert len(commands) == 1
         # Should generate uncommented delete command (has ~aw)
-        assert commands[0].startswith('timew delete @42 :yes')
-        assert not commands[0].startswith('#')
-        assert '# 2025-12-10' in commands[0]  # Check date, not exact time (timezone conversion)
-        assert 'tags: UNKNOWN not-afk ~aw' in commands[0]
+        assert commands[0].startswith("timew delete @42 :yes")
+        assert not commands[0].startswith("#")
+        assert "# 2025-12-10" in commands[0]  # Check date, not exact time (timezone conversion)
+        assert "tags: UNKNOWN not-afk ~aw" in commands[0]
 
     def test_generate_delete_command_for_extra_manual(self) -> None:
         """Test that extra manually-entered intervals get commented delete commands."""
         comparison = {
-            'matching': [],
-            'different_tags': [],
-            'missing': [],
-            'extra': [
+            "matching": [],
+            "different_tags": [],
+            "missing": [],
+            "extra": [
                 TimewInterval(
                     id=99,
                     start=datetime(2025, 12, 10, 16, 0, 0, tzinfo=UTC),
                     end=datetime(2025, 12, 10, 17, 0, 0, tzinfo=UTC),
-                    tags={'manual-work', 'meeting'}  # No ~aw tag
+                    tags={"manual-work", "meeting"},  # No ~aw tag
                 )
             ],
         }
@@ -606,30 +602,30 @@ class TestGenerateFixCommands:
 
         assert len(commands) == 1
         # Should generate commented delete command (no ~aw)
-        assert commands[0].startswith('# timew delete @99 :yes')
-        assert '# 2025-12-10' in commands[0]  # Check date, not exact time (timezone conversion)
-        assert 'tags: manual-work meeting' in commands[0]
+        assert commands[0].startswith("# timew delete @99 :yes")
+        assert "# 2025-12-10" in commands[0]  # Check date, not exact time (timezone conversion)
+        assert "tags: manual-work meeting" in commands[0]
 
     def test_generate_delete_commands_mixed(self) -> None:
         """Test generating delete commands for both auto and manual extra intervals."""
         comparison = {
-            'matching': [],
-            'different_tags': [],
-            'missing': [],
-            'extra': [
+            "matching": [],
+            "different_tags": [],
+            "missing": [],
+            "extra": [
                 # Auto-generated
                 TimewInterval(
                     id=1,
                     start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
                     end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
-                    tags={'auto', '~aw'}
+                    tags={"auto", "~aw"},
                 ),
                 # Manual
                 TimewInterval(
                     id=2,
                     start=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
                     end=datetime(2025, 12, 10, 12, 0, 0, tzinfo=UTC),
-                    tags={'manual'}
+                    tags={"manual"},
                 ),
             ],
         }
@@ -638,7 +634,7 @@ class TestGenerateFixCommands:
 
         assert len(commands) == 2
         # First should be uncommented delete (has ~aw)
-        assert commands[0].startswith('timew delete @1 :yes')
-        assert not commands[0].startswith('#')
+        assert commands[0].startswith("timew delete @1 :yes")
+        assert not commands[0].startswith("#")
         # Second should be commented delete (no ~aw)
-        assert commands[1].startswith('# timew delete @2 :yes')
+        assert commands[1].startswith("# timew delete @2 :yes")

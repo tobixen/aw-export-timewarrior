@@ -123,4 +123,3 @@ PS1="${PS1}"'\033]0;\u@\h:\w$(__git_ps1)\$ ${BASH_COMMAND}\007\]'
 ```
 
 Dependent on your setup, this may crash with existing provisions to set window title.  YMMV.
-

@@ -30,71 +30,75 @@ def create_aw_event(timestamp, duration, data):
 @pytest.fixture
 def mock_aw_client():
     """Fixture for mocked ActivityWatch client."""
-    with patch('aw_export_timewarrior.main.aw_client') as mock_aw:
+    with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
         mock_client = Mock()
 
         # Get current time for last_updated
         current_time = datetime.now(UTC).isoformat()
 
         mock_client.get_buckets.return_value = {
-            'aw-watcher-window_test': {
-                'id': 'aw-watcher-window_test',
-                'client': 'aw-watcher-window',
-                'last_updated': current_time
+            "aw-watcher-window_test": {
+                "id": "aw-watcher-window_test",
+                "client": "aw-watcher-window",
+                "last_updated": current_time,
             },
-            'aw-watcher-afk_test': {
-                'id': 'aw-watcher-afk_test',
-                'client': 'aw-watcher-afk',
-                'last_updated': current_time
-            }
+            "aw-watcher-afk_test": {
+                "id": "aw-watcher-afk_test",
+                "client": "aw-watcher-afk",
+                "last_updated": current_time,
+            },
         }
-        mock_aw.ActivityWatchClient.return_value = mock_client
+        mock_aw_class.return_value = mock_client
         yield mock_client
 
 
 class TestGetTimewInfo:
     """Tests for get_timew_info function."""
 
-    @patch('subprocess.check_output')
+    @patch("subprocess.check_output")
     def test_get_timew_info_parses_json(self, mock_subprocess: Mock) -> None:
         """Test that get_timew_info parses timewarrior JSON correctly."""
-        mock_subprocess.return_value = b'''{
+        mock_subprocess.return_value = b"""{
             "id": 1,
             "start": "20250528T140000Z",
             "tags": ["4work", "programming", "python"]
-        }'''
+        }"""
 
         result = get_timew_info()
 
-        assert result['id'] == 1
-        assert result['start'] == "20250528T140000Z"
-        assert result['tags'] == {'4work', 'programming', 'python'}
-        assert 'start_dt' in result
-        assert isinstance(result['start_dt'], datetime)
-        assert result['start_dt'].tzinfo == UTC
+        assert result["id"] == 1
+        assert result["start"] == "20250528T140000Z"
+        assert result["tags"] == {"4work", "programming", "python"}
+        assert "start_dt" in result
+        assert isinstance(result["start_dt"], datetime)
+        assert result["start_dt"].tzinfo == UTC
 
-    @patch('subprocess.check_output')
+    @patch("subprocess.check_output")
     def test_get_timew_info_command(self, mock_subprocess: Mock) -> None:
         """Test that correct timewarrior command is called."""
         mock_subprocess.return_value = b'{"id": 1, "start": "20250528T140000Z", "tags": []}'
 
         get_timew_info()
 
-        mock_subprocess.assert_called_once_with(["timew", "get", "dom.active.json"], stderr=subprocess.DEVNULL)
+        mock_subprocess.assert_called_once_with(
+            ["timew", "get", "dom.active.json"], stderr=subprocess.DEVNULL
+        )
 
-    @patch('subprocess.check_output')
+    @patch("subprocess.check_output")
     def test_get_timew_info_no_active_tracking(self, mock_subprocess: Mock) -> None:
         """Test that get_timew_info returns None when there's no active tracking."""
-        mock_subprocess.side_effect = subprocess.CalledProcessError(255, ['timew', 'get', 'dom.active.json'])
+        mock_subprocess.side_effect = subprocess.CalledProcessError(
+            255, ["timew", "get", "dom.active.json"]
+        )
 
         result = get_timew_info()
 
         assert result is None
 
-    @patch('subprocess.check_output')
+    @patch("subprocess.check_output")
     def test_get_timew_info_invalid_json(self, mock_subprocess: Mock) -> None:
         """Test that get_timew_info returns None when timew returns invalid JSON."""
-        mock_subprocess.return_value = b'invalid json'
+        mock_subprocess.return_value = b"invalid json"
 
         result = get_timew_info()
 
@@ -104,29 +108,31 @@ class TestGetTimewInfo:
 class TestTimewRun:
     """Tests for timew_run function."""
 
-    @patch('subprocess.run')
-    @patch.dict('os.environ', {'AW2TW_GRACE_TIME': '0.1'})
+    @patch("subprocess.run")
+    @patch.dict("os.environ", {"AW2TW_GRACE_TIME": "0.1"})
     def test_timew_run_executes_command(self, mock_subprocess: Mock) -> None:
         """Test that timew_run executes the correct command."""
         import tests.conftest
+
         initial_sleep_count = tests.conftest.sleep_counter
 
-        timew_run(['start', '4work', 'programming'])
+        timew_run(["start", "4work", "programming"])
 
         mock_subprocess.assert_called_once()
         call_args = mock_subprocess.call_args[0][0]
-        assert call_args == ['timew', 'start', '4work', 'programming']
+        assert call_args == ["timew", "start", "4work", "programming"]
         # Sleep should have been called (monkeypatched by conftest)
         assert tests.conftest.sleep_counter == initial_sleep_count + 1
 
-    @patch('subprocess.run')
-    @patch.dict('os.environ', {'AW2TW_GRACE_TIME': '0.1'})
+    @patch("subprocess.run")
+    @patch.dict("os.environ", {"AW2TW_GRACE_TIME": "0.1"})
     def test_timew_run_waits_grace_time(self, mock_subprocess: Mock) -> None:
         """Test that timew_run waits the grace period."""
         import tests.conftest
+
         initial_sleep_count = tests.conftest.sleep_counter
 
-        timew_run(['stop'])
+        timew_run(["stop"])
 
         # Sleep should have been called once (monkeypatched by conftest)
         assert tests.conftest.sleep_counter == initial_sleep_count + 1
@@ -135,35 +141,29 @@ class TestTimewRun:
 class TestTimewRetag:
     """Tests for timew_retag function."""
 
-    @patch('aw_export_timewarrior.main.config', {
-        'exclusive': {},
-        'tags': {
-            'work_tags': {
-                'source_tags': ['programming'],
-                'add': ['4work']
-            }
-        }
-    })
-    @patch('aw_export_timewarrior.main.timew_run')
-    @patch('aw_export_timewarrior.main.get_timew_info')
-    def test_timew_retag_applies_rules(
-        self,
-        mock_get_info: Mock,
-        mock_timew_run: Mock
-    ) -> None:
+    @patch(
+        "aw_export_timewarrior.main.config",
+        {
+            "exclusive": {},
+            "tags": {"work_tags": {"source_tags": ["programming"], "add": ["4work"]}},
+        },
+    )
+    @patch("aw_export_timewarrior.main.timew_run")
+    @patch("aw_export_timewarrior.main.get_timew_info")
+    def test_timew_retag_applies_rules(self, mock_get_info: Mock, mock_timew_run: Mock) -> None:
         """Test that timew_retag applies retagging rules."""
         initial_info = {
-            'id': 1,
-            'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            'tags': {'programming'}
+            "id": 1,
+            "start": "20250528T140000Z",
+            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
+            "tags": {"programming"},
         }
 
         retagged_info = {
-            'id': 1,
-            'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            'tags': {'programming', '4work'}
+            "id": 1,
+            "start": "20250528T140000Z",
+            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
+            "tags": {"programming", "4work"},
         }
 
         mock_get_info.return_value = retagged_info
@@ -173,24 +173,21 @@ class TestTimewRetag:
         # Should have called timew retag command
         mock_timew_run.assert_called_once()
         call_args = mock_timew_run.call_args[0][0]
-        assert call_args[0] == 'retag'
-        assert '4work' in call_args
-        assert 'programming' in call_args
+        assert call_args[0] == "retag"
+        assert "4work" in call_args
+        assert "programming" in call_args
 
         return result
 
-    @patch('aw_export_timewarrior.main.config', {
-        'exclusive': {},
-        'tags': {}
-    })
-    @patch('aw_export_timewarrior.main.timew_run')
+    @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
+    @patch("aw_export_timewarrior.main.timew_run")
     def test_timew_retag_no_changes_needed(self, mock_timew_run: Mock) -> None:
         """Test that timew_retag doesn't call timew if no changes needed."""
         timew_info = {
-            'id': 1,
-            'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            'tags': {'4work', 'programming'}
+            "id": 1,
+            "start": "20250528T140000Z",
+            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
+            "tags": {"4work", "programming"},
         }
 
         result = timew_retag(timew_info)
@@ -203,26 +200,22 @@ class TestTimewRetag:
 class TestEnsureTagExported:
     """Tests for ensure_tag_exported method."""
 
-    @patch('aw_export_timewarrior.main.config', {
-        'exclusive': {},
-        'tags': {}
-    })
-    def test_ensure_tag_exported_starts_new_tracking(
-        self,
-        mock_aw_client: Mock
-    ) -> None:
+    @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
+    def test_ensure_tag_exported_starts_new_tracking(self, mock_aw_client: Mock) -> None:
         """Test that ensure_tag_exported starts new timewarrior tracking."""
-        exporter = Exporter(enable_assert=False)  # Disable assertions for unit test with artificial timestamps
+        exporter = Exporter(
+            enable_assert=False
+        )  # Disable assertions for unit test with artificial timestamps
         exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
         exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
         exporter.state.set_afk_state(AfkState.ACTIVE)
         exporter.state.manual_tracking = False
 
         mock_timew_info = {
-            'id': 1,
-            'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            'tags': {'old', 'tags'}
+            "id": 1,
+            "start": "20250528T140000Z",
+            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
+            "tags": {"old", "tags"},
         }
 
         # Mock tracker methods
@@ -231,34 +224,29 @@ class TestEnsureTagExported:
         exporter.tracker.retag = Mock()
 
         event = {
-            'timestamp': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            'duration': timedelta(seconds=120)  # 2 minutes - enough to pass checks but < MAX_MIXED_INTERVAL
+            "timestamp": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
+            "duration": timedelta(
+                seconds=120
+            ),  # 2 minutes - enough to pass checks but < MAX_MIXED_INTERVAL
         }
 
-        tags = {'4work', 'programming'}
+        tags = {"4work", "programming"}
         exporter.ensure_tag_exported(tags, event)
 
         # Should have called tracker.start_tracking with new tags
         exporter.tracker.start_tracking.assert_called_once()
         call_args = exporter.tracker.start_tracking.call_args
         tags_arg = call_args[0][0]  # First positional argument (tags)
-        assert '4work' in tags_arg
-        assert 'programming' in tags_arg
-        assert '~aw' in tags_arg
+        assert "4work" in tags_arg
+        assert "programming" in tags_arg
+        assert "~aw" in tags_arg
 
-    @patch('aw_export_timewarrior.main.config', {
-        'exclusive': {},
-        'tags': {}
-    })
-    @patch('aw_export_timewarrior.main.timew_run')
-    @patch('aw_export_timewarrior.main.get_timew_info')
-    @patch('aw_export_timewarrior.main.timew_retag')
+    @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
+    @patch("aw_export_timewarrior.main.timew_run")
+    @patch("aw_export_timewarrior.main.get_timew_info")
+    @patch("aw_export_timewarrior.main.timew_retag")
     def test_ensure_tag_exported_skips_if_override(
-        self,
-        mock_retag: Mock,
-        mock_get_info: Mock,
-        mock_timew_run: Mock,
-        mock_aw_client: Mock
+        self, mock_retag: Mock, mock_get_info: Mock, mock_timew_run: Mock, mock_aw_client: Mock
     ) -> None:
         """Test that ensure_tag_exported skips when 'override' tag is present."""
         exporter = Exporter()
@@ -267,37 +255,30 @@ class TestEnsureTagExported:
         exporter.state.set_afk_state(AfkState.ACTIVE)
 
         mock_timew_info = {
-            'id': 1,
-            'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            'tags': {'4work', 'override'}  # Has override tag
+            "id": 1,
+            "start": "20250528T140000Z",
+            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
+            "tags": {"4work", "override"},  # Has override tag
         }
         mock_retag.return_value = mock_timew_info
 
         event = {
-            'timestamp': datetime(2025, 5, 28, 14, 2, 0, tzinfo=UTC),
-            'duration': timedelta(minutes=5)
+            "timestamp": datetime(2025, 5, 28, 14, 2, 0, tzinfo=UTC),
+            "duration": timedelta(minutes=5),
         }
 
-        tags = {'4break', 'tea'}
+        tags = {"4break", "tea"}
         exporter.ensure_tag_exported(tags, event)
 
         # Should not have called timew_run because of override
         mock_timew_run.assert_not_called()
 
-    @patch('aw_export_timewarrior.main.config', {
-        'exclusive': {},
-        'tags': {}
-    })
-    @patch('aw_export_timewarrior.main.timew_run')
-    @patch('aw_export_timewarrior.main.get_timew_info')
-    @patch('aw_export_timewarrior.main.timew_retag')
+    @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
+    @patch("aw_export_timewarrior.main.timew_run")
+    @patch("aw_export_timewarrior.main.get_timew_info")
+    @patch("aw_export_timewarrior.main.timew_retag")
     def test_ensure_tag_exported_skips_if_tags_subset(
-        self,
-        mock_retag: Mock,
-        mock_get_info: Mock,
-        mock_timew_run: Mock,
-        mock_aw_client: Mock
+        self, mock_retag: Mock, mock_get_info: Mock, mock_timew_run: Mock, mock_aw_client: Mock
     ) -> None:
         """Test that ensure_tag_exported skips when tags are already tracked."""
         exporter = Exporter()
@@ -306,20 +287,20 @@ class TestEnsureTagExported:
         exporter.state.set_afk_state(AfkState.ACTIVE)
 
         mock_timew_info = {
-            'id': 1,
-            'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            'tags': {'4work', 'programming', 'python'}
+            "id": 1,
+            "start": "20250528T140000Z",
+            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
+            "tags": {"4work", "programming", "python"},
         }
         mock_retag.return_value = mock_timew_info
 
         event = {
-            'timestamp': datetime(2025, 5, 28, 14, 2, 0, tzinfo=UTC),
-            'duration': timedelta(minutes=5)
+            "timestamp": datetime(2025, 5, 28, 14, 2, 0, tzinfo=UTC),
+            "duration": timedelta(minutes=5),
         }
 
         # Tags are subset of current tracking
-        tags = {'4work', 'programming'}
+        tags = {"4work", "programming"}
         exporter.ensure_tag_exported(tags, event)
 
         # Should not have called timew_run because tags are already tracked
@@ -329,21 +310,19 @@ class TestEnsureTagExported:
 class TestExporterTick:
     """Tests for main tick method."""
 
-    @patch('aw_export_timewarrior.main.sleep')
+    @patch("aw_export_timewarrior.main.sleep")
     def test_tick_initializes_last_tick_from_timew(
-        self,
-        mock_sleep: Mock,
-        mock_aw_client: Mock
+        self, mock_sleep: Mock, mock_aw_client: Mock
     ) -> None:
         """Test that first tick initializes from timewarrior info."""
         exporter = Exporter()
         exporter.state.last_tick = None  # Not initialized
 
         timew_info = {
-            'id': 1,
-            'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            'tags': {'4work'}
+            "id": 1,
+            "start": "20250528T140000Z",
+            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
+            "tags": {"4work"},
         }
 
         # Mock tracker methods
@@ -355,29 +334,25 @@ class TestExporterTick:
 
         exporter.tick()
 
-        assert exporter.state.last_tick == timew_info['start_dt']
-        assert exporter.state.last_known_tick == timew_info['start_dt']
+        assert exporter.state.last_tick == timew_info["start_dt"]
+        assert exporter.state.last_known_tick == timew_info["start_dt"]
 
-    @patch('aw_export_timewarrior.main.get_timew_info')
-    @patch('aw_export_timewarrior.main.timew_retag')
+    @patch("aw_export_timewarrior.main.get_timew_info")
+    @patch("aw_export_timewarrior.main.timew_retag")
     def test_tick_sleeps_when_no_events(
-        self,
-        mock_retag: Mock,
-        mock_get_info: Mock,
-        mock_aw_client: Mock
+        self, mock_retag: Mock, mock_get_info: Mock, mock_aw_client: Mock
     ) -> None:
         """Test that tick sleeps when no events are found."""
-        from tests.conftest import sleep_counter as get_sleep_counter
         import tests.conftest
 
         exporter = Exporter()
         exporter.state.last_tick = datetime.now(UTC)
 
         timew_info = {
-            'id': 1,
-            'start': '20250528T140000Z',
-            'start_dt': datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            'tags': {'4work'}
+            "id": 1,
+            "start": "20250528T140000Z",
+            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
+            "tags": {"4work"},
         }
         mock_retag.return_value = timew_info
         mock_get_info.return_value = timew_info
@@ -391,21 +366,23 @@ class TestExporterTick:
         exporter.tick()
 
         # Verify sleep was called (counter increased)
-        assert tests.conftest.sleep_counter == initial_sleep_count + 1, "tick() should call sleep when no events are found"
+        assert (
+            tests.conftest.sleep_counter == initial_sleep_count + 1
+        ), "tick() should call sleep when no events are found"
 
 
 class TestExporterLog:
     """Tests for logging method."""
 
-    @patch('aw_export_timewarrior.main.logger')
+    @patch("aw_export_timewarrior.main.logger")
     def test_log_with_event(self, mock_logger: Mock, mock_aw_client: Mock) -> None:
         """Test logging with an event."""
         exporter = Exporter()
         exporter.state.last_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
 
         event = {
-            'timestamp': datetime(2025, 5, 28, 14, 5, 0, tzinfo=UTC),
-            'duration': timedelta(minutes=5)
+            "timestamp": datetime(2025, 5, 28, 14, 5, 0, tzinfo=UTC),
+            "duration": timedelta(minutes=5),
         }
 
         exporter.log("Test message", event=event)
@@ -414,11 +391,11 @@ class TestExporterLog:
         # Check the message and extra data
         call_args = mock_logger.log.call_args
         assert call_args[0][1] == "Test message"  # Second arg is the message
-        extra = call_args[1]['extra']
-        assert 'event_duration' in extra
-        assert '300' in extra['event_duration'] or '300.0' in extra['event_duration']
+        extra = call_args[1]["extra"]
+        assert "event_duration" in extra
+        assert "300" in extra["event_duration"] or "300.0" in extra["event_duration"]
 
-    @patch('aw_export_timewarrior.main.logger')
+    @patch("aw_export_timewarrior.main.logger")
     def test_log_with_level(self, mock_logger: Mock, mock_aw_client: Mock) -> None:
         """Test logging with different log levels."""
         exporter = Exporter()
@@ -431,5 +408,5 @@ class TestExporterLog:
         assert call_args[0][1] == "Important message"  # Second arg is the message
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

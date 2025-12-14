@@ -7,7 +7,7 @@ making it easy to test and maintain. Part of the Exporter refactoring plan.
 import logging
 import re
 from collections.abc import Callable
-from typing import Any, Union
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class TagExtractor:
         config: dict,
         event_fetcher: Any,  # EventFetcher type
         terminal_apps: set[str] | None = None,
-        log_callback: Callable | None = None
+        log_callback: Callable | None = None,
     ) -> None:
         """Initialize tag extractor.
 
@@ -50,7 +50,7 @@ class TagExtractor:
         """Get the current config (supports both static dict and dynamic callable)."""
         return self._config_getter()
 
-    def get_tags(self, event: dict) -> Union[set[str], None, bool]:
+    def get_tags(self, event: dict) -> set[str] | None | bool:
         """Determine tags for an event.
 
         Tries each extraction method in order until one succeeds.
@@ -68,7 +68,7 @@ class TagExtractor:
             self.get_afk_tags,
             self.get_app_tags,
             self.get_browser_tags,
-            self.get_editor_tags
+            self.get_editor_tags,
         ]:
             result = method(event)
             if result is not None and result is not False:
@@ -76,7 +76,7 @@ class TagExtractor:
 
         return False  # No rules matched
 
-    def get_afk_tags(self, event: dict) -> Union[set[str], bool]:
+    def get_afk_tags(self, event: dict) -> set[str] | bool:
         """Extract AFK status tags from AFK events.
 
         Args:
@@ -85,12 +85,12 @@ class TagExtractor:
         Returns:
             Set containing 'afk' or 'not-afk', or False if not an AFK event
         """
-        if 'status' in event['data']:
-            return {event['data']['status']}
+        if "status" in event["data"]:
+            return {event["data"]["status"]}
         else:
             return False
 
-    def get_app_tags(self, event: dict) -> Union[set[str], bool]:
+    def get_app_tags(self, event: dict) -> set[str] | bool:
         """Extract tags from app/title matching.
 
         Args:
@@ -99,31 +99,31 @@ class TagExtractor:
         Returns:
             Set of tags, or False if no rules matched
         """
-        for rule_name in self.config.get('rules', {}).get('app', {}):
-            rule = self.config['rules']['app'][rule_name]
+        for rule_name in self.config.get("rules", {}).get("app", {}):
+            rule = self.config["rules"]["app"][rule_name]
 
             # Check if app matches
-            if event['data'].get('app') not in rule.get('app_names', []):
+            if event["data"].get("app") not in rule.get("app_names", []):
                 continue
 
             # Try to match title regexp if present
             title_match = None
-            if 'title_regexp' in rule:
-                title_match = re.search(rule['title_regexp'], event['data'].get('title', ''))
+            if "title_regexp" in rule:
+                title_match = re.search(rule["title_regexp"], event["data"].get("title", ""))
                 if not title_match:
                     continue  # Required regexp didn't match
 
             # Build tags with variable substitution
             substitutions = {
-                '$app': event['data'].get('app'),
-                '$1': title_match.group(1) if title_match and title_match.groups() else None,
+                "$app": event["data"].get("app"),
+                "$1": title_match.group(1) if title_match and title_match.groups() else None,
             }
 
-            return self._build_tags(rule['timew_tags'], substitutions)
+            return self._build_tags(rule["timew_tags"], substitutions)
 
         return False
 
-    def get_browser_tags(self, window_event: dict) -> Union[set[str], list, bool]:
+    def get_browser_tags(self, window_event: dict) -> set[str] | list | bool:
         """Extract tags from browser URL matching.
 
         Args:
@@ -134,17 +134,18 @@ class TagExtractor:
         """
         return self._get_subevent_tags(
             window_event=window_event,
-            subtype='browser',
-            apps=('chromium', 'chrome', 'firefox'),
-            bucket_pattern='aw-watcher-web-{app}',
-            app_normalizer=lambda app: 'chrome' if app == 'chromium' else app,
+            subtype="browser",
+            apps=("chromium", "chrome", "firefox"),
+            bucket_pattern="aw-watcher-web-{app}",
+            app_normalizer=lambda app: "chrome" if app == "chromium" else app,
             matchers=[
-                ('url_regexp', self._match_url_regexp),
+                ("url_regexp", self._match_url_regexp),
             ],
-            skip_if=lambda sub_event: sub_event['data'].get('url') in ('chrome://newtab/', 'about:newtab')
+            skip_if=lambda sub_event: sub_event["data"].get("url")
+            in ("chrome://newtab/", "about:newtab"),
         )
 
-    def get_editor_tags(self, window_event: dict) -> Union[set[str], list, bool]:
+    def get_editor_tags(self, window_event: dict) -> set[str] | list | bool:
         """Extract tags from editor file/project matching.
 
         Args:
@@ -155,13 +156,13 @@ class TagExtractor:
         """
         return self._get_subevent_tags(
             window_event=window_event,
-            subtype='editor',
-            apps=('emacs', 'vi', 'vim'),
-            bucket_pattern='aw-watcher-{app}',
+            subtype="editor",
+            apps=("emacs", "vi", "vim"),
+            bucket_pattern="aw-watcher-{app}",
             matchers=[
-                ('projects', self._match_project),
-                ('path_regexp', self._match_path_regexp),
-            ]
+                ("projects", self._match_project),
+                ("path_regexp", self._match_path_regexp),
+            ],
         )
 
     def _get_subevent_tags(
@@ -172,8 +173,8 @@ class TagExtractor:
         bucket_pattern: str,
         app_normalizer: Callable | None = None,
         matchers: list | None = None,
-        skip_if: Callable | None = None
-    ) -> Union[set[str], list, bool]:
+        skip_if: Callable | None = None,
+    ) -> set[str] | list | bool:
         """Generic method to extract tags from events that require sub-events.
 
         Args:
@@ -189,22 +190,24 @@ class TagExtractor:
             Set of tags, empty list if no match, or False if wrong app type
         """
         # Check if this is the right app type
-        if window_event['data'].get('app', '').lower() not in apps:
+        if window_event["data"].get("app", "").lower() not in apps:
             return False
 
-        app = window_event['data']['app'].lower()
+        app = window_event["data"]["app"].lower()
 
         # Normalize app name if needed
         app_normalized = app_normalizer(app) if app_normalizer else app
 
         # Get the bucket ID
-        bucket_id = self.event_fetcher.bucket_short[bucket_pattern.format(app=app_normalized)]['id']
+        bucket_id = self.event_fetcher.bucket_short[bucket_pattern.format(app=app_normalized)]["id"]
 
         # Determine if we should ignore certain events (e.g., emacs buffers)
         ignorable = self._is_ignorable_event(app, window_event)
 
         # Get the corresponding sub-event
-        sub_event = self.event_fetcher.get_corresponding_event(window_event, bucket_id, ignorable=ignorable)
+        sub_event = self.event_fetcher.get_corresponding_event(
+            window_event, bucket_id, ignorable=ignorable
+        )
 
         if not sub_event:
             return []
@@ -214,9 +217,9 @@ class TagExtractor:
             return []
 
         # Try each matcher in order
-        for rule_key, matcher_func in (matchers or []):
-            for rule_name in self.config.get('rules', {}).get(subtype, {}):
-                rule = self.config['rules'][subtype][rule_name]
+        for rule_key, matcher_func in matchers or []:
+            for rule_name in self.config.get("rules", {}).get(subtype, {}):
+                rule = self.config["rules"][subtype][rule_name]
 
                 # Skip rules that don't have this key
                 if rule_key not in rule:
@@ -231,8 +234,8 @@ class TagExtractor:
         self.log_callback(
             f"Unhandled {subtype} event",
             event=window_event,
-            extra={'sub_event': sub_event, 'event_type': subtype, 'log_event': 'unhandled'},
-            level=logging.WARNING
+            extra={"sub_event": sub_event, "event_type": subtype, "log_event": "unhandled"},
+            level=logging.WARNING,
         )
         return []
 
@@ -246,11 +249,11 @@ class TagExtractor:
         Returns:
             True if event should be ignored
         """
-        if app == 'emacs':
-            return bool(re.match(r'^( )?\*.*\*', window_event['data']['title']))
+        if app == "emacs":
+            return bool(re.match(r"^( )?\*.*\*", window_event["data"]["title"]))
         return False
 
-    def _match_project(self, rule: dict, sub_event: dict, rule_key: str) -> Union[set[str], None]:
+    def _match_project(self, rule: dict, sub_event: dict, rule_key: str) -> set[str] | None:
         """Match editor events by project name.
 
         Args:
@@ -261,12 +264,12 @@ class TagExtractor:
         Returns:
             Set of tags if matched, None otherwise
         """
-        for project in rule.get('projects', []):
-            if project == sub_event['data'].get('project'):
-                return self._build_tags(rule['timew_tags'])
+        for project in rule.get("projects", []):
+            if project == sub_event["data"].get("project"):
+                return self._build_tags(rule["timew_tags"])
         return None
 
-    def _match_path_regexp(self, rule: dict, sub_event: dict, rule_key: str) -> Union[set[str], None]:
+    def _match_path_regexp(self, rule: dict, sub_event: dict, rule_key: str) -> set[str] | None:
         """Match editor events by file path regexp.
 
         Args:
@@ -278,12 +281,10 @@ class TagExtractor:
             Set of tags if matched, None otherwise
         """
         return self._match_regexp(
-            rule=rule,
-            text=sub_event['data'].get('file', ''),
-            rule_key=rule_key
+            rule=rule, text=sub_event["data"].get("file", ""), rule_key=rule_key
         )
 
-    def _match_url_regexp(self, rule: dict, sub_event: dict, rule_key: str) -> Union[set[str], None]:
+    def _match_url_regexp(self, rule: dict, sub_event: dict, rule_key: str) -> set[str] | None:
         """Match browser events by URL regexp.
 
         Args:
@@ -295,12 +296,10 @@ class TagExtractor:
             Set of tags if matched, None otherwise
         """
         return self._match_regexp(
-            rule=rule,
-            text=sub_event['data'].get('url', ''),
-            rule_key=rule_key
+            rule=rule, text=sub_event["data"].get("url", ""), rule_key=rule_key
         )
 
-    def _match_regexp(self, rule: dict, text: str, rule_key: str) -> Union[set[str], None]:
+    def _match_regexp(self, rule: dict, text: str, rule_key: str) -> set[str] | None:
         """Generic regexp matcher with group substitution.
 
         Args:
@@ -321,11 +320,11 @@ class TagExtractor:
         # Build substitutions from match groups
         substitutions = {}
         for i, group in enumerate(match.groups(), start=1):
-            substitutions[f'${i}'] = group
+            substitutions[f"${i}"] = group
 
-        return self._build_tags(rule['timew_tags'], substitutions)
+        return self._build_tags(rule["timew_tags"], substitutions)
 
-    def _build_tags(self, tag_templates: list, substitutions: Union[dict, None] = None) -> set[str]:
+    def _build_tags(self, tag_templates: list, substitutions: dict | None = None) -> set[str]:
         """Build a set of tags from templates with variable substitution.
 
         Args:
@@ -340,7 +339,7 @@ class TagExtractor:
 
         for tag in tag_templates:
             # Skip tags with variables that have no value
-            if '$' in tag:
+            if "$" in tag:
                 # Try to substitute all variables
                 new_tag = tag
                 has_missing_var = False
@@ -353,7 +352,7 @@ class TagExtractor:
                         new_tag = new_tag.replace(var, value)
 
                 # Skip if we couldn't substitute all variables
-                if has_missing_var or '$' in new_tag:
+                if has_missing_var or "$" in new_tag:
                     continue
 
                 tags.add(new_tag)
@@ -361,7 +360,7 @@ class TagExtractor:
                 tags.add(tag)
 
         # Always add 'not-afk' tag to activity-based tags
-        tags.add('not-afk')
+        tags.add("not-afk")
 
         return tags
 
@@ -384,13 +383,13 @@ class TagExtractor:
 
         new_tags = source_tags.copy()
 
-        for tag_section in self.config.get('tags', {}):
-            retags = self.config['tags'][tag_section]
-            intersection = source_tags.intersection(set(retags['source_tags']))
+        for tag_section in self.config.get("tags", {}):
+            retags = self.config["tags"][tag_section]
+            intersection = source_tags.intersection(set(retags["source_tags"]))
 
             if intersection:
                 new_tags_ = set()
-                for tag in retags.get('add', []):
+                for tag in retags.get("add", []):
                     if "$source_tag" in tag:
                         for source_tag in intersection:
                             new_tags_.add(tag.replace("$source_tag", source_tag))
@@ -400,7 +399,9 @@ class TagExtractor:
                 new_tags_ = new_tags.union(new_tags_)
 
                 if self.check_exclusive_groups(new_tags_):
-                    logger.warning(f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts")
+                    logger.warning(
+                        f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts"
+                    )
                 else:
                     new_tags = new_tags_
 
@@ -424,8 +425,8 @@ class TagExtractor:
             True if tags violate exclusivity (conflict detected)
             False if tags are valid (no conflicts)
         """
-        for gid in self.config.get('exclusive', {}):
-            group = set(self.config['exclusive'][gid]['tags'])
+        for gid in self.config.get("exclusive", {}):
+            group = set(self.config["exclusive"][gid]["tags"])
             if len(group.intersection(tags)) > 1:
                 return True
         return False

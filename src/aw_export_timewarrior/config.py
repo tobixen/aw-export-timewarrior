@@ -99,6 +99,7 @@ tags = [ "4break", "4chores", "4work", "4me" ]
 
 config = load_config_toml("aw-export-timewarrior", default_config)
 
+
 def load_custom_config(config_path):
     """Load config from a custom file path."""
     global config

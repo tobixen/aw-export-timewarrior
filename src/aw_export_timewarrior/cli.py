@@ -17,11 +17,7 @@ from .main import Exporter, load_config, setup_logging
 from .utils import parse_datetime
 
 
-def create_exporter_from_args(
-    args: argparse.Namespace,
-    method: str,
-    **overrides
-) -> Exporter:
+def create_exporter_from_args(args: argparse.Namespace, method: str, **overrides) -> Exporter:
     """
     Create an Exporter instance from CLI arguments.
 
@@ -35,13 +31,10 @@ def create_exporter_from_args(
     Returns:
         Configured Exporter instance
     """
-     # Build kwargs from args
+    # Build kwargs from args
     kwargs = {}
 
-    arg_mapping = {
-        'timeline': 'show_timeline',
-        'config': 'config_path'
-    }
+    arg_mapping = {"timeline": "show_timeline", "config": "config_path"}
 
     exporter_field_names = {f.name for f in fields(Exporter)}
 
@@ -59,30 +52,37 @@ def create_exporter_from_args(
 
     return Exporter(**kwargs)
 
+
 def add_timespan_arguments(parser):
     start_group = parser.add_mutually_exclusive_group()
     start_group.add_argument(
-        '--from', '--since', '--begin', '--start',
-        dest='start',
-        metavar='DATETIME',
-        help='Start time for processing window (defaults to last observed timew tagging timestamp)'
+        "--from",
+        "--since",
+        "--begin",
+        "--start",
+        dest="start",
+        metavar="DATETIME",
+        help="Start time for processing window (defaults to last observed timew tagging timestamp)",
     )
 
     # End time aliases
     end_group = parser.add_mutually_exclusive_group()
     end_group.add_argument(
-        '--to', '--until', '--end',
-        dest='end',
-        metavar='DATETIME',
-        help='End time (continuous mode: runs indefinitely; with --once or --dry-run: defaults to now)'
+        "--to",
+        "--until",
+        "--end",
+        dest="end",
+        metavar="DATETIME",
+        help="End time (continuous mode: runs indefinitely; with --once or --dry-run: defaults to now)",
     )
 
-    start_group.add_argument('--day', metavar='DATE')
+    start_group.add_argument("--day", metavar="DATE")
+
 
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser with subcommands."""
     parser = argparse.ArgumentParser(
-        description='Export ActivityWatch data to Timewarrior',
+        description="Export ActivityWatch data to Timewarrior",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Subcommands:
@@ -118,58 +118,54 @@ Examples:
 
   # Validate config
   %(prog)s validate
-        """
+        """,
     )
 
     # Global options (available for all subcommands)
     parser.add_argument(
-        '--config',
-        metavar='FILE',
+        "--config",
+        metavar="FILE",
         type=Path,
-        help='Path to configuration file (default: uses standard config locations)'
+        help="Path to configuration file (default: uses standard config locations)",
     )
     parser.add_argument(
-        '--log-level',
-        choices=['NONE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-        default='WARNING',
-        help='Set logging level (default: WARNING)'
+        "--log-level",
+        choices=["NONE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="WARNING",
+        help="Set logging level (default: WARNING)",
     )
     parser.add_argument(
-        '--console-log-level',
-        choices=['NONE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-        default='ERROR',
-        help='Set console logging level (default: ERROR)'
+        "--console-log-level",
+        choices=["NONE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="ERROR",
+        help="Set console logging level (default: ERROR)",
     )
     parser.add_argument(
-        '--log-file',
-        metavar='FILE',
+        "--log-file",
+        metavar="FILE",
         type=Path,
-        help='Log file path (default: ~/.local/share/aw-export-timewarrior/aw-export.json.log)'
+        help="Log file path (default: ~/.local/share/aw-export-timewarrior/aw-export.json.log)",
     )
     parser.add_argument(
-        '--no-log-json',
-        action='store_true',
-        help='Do not output logs in JSON format'
+        "--no-log-json", action="store_true", help="Do not output logs in JSON format"
     )
     debug_group = parser.add_mutually_exclusive_group()
     debug_group.add_argument(
-        '--enable-pdb',
-        action='store_true',
-        help='Drop into debugger on unexpected states (for development)'
+        "--enable-pdb",
+        action="store_true",
+        help="Drop into debugger on unexpected states (for development)",
     )
     debug_group.add_argument(
-        '--enable-assert',
-        action='store_true',
-        help='Assert no unexpected states (for development)'
+        "--enable-assert", action="store_true", help="Assert no unexpected states (for development)"
     )
 
     # Create subparsers
-    subparsers = parser.add_subparsers(dest='subcommand', help='Subcommand to run')
+    subparsers = parser.add_subparsers(dest="subcommand", help="Subcommand to run")
 
     # ===== SYNC subcommand =====
     sync_parser = subparsers.add_parser(
-        'sync',
-        help='Synchronize ActivityWatch to TimeWarrior (default)',
+        "sync",
+        help="Synchronize ActivityWatch to TimeWarrior (default)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -181,53 +177,45 @@ Examples:
 
   # Process specific time range once
   %(prog)s --from "2025-12-08 09:00" --to "2025-12-08 17:00" --once
-        """
+        """,
     )
     sync_parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Show what would be done without modifying TimeWarrior.'
+        "--dry-run",
+        action="store_true",
+        help="Show what would be done without modifying TimeWarrior.",
     )
     sync_parser.add_argument(
-        '--no-dry-run',
-        action='store_true',
-        help='dry-run is by default enabled when using test-data.  This option explicitly disables dry run'
+        "--no-dry-run",
+        action="store_true",
+        help="dry-run is by default enabled when using test-data.  This option explicitly disables dry run",
     )
     sync_parser.add_argument(
-        '--once',
-        action='store_true',
-        help='Process once and exit (instead of continuous monitoring)'
+        "--once",
+        action="store_true",
+        help="Process once and exit (instead of continuous monitoring)",
     )
 
     # time aliases
     add_timespan_arguments(sync_parser)
 
+    sync_parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
     sync_parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Enable verbose output'
+        "--hide-processing-output", action="store_true", help="Hide command execution messages"
     )
     sync_parser.add_argument(
-        '--hide-processing-output',
-        action='store_true',
-        help='Hide command execution messages'
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress all console output (for headless/systemd usage)",
     )
     sync_parser.add_argument(
-        '--quiet', '-q',
-        action='store_true',
-        help='Suppress all console output (for headless/systemd usage)'
-    )
-    sync_parser.add_argument(
-        '--test-data',
-        metavar='FILE',
-        type=Path,
-        help='Use test data instead of live ActivityWatch'
+        "--test-data", metavar="FILE", type=Path, help="Use test data instead of live ActivityWatch"
     )
 
     # ===== DIFF subcommand =====
     diff_parser = subparsers.add_parser(
-        'diff',
-        help='Compare TimeWarrior with ActivityWatch and optionally fix',
+        "diff",
+        help="Compare TimeWarrior with ActivityWatch and optionally fix",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -239,54 +227,40 @@ Examples:
 
   # Apply fixes automatically
   %(prog)s --from "2025-12-08 10:00" --to "2025-12-08 11:00" --apply
-        """
+        """,
     )
 
     # time aliases
     add_timespan_arguments(diff_parser)
 
     diff_parser.add_argument(
-        '--show-commands',
-        action='store_true',
-        help='Show timew track commands to fix differences'
+        "--show-commands", action="store_true", help="Show timew track commands to fix differences"
     )
     diff_parser.add_argument(
-        '--apply',
-        action='store_true',
-        help='Execute the fix commands (implies --show-commands)'
+        "--apply", action="store_true", help="Execute the fix commands (implies --show-commands)"
     )
     diff_parser.add_argument(
-        '--hide-report',
-        action='store_true',
-        help='Hide the detailed diff report'
+        "--hide-report", action="store_true", help="Hide the detailed diff report"
     )
     diff_parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Show more details in the diff'
+        "--verbose", "-v", action="store_true", help="Show more details in the diff"
     )
     diff_parser.add_argument(
-        '--timeline',
-        action='store_true',
-        help='Show side-by-side timeline of TimeWarrior vs ActivityWatch intervals'
+        "--timeline",
+        action="store_true",
+        help="Show side-by-side timeline of TimeWarrior vs ActivityWatch intervals",
     )
     diff_parser.add_argument(
-        '--test-data',
-        metavar='FILE',
-        type=Path,
-        help='Use test data instead of live ActivityWatch'
+        "--test-data", metavar="FILE", type=Path, help="Use test data instead of live ActivityWatch"
     )
     diff_parser.add_argument(
-        '--config',
-        metavar='FILE',
-        type=Path,
-        help='Path to configuration file'
+        "--config", metavar="FILE", type=Path, help="Path to configuration file"
     )
 
     # ===== ANALYZE subcommand =====
     analyze_parser = subparsers.add_parser(
-        'analyze',
-        help='Analyze events and show unmatched activities',
+        "analyze",
+        help="Analyze events and show unmatched activities",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -298,34 +272,29 @@ Examples:
 
   # Find long unmatched events
   %(prog)s --from yesterday --to today --min-duration 5
-        """
+        """,
     )
 
     # Start time aliases
     add_timespan_arguments(analyze_parser)
 
     analyze_parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Show more details per event'
+        "--verbose", "-v", action="store_true", help="Show more details per event"
     )
     analyze_parser.add_argument(
-        '--group-by',
-        choices=['app', 'hour', 'day'],
-        default='app',
-        help='How to group results (default: app)'
+        "--group-by",
+        choices=["app", "hour", "day"],
+        default="app",
+        help="How to group results (default: app)",
     )
     analyze_parser.add_argument(
-        '--min-duration',
-        type=int,
-        metavar='MINUTES',
-        help='Only show events longer than X minutes'
+        "--min-duration", type=int, metavar="MINUTES", help="Only show events longer than X minutes"
     )
 
     # ===== EXPORT subcommand =====
     export_parser = subparsers.add_parser(
-        'export',
-        help='Export ActivityWatch data to file',
+        "export",
+        help="Export ActivityWatch data to file",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -337,22 +306,23 @@ Examples:
 
   # Export and pipe to jq
   %(prog)s --from yesterday | jq '.events'
-        """
+        """,
     )
 
     add_timespan_arguments(export_parser)
 
     export_parser.add_argument(
-        '--output', '-o',
-        metavar='FILE',
-        default='-',
-        help='Output file path (default: stdout). Use "-" for stdout or specify a file path'
+        "--output",
+        "-o",
+        metavar="FILE",
+        default="-",
+        help='Output file path (default: stdout). Use "-" for stdout or specify a file path',
     )
 
     # ===== REPORT subcommand =====
     report_parser = subparsers.add_parser(
-        'report',
-        help='Generate detailed activity report',
+        "report",
+        help="Generate detailed activity report",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -367,30 +337,28 @@ Examples:
 
   # Export report as CSV
   %(prog)s --from yesterday --format csv > report.csv
-        """
+        """,
     )
     add_timespan_arguments(report_parser)
     report_parser.add_argument(
-        '--all-columns',
-        action='store_true',
-        help='Show all available columns (default shows main columns only)'
+        "--all-columns",
+        action="store_true",
+        help="Show all available columns (default shows main columns only)",
     )
     report_parser.add_argument(
-        '--format',
-        choices=['table', 'csv', 'tsv'],
-        default='table',
-        help='Output format (default: table)'
+        "--format",
+        choices=["table", "csv", "tsv"],
+        default="table",
+        help="Output format (default: table)",
     )
     report_parser.add_argument(
-        '--no-truncate',
-        action='store_true',
-        help='Do not truncate long values in table mode'
+        "--no-truncate", action="store_true", help="Do not truncate long values in table mode"
     )
 
     # ===== VALIDATE subcommand =====
     subparsers.add_parser(
-        'validate',
-        help='Validate configuration file',
+        "validate",
+        help="Validate configuration file",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -399,7 +367,7 @@ Examples:
 
   # Validate custom config
   %(prog)s --config my_config.toml
-        """
+        """,
     )
 
     return parser
@@ -414,15 +382,16 @@ def get_default_log_file(json: bool) -> Path:
     """
     # Use XDG_DATA_HOME or fallback to ~/.local/share
     import os
-    data_home = os.environ.get('XDG_DATA_HOME')
-    data_dir = Path(data_home) if data_home else Path.home() / '.local' / 'share'
 
-    log_dir = data_dir / 'aw-export-timewarrior'
+    data_home = os.environ.get("XDG_DATA_HOME")
+    data_dir = Path(data_home) if data_home else Path.home() / ".local" / "share"
+
+    log_dir = data_dir / "aw-export-timewarrior"
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    json_postfix = '.json' if json else ''
+    json_postfix = ".json" if json else ""
 
-    return log_dir / f'aw-export{json_postfix}.log'
+    return log_dir / f"aw-export{json_postfix}.log"
 
 
 def configure_logging(args: argparse.Namespace, subcommand: str) -> None:
@@ -438,11 +407,11 @@ def configure_logging(args: argparse.Namespace, subcommand: str) -> None:
     console_log_level = getattr(logging, args.console_log_level, 0)
 
     # If verbose mode, enable DEBUG logging
-    if hasattr(args, 'verbose') and args.verbose:
+    if hasattr(args, "verbose") and args.verbose:
         console_log_level = logging.DEBUG
 
     # If quiet mode (sync only), suppress console output
-    if hasattr(args, 'quiet') and args.quiet:
+    if hasattr(args, "quiet") and args.quiet:
         console_log_level = logging.CRITICAL + 1  # Above all levels
 
     # Determine log file
@@ -454,10 +423,10 @@ def configure_logging(args: argparse.Namespace, subcommand: str) -> None:
 
     # Build run mode info for structured logging (allows filtering logs)
     run_mode = {
-        'subcommand': subcommand,
-        'dry_run': getattr(args, 'dry_run', False),
-        'test_data': hasattr(args, 'test_data') and args.test_data is not None,
-        'once': getattr(args, 'once', False),
+        "subcommand": subcommand,
+        "dry_run": getattr(args, "dry_run", False),
+        "test_data": hasattr(args, "test_data") and args.test_data is not None,
+        "once": getattr(args, "once", False),
     }
 
     # Configure the logging system
@@ -466,13 +435,13 @@ def configure_logging(args: argparse.Namespace, subcommand: str) -> None:
         log_level=log_level,
         console_log_level=console_log_level,
         log_file=log_file,
-        run_mode=run_mode
+        run_mode=run_mode,
     )
 
 
 def validate_sync_args(args: argparse.Namespace) -> str | None:
     """Validate arguments for sync subcommand."""
-    if getattr(args, 'test_data', False):
+    if getattr(args, "test_data", False):
         if not args.test_data.exists():
             return f"Error: Test data file not found: {args.test_data}"
         if args.start or args.end:
@@ -518,6 +487,7 @@ def validate_validate_args(args: argparse.Namespace) -> str | None:
     # No special validation needed
     return None
 
+
 def _handle_start_stop_testdata_from_args(args, exporter_args, method):
     ## TODO: I want a --day parameter for processing a full day (local time, midnight to midnight)
 
@@ -537,34 +507,35 @@ def _handle_start_stop_testdata_from_args(args, exporter_args, method):
 
     if args.end:
         ## TODO - can we make this work?
-        #if args.day:
-            #end = args.day +parse_time(args.end)
+        # if args.day:
+        # end = args.day +parse_time(args.end)
         end = parse_datetime(args.end)
 
-    if getattr(args, 'test_data', False):
+    if getattr(args, "test_data", False):
         print(f"Loading test data from {args.test_data}")
         test_data = load_test_data(args.test_data)
 
         # Extract start/end times from test data metadata if not provided via CLI
-        if not start and 'metadata' in test_data and 'start_time' in test_data['metadata']:
-            start = parse_datetime(test_data['metadata']['start_time'])
+        if not start and "metadata" in test_data and "start_time" in test_data["metadata"]:
+            start = parse_datetime(test_data["metadata"]["start_time"])
             print(f"Using start time from test data: {start}")
-        if not end and 'metadata' in test_data and 'end_time' in test_data['metadata']:
-            end = parse_datetime(test_data['metadata']['end_time'])
+        if not end and "metadata" in test_data and "end_time" in test_data["metadata"]:
+            end = parse_datetime(test_data["metadata"]["end_time"])
             print(f"Using end time from test data: {end}")
 
     ## The default for sync, "since last timew entry" is set somewhere else, otherwise it should be set here.
-    if method != 'sync' and not start:
+    if method != "sync" and not start:
         start = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
 
     ## The default for sync is "run forever" or "run once", otherwise we should end at current timestamp
-    if method != 'sync' and not end:
+    if method != "sync" and not end:
         end = datetime.now().astimezone()
 
     print(f"Processing time range: {start} to {end}")
-    exporter_args['start_time'] = start
-    exporter_args['end_time'] = end
-    exporter_args['test_data'] = test_data
+    exporter_args["start_time"] = start
+    exporter_args["end_time"] = end
+    exporter_args["test_data"] = test_data
+
 
 def run_sync(args: argparse.Namespace) -> int:
     """Execute the sync subcommand."""
@@ -572,7 +543,7 @@ def run_sync(args: argparse.Namespace) -> int:
         args.dry_run = True
 
     # Create exporter with options
-    exporter = create_exporter_from_args(args, 'sync')
+    exporter = create_exporter_from_args(args, "sync")
 
     # Run exporter
     if args.dry_run:
@@ -600,7 +571,9 @@ def run_diff(args: argparse.Namespace) -> int:
     """Execute the diff subcommand."""
 
     # Create exporter in dry-run mode (diff doesn't modify unless --apply)
-    exporter = create_exporter_from_args(args, 'diff',
+    exporter = create_exporter_from_args(
+        args,
+        "diff",
         dry_run=not args.apply,  # Only modify timew if --apply is set
         show_diff=True,
         show_fix_commands=args.show_commands or args.apply,
@@ -618,12 +591,7 @@ def run_diff(args: argparse.Namespace) -> int:
 def run_analyze(args: argparse.Namespace) -> int:
     """Execute the analyze subcommand."""
     # Create exporter in dry-run mode with show_unmatched
-    exporter = create_exporter_from_args(
-        args,
-        'analyze',
-        dry_run=True,
-        show_unmatched=True
-    )
+    exporter = create_exporter_from_args(args, "analyze", dry_run=True, show_unmatched=True)
 
     # Process all events
     exporter.tick(process_all=True)
@@ -642,14 +610,14 @@ def run_export(args: argparse.Namespace) -> int:
     from .export import export_aw_data
 
     exporter_args = {}
-    _handle_start_stop_testdata_from_args(args, exporter_args, 'export')
+    _handle_start_stop_testdata_from_args(args, exporter_args, "export")
 
     # Direct progress messages to stderr if outputting to stdout
-    use_stdout = str(args.output) == '-'
+    use_stdout = str(args.output) == "-"
     progress_output = sys.stderr if use_stdout else sys.stdout
 
-    start_time = exporter_args.get('start_time')
-    end_time = exporter_args.get('end_time')
+    start_time = exporter_args.get("start_time")
+    end_time = exporter_args.get("end_time")
 
     print(f"Exporting data from {start_time} to {end_time}...", file=progress_output)
     export_aw_data(args.start or str(start_time), args.end or str(end_time), args.output)
@@ -666,7 +634,7 @@ def run_report(args: argparse.Namespace) -> int:
     from .report import generate_activity_report
 
     # Create exporter for reading ActivityWatch data
-    exporter = create_exporter_from_args(args, 'report', dry_run=True)
+    exporter = create_exporter_from_args(args, "report", dry_run=True)
 
     # Generate report
     generate_activity_report(
@@ -700,12 +668,12 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     # Default to 'sync' if no subcommand specified
-    subcommand = args.subcommand or 'sync'
+    subcommand = args.subcommand or "sync"
     if not args.subcommand:
         # Re-parse with 'sync' as the subcommand
-        argv_with_sync = ['sync'] + (argv if argv else sys.argv[1:])
+        argv_with_sync = ["sync"] + (argv if argv else sys.argv[1:])
         args = parser.parse_args(argv_with_sync)
-        args.subcommand = 'sync'
+        args.subcommand = "sync"
 
     # Validate config file if specified
     if args.config and not args.config.exists():
@@ -717,42 +685,42 @@ def main(argv=None) -> int:
 
     try:
         # Validate and run the appropriate subcommand
-        if subcommand == 'sync':
+        if subcommand == "sync":
             error = validate_sync_args(args)
             if error:
                 print(error, file=sys.stderr)
                 return 1
             return run_sync(args)
 
-        elif subcommand == 'diff':
+        elif subcommand == "diff":
             error = validate_diff_args(args)
             if error:
                 print(error, file=sys.stderr)
                 return 1
             return run_diff(args)
 
-        elif subcommand == 'analyze':
+        elif subcommand == "analyze":
             error = validate_analyze_args(args)
             if error:
                 print(error, file=sys.stderr)
                 return 1
             return run_analyze(args)
 
-        elif subcommand == 'export':
+        elif subcommand == "export":
             error = validate_export_args(args)
             if error:
                 print(error, file=sys.stderr)
                 return 1
             return run_export(args)
 
-        elif subcommand == 'report':
+        elif subcommand == "report":
             error = validate_report_args(args)
             if error:
                 print(error, file=sys.stderr)
                 return 1
             return run_report(args)
 
-        elif subcommand == 'validate':
+        elif subcommand == "validate":
             error = validate_validate_args(args)
             if error:
                 print(error, file=sys.stderr)
@@ -768,11 +736,12 @@ def main(argv=None) -> int:
         return 0
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
-        if hasattr(args, 'verbose') and args.verbose:
+        if hasattr(args, "verbose") and args.verbose:
             import traceback
+
             traceback.print_exc()
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

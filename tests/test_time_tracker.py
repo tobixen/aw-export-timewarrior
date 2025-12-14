@@ -20,6 +20,7 @@ class TestTimeTrackerInterface:
 
         class IncompleteTracker(TimeTracker):
             """Incomplete implementation missing methods."""
+
             pass
 
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
@@ -39,16 +40,16 @@ class TestDryRunTracker:
     def test_start_tracking(self, capsys) -> None:
         """Test starting tracking creates current entry."""
         tracker = DryRunTracker()
-        tags = {'work', 'coding', 'python'}
+        tags = {"work", "coding", "python"}
         start_time = datetime.now(UTC)
 
         tracker.start_tracking(tags, start_time)
 
         current = tracker.get_current_tracking()
         assert current is not None
-        assert current['id'] == 1
-        assert current['start'] == start_time
-        assert current['tags'] == tags
+        assert current["id"] == 1
+        assert current["start"] == start_time
+        assert current["tags"] == tags
 
         # Check dry-run output
         captured = capsys.readouterr()
@@ -58,7 +59,7 @@ class TestDryRunTracker:
     def test_stop_tracking(self, capsys) -> None:
         """Test stopping tracking clears current entry."""
         tracker = DryRunTracker()
-        tags = {'work', 'meeting'}
+        tags = {"work", "meeting"}
 
         tracker.start_tracking(tags, datetime.now(UTC))
         assert tracker.get_current_tracking() is not None
@@ -83,15 +84,15 @@ class TestDryRunTracker:
     def test_retag(self, capsys) -> None:
         """Test retagging changes tags on current entry."""
         tracker = DryRunTracker()
-        initial_tags = {'work', 'coding'}
-        new_tags = {'work', 'meeting'}
+        initial_tags = {"work", "coding"}
+        new_tags = {"work", "meeting"}
 
         tracker.start_tracking(initial_tags, datetime.now(UTC))
         tracker.retag(new_tags)
 
         current = tracker.get_current_tracking()
         assert current is not None
-        assert current['tags'] == new_tags
+        assert current["tags"] == new_tags
 
         # Check dry-run output
         captured = capsys.readouterr()
@@ -101,7 +102,7 @@ class TestDryRunTracker:
         """Test retagging when nothing is active."""
         tracker = DryRunTracker()
 
-        tracker.retag({'work', 'coding'})
+        tracker.retag({"work", "coding"})
 
         # Should not print anything
         captured = capsys.readouterr()
@@ -112,15 +113,15 @@ class TestDryRunTracker:
         tracker = DryRunTracker()
         start = datetime.now(UTC) - timedelta(hours=2)
         end = datetime.now(UTC) - timedelta(hours=1)
-        tags = {'work', 'coding', 'python'}
+        tags = {"work", "coding", "python"}
 
         tracker.track_interval(start, end, tags)
 
         assert len(tracker.intervals) == 1
         interval = tracker.intervals[0]
-        assert interval['start'] == start
-        assert interval['end'] == end
-        assert interval['tags'] == tags
+        assert interval["start"] == start
+        assert interval["end"] == end
+        assert interval["tags"] == tags
 
         # Check dry-run output
         captured = capsys.readouterr()
@@ -143,30 +144,21 @@ class TestDryRunTracker:
 
         # Add intervals at different times
         tracker.track_interval(
-            now - timedelta(hours=5),
-            now - timedelta(hours=4),
-            {'work', 'coding'}
+            now - timedelta(hours=5), now - timedelta(hours=4), {"work", "coding"}
         )
         tracker.track_interval(
-            now - timedelta(hours=2),
-            now - timedelta(hours=1),
-            {'work', 'meeting'}
+            now - timedelta(hours=2), now - timedelta(hours=1), {"work", "meeting"}
         )
         tracker.track_interval(
-            now + timedelta(hours=1),
-            now + timedelta(hours=2),
-            {'personal', 'reading'}
+            now + timedelta(hours=1), now + timedelta(hours=2), {"personal", "reading"}
         )
 
         # Query for intervals in specific range
-        intervals = tracker.get_intervals(
-            now - timedelta(hours=3),
-            now
-        )
+        intervals = tracker.get_intervals(now - timedelta(hours=3), now)
 
         # Should only get the middle interval
         assert len(intervals) == 1
-        assert intervals[0]['tags'] == {'work', 'meeting'}
+        assert intervals[0]["tags"] == {"work", "meeting"}
 
     def test_multiple_track_intervals(self) -> None:
         """Test tracking multiple intervals."""
@@ -174,15 +166,9 @@ class TestDryRunTracker:
         now = datetime.now(UTC)
 
         tracker.track_interval(
-            now - timedelta(hours=3),
-            now - timedelta(hours=2),
-            {'work', 'coding'}
+            now - timedelta(hours=3), now - timedelta(hours=2), {"work", "coding"}
         )
-        tracker.track_interval(
-            now - timedelta(hours=1),
-            now,
-            {'work', 'meeting'}
-        )
+        tracker.track_interval(now - timedelta(hours=1), now, {"work", "meeting"})
 
         assert len(tracker.intervals) == 2
 
@@ -191,18 +177,14 @@ class TestDryRunTracker:
         tracker = DryRunTracker()
 
         # Add an interval first
-        tracker.track_interval(
-            datetime.now(UTC) - timedelta(hours=1),
-            datetime.now(UTC),
-            {'work'}
-        )
+        tracker.track_interval(datetime.now(UTC) - timedelta(hours=1), datetime.now(UTC), {"work"})
 
         # Start tracking - ID should be based on number of intervals
-        tracker.start_tracking({'work', 'coding'}, datetime.now(UTC))
+        tracker.start_tracking({"work", "coding"}, datetime.now(UTC))
 
         current = tracker.get_current_tracking()
         assert current is not None
-        assert current['id'] == 2  # 1 interval + 1 = 2
+        assert current["id"] == 2  # 1 interval + 1 = 2
 
     def test_workflow_start_stop_track(self, capsys) -> None:
         """Test a complete workflow: start, stop, track past interval."""
@@ -210,14 +192,14 @@ class TestDryRunTracker:
         now = datetime.now(UTC)
 
         # Start tracking
-        tracker.start_tracking({'work', 'coding'}, now)
+        tracker.start_tracking({"work", "coding"}, now)
         assert tracker.get_current_tracking() is not None
 
         # Retag while tracking
-        tracker.retag({'work', 'meeting'})
+        tracker.retag({"work", "meeting"})
         current = tracker.get_current_tracking()
         assert current is not None
-        assert current['tags'] == {'work', 'meeting'}
+        assert current["tags"] == {"work", "meeting"}
 
         # Stop tracking
         tracker.stop_tracking()
@@ -225,9 +207,7 @@ class TestDryRunTracker:
 
         # Track a past interval
         tracker.track_interval(
-            now - timedelta(hours=2),
-            now - timedelta(hours=1),
-            {'personal', 'reading'}
+            now - timedelta(hours=2), now - timedelta(hours=1), {"personal", "reading"}
         )
 
         assert len(tracker.intervals) == 1
@@ -255,12 +235,12 @@ class TestTimeTrackerCompleteImplementation:
         """Test that DryRunTracker has all required methods."""
         tracker = DryRunTracker()
 
-        assert hasattr(tracker, 'get_current_tracking')
-        assert hasattr(tracker, 'start_tracking')
-        assert hasattr(tracker, 'stop_tracking')
-        assert hasattr(tracker, 'retag')
-        assert hasattr(tracker, 'get_intervals')
-        assert hasattr(tracker, 'track_interval')
+        assert hasattr(tracker, "get_current_tracking")
+        assert hasattr(tracker, "start_tracking")
+        assert hasattr(tracker, "stop_tracking")
+        assert hasattr(tracker, "retag")
+        assert hasattr(tracker, "get_intervals")
+        assert hasattr(tracker, "track_interval")
 
         # Verify they're callable
         assert callable(tracker.get_current_tracking)
@@ -271,5 +251,5 @@ class TestTimeTrackerCompleteImplementation:
         assert callable(tracker.track_interval)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

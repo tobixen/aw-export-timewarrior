@@ -2,7 +2,7 @@
 
 import json
 import subprocess
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -15,7 +15,7 @@ class TestTimewTrackerInit:
 
     def test_default_init(self) -> None:
         """Test initialization with defaults."""
-        with patch.dict('os.environ', {}, clear=False):
+        with patch.dict("os.environ", {}, clear=False):
             tracker = TimewTracker()
 
             assert tracker.grace_time == 10.0
@@ -31,7 +31,7 @@ class TestTimewTrackerInit:
 
     def test_grace_time_from_env(self) -> None:
         """Test grace time from environment variable."""
-        with patch.dict('os.environ', {'AW2TW_GRACE_TIME': '3.5'}):
+        with patch.dict("os.environ", {"AW2TW_GRACE_TIME": "3.5"}):
             tracker = TimewTracker()
 
             assert tracker.grace_time == 3.5
@@ -57,26 +57,24 @@ class TestGetCurrentTracking:
         """Test getting active tracking."""
         tracker = TimewTracker(grace_time=0)
 
-        mock_data = {
-            'id': 123,
-            'start': '20250101T120000Z',
-            'tags': ['work', 'coding', 'python']
-        }
+        mock_data = {"id": 123, "start": "20250101T120000Z", "tags": ["work", "coding", "python"]}
 
-        with patch('subprocess.check_output', return_value=json.dumps(mock_data).encode()):
+        with patch("subprocess.check_output", return_value=json.dumps(mock_data).encode()):
             result = tracker.get_current_tracking()
 
         assert result is not None
-        assert result['id'] == 123
-        assert result['start'] == '20250101T120000Z'
-        assert result['start_dt'] == datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
-        assert result['tags'] == {'work', 'coding', 'python'}
+        assert result["id"] == 123
+        assert result["start"] == "20250101T120000Z"
+        assert result["start_dt"] == datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+        assert result["tags"] == {"work", "coding", "python"}
 
     def test_get_current_tracking_none(self) -> None:
         """Test getting tracking when nothing is active."""
         tracker = TimewTracker(grace_time=0)
 
-        with patch('subprocess.check_output', side_effect=subprocess.CalledProcessError(1, 'timew')):
+        with patch(
+            "subprocess.check_output", side_effect=subprocess.CalledProcessError(1, "timew")
+        ):
             result = tracker.get_current_tracking()
 
         assert result is None
@@ -85,9 +83,11 @@ class TestGetCurrentTracking:
         """Test that result is cached."""
         tracker = TimewTracker(grace_time=0)
 
-        mock_data = {'id': 123, 'start': '20250101T120000Z', 'tags': []}
+        mock_data = {"id": 123, "start": "20250101T120000Z", "tags": []}
 
-        with patch('subprocess.check_output', return_value=json.dumps(mock_data).encode()) as mock_check:
+        with patch(
+            "subprocess.check_output", return_value=json.dumps(mock_data).encode()
+        ) as mock_check:
             result1 = tracker.get_current_tracking()
             result2 = tracker.get_current_tracking()
 
@@ -100,10 +100,14 @@ class TestGetCurrentTracking:
         captured = []
         tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
 
-        mock_data = {'id': 123, 'start': '20250101T120000Z', 'tags': []}
+        mock_data = {"id": 123, "start": "20250101T120000Z", "tags": []}
 
-        with patch('subprocess.check_output', return_value=json.dumps(mock_data).encode()) as mock_check, \
-             patch('subprocess.run', return_value=Mock(returncode=0)):
+        with (
+            patch(
+                "subprocess.check_output", return_value=json.dumps(mock_data).encode()
+            ) as mock_check,
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+        ):
             # Get current tracking (caches it)
             tracker.get_current_tracking()
             assert mock_check.call_count == 1
@@ -124,20 +128,20 @@ class TestStartTracking:
         captured = []
         tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
         start_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
-        tags = {'work', 'coding', 'python'}
+        tags = {"work", "coding", "python"}
 
-        with patch('subprocess.run', return_value=Mock(returncode=0)):
+        with patch("subprocess.run", return_value=Mock(returncode=0)):
             tracker.start_tracking(tags, start_time)
 
         assert len(captured) == 1
         cmd = captured[0]
-        assert cmd[0] == 'timew'
-        assert cmd[1] == 'start'
-        assert 'coding' in cmd
-        assert 'python' in cmd
-        assert 'work' in cmd
+        assert cmd[0] == "timew"
+        assert cmd[1] == "start"
+        assert "coding" in cmd
+        assert "python" in cmd
+        assert "work" in cmd
         # Check time format (will be in local time)
-        assert any('2025-01-01' in arg for arg in cmd)
+        assert any("2025-01-01" in arg for arg in cmd)
 
 
 class TestStopTracking:
@@ -148,10 +152,10 @@ class TestStopTracking:
         captured = []
         tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
 
-        with patch('subprocess.run', return_value=Mock(returncode=0)):
+        with patch("subprocess.run", return_value=Mock(returncode=0)):
             tracker.stop_tracking()
 
-        assert captured == [['timew', 'stop']]
+        assert captured == [["timew", "stop"]]
 
 
 class TestRetag:
@@ -161,19 +165,19 @@ class TestRetag:
         """Test retagging current interval."""
         captured = []
         tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
-        tags = {'work', 'meeting', 'client'}
+        tags = {"work", "meeting", "client"}
 
-        with patch('subprocess.run', return_value=Mock(returncode=0)):
+        with patch("subprocess.run", return_value=Mock(returncode=0)):
             tracker.retag(tags)
 
         assert len(captured) == 1
         cmd = captured[0]
-        assert cmd[0] == 'timew'
-        assert cmd[1] == 'tag'
-        assert cmd[2] == '@1'
-        assert 'client' in cmd
-        assert 'meeting' in cmd
-        assert 'work' in cmd
+        assert cmd[0] == "timew"
+        assert cmd[1] == "tag"
+        assert cmd[2] == "@1"
+        assert "client" in cmd
+        assert "meeting" in cmd
+        assert "work" in cmd
 
 
 class TestGetIntervals:
@@ -186,9 +190,9 @@ class TestGetIntervals:
         end = datetime(2025, 1, 2, 0, 0, 0, tzinfo=UTC)
 
         mock_result = Mock()
-        mock_result.stdout = '[]'
+        mock_result.stdout = "[]"
 
-        with patch('subprocess.run', return_value=mock_result):
+        with patch("subprocess.run", return_value=mock_result):
             intervals = tracker.get_intervals(start, end)
 
         assert intervals == []
@@ -201,33 +205,33 @@ class TestGetIntervals:
 
         mock_data = [
             {
-                'id': 1,
-                'start': '20250101T100000Z',
-                'end': '20250101T110000Z',
-                'tags': ['work', 'coding']
+                "id": 1,
+                "start": "20250101T100000Z",
+                "end": "20250101T110000Z",
+                "tags": ["work", "coding"],
             },
             {
-                'id': 2,
-                'start': '20250101T140000Z',
-                'end': '20250101T150000Z',
-                'tags': ['work', 'meeting']
-            }
+                "id": 2,
+                "start": "20250101T140000Z",
+                "end": "20250101T150000Z",
+                "tags": ["work", "meeting"],
+            },
         ]
 
         mock_result = Mock()
         mock_result.stdout = json.dumps(mock_data)
 
-        with patch('subprocess.run', return_value=mock_result):
+        with patch("subprocess.run", return_value=mock_result):
             intervals = tracker.get_intervals(start, end)
 
         assert len(intervals) == 2
-        assert intervals[0]['id'] == 1
-        assert intervals[0]['start'] == datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
-        assert intervals[0]['end'] == datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC)
-        assert intervals[0]['tags'] == {'work', 'coding'}
+        assert intervals[0]["id"] == 1
+        assert intervals[0]["start"] == datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
+        assert intervals[0]["end"] == datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC)
+        assert intervals[0]["tags"] == {"work", "coding"}
 
-        assert intervals[1]['id'] == 2
-        assert intervals[1]['tags'] == {'work', 'meeting'}
+        assert intervals[1]["id"] == 2
+        assert intervals[1]["tags"] == {"work", "meeting"}
 
     def test_get_intervals_ongoing(self) -> None:
         """Test getting intervals with ongoing interval (no end time)."""
@@ -237,21 +241,21 @@ class TestGetIntervals:
 
         mock_data = [
             {
-                'id': 1,
-                'start': '20250101T100000Z',
+                "id": 1,
+                "start": "20250101T100000Z",
                 # No 'end' field - ongoing interval
-                'tags': ['work', 'coding']
+                "tags": ["work", "coding"],
             }
         ]
 
         mock_result = Mock()
         mock_result.stdout = json.dumps(mock_data)
 
-        with patch('subprocess.run', return_value=mock_result):
+        with patch("subprocess.run", return_value=mock_result):
             intervals = tracker.get_intervals(start, end)
 
         assert len(intervals) == 1
-        assert intervals[0]['end'] is None
+        assert intervals[0]["end"] is None
 
     def test_get_intervals_command_failure(self) -> None:
         """Test handling of timew export failure."""
@@ -259,9 +263,11 @@ class TestGetIntervals:
         start = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
         end = datetime(2025, 1, 2, 0, 0, 0, tzinfo=UTC)
 
-        with patch('subprocess.run', side_effect=subprocess.CalledProcessError(1, 'timew')):
-            with pytest.raises(RuntimeError, match="Failed to fetch TimeWarrior intervals"):
-                tracker.get_intervals(start, end)
+        with (
+            patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "timew")),
+            pytest.raises(RuntimeError, match="Failed to fetch TimeWarrior intervals"),
+        ):
+            tracker.get_intervals(start, end)
 
 
 class TestTrackInterval:
@@ -273,19 +279,19 @@ class TestTrackInterval:
         tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
         start = datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
         end = datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC)
-        tags = {'work', 'coding', 'python'}
+        tags = {"work", "coding", "python"}
 
-        with patch('subprocess.run', return_value=Mock(returncode=0)):
+        with patch("subprocess.run", return_value=Mock(returncode=0)):
             tracker.track_interval(start, end, tags)
 
         assert len(captured) == 1
         cmd = captured[0]
-        assert cmd[0] == 'timew'
-        assert cmd[1] == 'track'
-        assert '-' in cmd  # The separator between start and end
-        assert 'coding' in cmd
-        assert 'python' in cmd
-        assert 'work' in cmd
+        assert cmd[0] == "timew"
+        assert cmd[1] == "track"
+        assert "-" in cmd  # The separator between start and end
+        assert "coding" in cmd
+        assert "python" in cmd
+        assert "work" in cmd
 
 
 class TestRunTimew:
@@ -296,20 +302,20 @@ class TestRunTimew:
         captured = []
         tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
 
-        with patch('subprocess.run', return_value=Mock(returncode=0)):
-            tracker._run_timew(['test', 'command'])
+        with patch("subprocess.run", return_value=Mock(returncode=0)):
+            tracker._run_timew(["test", "command"])
 
-        assert captured == [['timew', 'test', 'command']]
+        assert captured == [["timew", "test", "command"]]
 
     def test_run_timew_invalidates_cache(self) -> None:
         """Test that running a command invalidates the cache."""
         tracker = TimewTracker(grace_time=0, hide_output=True)
 
         # Set up a cache
-        tracker._current_cache = {'test': 'data'}
+        tracker._current_cache = {"test": "data"}
 
-        with patch('subprocess.run', return_value=Mock(returncode=0)):
-            tracker._run_timew(['test'])
+        with patch("subprocess.run", return_value=Mock(returncode=0)):
+            tracker._run_timew(["test"])
 
         # Cache should be cleared
         assert tracker._current_cache is None
@@ -318,9 +324,11 @@ class TestRunTimew:
         """Test that command waits for grace period."""
         tracker = TimewTracker(grace_time=0.01, hide_output=True)  # Very short for testing
 
-        with patch('subprocess.run', return_value=Mock(returncode=0)), \
-             patch('time.sleep') as mock_sleep:
-            tracker._run_timew(['test'])
+        with (
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+            patch("time.sleep") as mock_sleep,
+        ):
+            tracker._run_timew(["test"])
 
             mock_sleep.assert_called_once_with(0.01)
 
@@ -341,13 +349,13 @@ class TestTimewTrackerInterface:
         """Test that TimewTracker has all required TimeTracker methods."""
         tracker = TimewTracker(grace_time=0)
 
-        assert hasattr(tracker, 'get_current_tracking')
-        assert hasattr(tracker, 'start_tracking')
-        assert hasattr(tracker, 'stop_tracking')
-        assert hasattr(tracker, 'retag')
-        assert hasattr(tracker, 'get_intervals')
-        assert hasattr(tracker, 'track_interval')
+        assert hasattr(tracker, "get_current_tracking")
+        assert hasattr(tracker, "start_tracking")
+        assert hasattr(tracker, "stop_tracking")
+        assert hasattr(tracker, "retag")
+        assert hasattr(tracker, "get_intervals")
+        assert hasattr(tracker, "track_interval")
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

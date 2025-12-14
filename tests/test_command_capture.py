@@ -15,19 +15,21 @@ from tests.conftest import FixtureDataBuilder
 def test_basic_command_capture() -> None:
     """Test that commands are captured in dry-run mode."""
     # Create simple test data - need at least 3 events for processing
-    data = (FixtureDataBuilder()
+    data = (
+        FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
         .add_window_event("Code", "test.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
-        .build())
+        .build()
+    )
 
     # Create exporter in dry-run mode with custom config
     exporter = Exporter(
         test_data=data,
         dry_run=True,
-        config_path='tests/fixtures/test_config.toml',
-        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+        config_path="tests/fixtures/test_config.toml",
+        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC),
     )
 
     # Process events
@@ -41,8 +43,8 @@ def test_basic_command_capture() -> None:
 
     # First command should be a 'start' command
     first_cmd = commands[0]
-    assert first_cmd[0] == 'timew', "Command should start with 'timew'"
-    assert first_cmd[1] == 'start', "First command should be 'start'"
+    assert first_cmd[0] == "timew", "Command should start with 'timew'"
+    assert first_cmd[1] == "start", "First command should be 'start'"
 
     # Should include some tags
     assert len(first_cmd) > 3, "Should have tags in addition to timew and start"
@@ -55,18 +57,20 @@ def test_basic_command_capture() -> None:
 
 def test_multiple_ticks_accumulate_commands() -> None:
     """Test that multiple ticks accumulate commands."""
-    data = (FixtureDataBuilder()
+    data = (
+        FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=300)
         .add_afk_event("not-afk", duration=300)
         .add_window_event("Chrome", "GitHub", duration=300)
         .add_afk_event("not-afk", duration=300)
-        .build())
+        .build()
+    )
 
     exporter = Exporter(
         test_data=data,
         dry_run=True,
-        config_path='tests/fixtures/test_config.toml',
-        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+        config_path="tests/fixtures/test_config.toml",
+        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC),
     )
 
     # First tick
@@ -83,18 +87,20 @@ def test_multiple_ticks_accumulate_commands() -> None:
 
 def test_clear_captured_commands() -> None:
     """Test that captured commands can be cleared."""
-    data = (FixtureDataBuilder()
+    data = (
+        FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
         .add_window_event("Code", "test.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
-        .build())
+        .build()
+    )
 
     exporter = Exporter(
         test_data=data,
         dry_run=True,
-        config_path='tests/fixtures/test_config.toml',
-        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+        config_path="tests/fixtures/test_config.toml",
+        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC),
     )
 
     exporter.tick()
@@ -108,18 +114,20 @@ def test_commands_not_captured_in_normal_mode() -> None:
     """Test that commands are NOT captured when not in dry-run mode."""
     # Note: This test doesn't actually run timew commands because we're using test_data
     # In real use without test_data, it would try to run actual commands
-    data = (FixtureDataBuilder()
+    data = (
+        FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
         .add_window_event("Code", "test.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
-        .build())
+        .build()
+    )
 
     exporter = Exporter(
         test_data=data,
         dry_run=False,  # Not in dry-run mode
-        config_path='tests/fixtures/test_config.toml',
-        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+        config_path="tests/fixtures/test_config.toml",
+        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC),
     )
 
     # In normal mode with test_data, it still won't run real commands
@@ -132,18 +140,20 @@ def test_commands_not_captured_in_normal_mode() -> None:
 
 def test_command_format() -> None:
     """Test that captured commands have the expected format."""
-    data = (FixtureDataBuilder()
+    data = (
+        FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
         .add_window_event("Code", "test.py - VS Code", duration=600)
         .add_afk_event("not-afk", duration=600)
-        .build())
+        .build()
+    )
 
     exporter = Exporter(
         test_data=data,
         dry_run=True,
-        config_path='tests/fixtures/test_config.toml',
-        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+        config_path="tests/fixtures/test_config.toml",
+        start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC),
     )
 
     exporter.tick()
@@ -159,8 +169,13 @@ def test_command_format() -> None:
         assert all(isinstance(part, str) for part in cmd), "All command parts should be strings"
 
         # Should start with 'timew'
-        assert cmd[0] == 'timew', "Command should start with 'timew'"
+        assert cmd[0] == "timew", "Command should start with 'timew'"
 
         # Second element should be a valid timew command
-        assert cmd[1] in ['start', 'stop', 'retag', 'modify', 'track'], \
-            f"Second element should be a timew command, got: {cmd[1]}"
+        assert cmd[1] in [
+            "start",
+            "stop",
+            "retag",
+            "modify",
+            "track",
+        ], f"Second element should be a timew command, got: {cmd[1]}"

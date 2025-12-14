@@ -21,9 +21,10 @@ class AfkState(Enum):
 
     Replaces the tri-state None/True/False pattern with explicit states.
     """
+
     UNKNOWN = "unknown"  # Initial state, no AFK information available
-    AFK = "afk"          # User is away from keyboard
-    ACTIVE = "active"    # User is actively using the system
+    AFK = "afk"  # User is away from keyboard
+    ACTIVE = "active"  # User is actively using the system
 
 
 @dataclass
@@ -53,11 +54,7 @@ class TimeStats:
         """Add time to the unknown events counter."""
         self.unknown_events_time += duration
 
-    def reset(
-        self,
-        retain_tags: set[str] | None = None,
-        stickyness_factor: float = 1.0
-    ) -> None:
+    def reset(self, retain_tags: set[str] | None = None, stickyness_factor: float = 1.0) -> None:
         """Reset statistics.
 
         Args:
@@ -160,8 +157,7 @@ class StateManager:
         """
         if new_state == AfkState.UNKNOWN:
             raise ValueError(
-                "Cannot transition to UNKNOWN state. "
-                "UNKNOWN is only valid as an initial state."
+                "Cannot transition to UNKNOWN state. " "UNKNOWN is only valid as an initial state."
             )
 
     def update_time_bounds(
@@ -206,17 +202,21 @@ class StateManager:
         Raises:
             ValueError: If invariants are violated
         """
-        if (self.last_known_tick is not None and
-            self.last_tick is not None and
-            self.last_known_tick > self.last_tick):
+        if (
+            self.last_known_tick is not None
+            and self.last_tick is not None
+            and self.last_known_tick > self.last_tick
+        ):
             raise ValueError(
                 f"Invalid time bounds: last_known_tick ({self.last_known_tick}) "
                 f"is after last_tick ({self.last_tick})"
             )
 
-        if (self.last_start_time is not None and
-            self.last_known_tick is not None and
-            self.last_start_time > self.last_known_tick):
+        if (
+            self.last_start_time is not None
+            and self.last_known_tick is not None
+            and self.last_start_time > self.last_known_tick
+        ):
             raise ValueError(
                 f"Invalid time bounds: last_start_time ({self.last_start_time}) "
                 f"is after last_known_tick ({self.last_known_tick})"
@@ -321,11 +321,7 @@ class StateManager:
             return set(self.stats.tags_accumulated_time.keys())
 
         # Filter by minimum time
-        return {
-            tag
-            for tag, time in self.stats.tags_accumulated_time.items()
-            if time >= min_time
-        }
+        return {tag for tag, time in self.stats.tags_accumulated_time.items() if time >= min_time}
 
     def time_since_last_export(self) -> timedelta | None:
         """Calculate time since the last export ended.

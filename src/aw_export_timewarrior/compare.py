@@ -20,13 +20,15 @@ class TimewInterval:
 
     def __repr__(self) -> str:
         end_str = self.end.isoformat() if self.end else "ongoing"
-        return f"TimewInterval(id={self.id}, {self.start.isoformat()} - {end_str}, tags={self.tags})"
+        return (
+            f"TimewInterval(id={self.id}, {self.start.isoformat()} - {end_str}, tags={self.tags})"
+        )
 
-    def overlaps(self, other: 'TimewInterval') -> bool:
+    def overlaps(self, other: "TimewInterval") -> bool:
         """Check if this interval overlaps with another."""
         if not self.end or not other.end:
             return False  # Skip ongoing intervals for now
-        return (self.start < other.end and other.start < self.end)
+        return self.start < other.end and other.start < self.end
 
     def duration(self) -> timedelta:
         """Get the duration of this interval."""
@@ -63,15 +65,15 @@ def fetch_timew_intervals(start_time: datetime, end_time: datetime) -> list[Time
         List of TimewInterval objects
     """
     # Format times for timew export command (timew expects local time)
-    start_str = start_time.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
-    end_str = end_time.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
+    start_str = start_time.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+    end_str = end_time.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
 
     try:
         result = subprocess.run(
-            ['timew', 'export', f'{start_str}', '-', f'{end_str}'],
+            ["timew", "export", f"{start_str}", "-", f"{end_str}"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
 
         data = json.loads(result.stdout)
@@ -79,24 +81,19 @@ def fetch_timew_intervals(start_time: datetime, end_time: datetime) -> list[Time
 
         for entry in data:
             # Parse start time
-            start = datetime.strptime(entry['start'], '%Y%m%dT%H%M%SZ')
+            start = datetime.strptime(entry["start"], "%Y%m%dT%H%M%SZ")
             start = start.replace(tzinfo=UTC)
 
             # Parse end time (may not exist for ongoing intervals)
             end = None
-            if 'end' in entry:
-                end = datetime.strptime(entry['end'], '%Y%m%dT%H%M%SZ')
+            if "end" in entry:
+                end = datetime.strptime(entry["end"], "%Y%m%dT%H%M%SZ")
                 end = end.replace(tzinfo=UTC)
 
             # Parse tags
-            tags = set(entry.get('tags', []))
+            tags = set(entry.get("tags", []))
 
-            intervals.append(TimewInterval(
-                id=entry.get('id', 0),
-                start=start,
-                end=end,
-                tags=tags
-            ))
+            intervals.append(TimewInterval(id=entry.get("id", 0), start=start, end=end, tags=tags))
 
         return intervals
 
@@ -106,8 +103,9 @@ def fetch_timew_intervals(start_time: datetime, end_time: datetime) -> list[Time
         raise Exception(f"Failed to parse timew export output: {e}") from e
 
 
-def compare_intervals(timew_intervals: list[TimewInterval],
-                     suggested_intervals: list[SuggestedInterval]) -> dict[str, list]:
+def compare_intervals(
+    timew_intervals: list[TimewInterval], suggested_intervals: list[SuggestedInterval]
+) -> dict[str, list]:
     """
     Compare TimeWarrior intervals with suggested intervals.
 
@@ -115,10 +113,10 @@ def compare_intervals(timew_intervals: list[TimewInterval],
         Dict with keys: 'missing', 'extra', 'different_tags', 'matching'
     """
     result = {
-        'missing': [],      # Intervals suggested but not in timew
-        'extra': [],        # Intervals in timew but not suggested
-        'different_tags': [],  # Intervals that exist but with different tags
-        'matching': [],     # Intervals that match perfectly
+        "missing": [],  # Intervals suggested but not in timew
+        "extra": [],  # Intervals in timew but not suggested
+        "different_tags": [],  # Intervals that exist but with different tags
+        "matching": [],  # Intervals that match perfectly
     }
 
     # Create a working copy of timew intervals
@@ -126,28 +124,33 @@ def compare_intervals(timew_intervals: list[TimewInterval],
 
     for suggested in suggested_intervals:
         # Find overlapping timew intervals
-        overlapping = [tw for tw in unmatched_timew
-                      if tw.end and tw.start <= suggested.end and suggested.start <= tw.end]
+        overlapping = [
+            tw
+            for tw in unmatched_timew
+            if tw.end and tw.start <= suggested.end and suggested.start <= tw.end
+        ]
 
         if not overlapping:
             # No timew interval found for this suggestion
-            result['missing'].append(suggested)
+            result["missing"].append(suggested)
             continue
 
         # Find best matching interval (most overlap)
-        best_match = max(overlapping, key=lambda tw: min(tw.end, suggested.end) - max(tw.start, suggested.start))
+        best_match = max(
+            overlapping, key=lambda tw: min(tw.end, suggested.end) - max(tw.start, suggested.start)
+        )
 
         # Check if tags match
         if best_match.tags == suggested.tags:
-            result['matching'].append((best_match, suggested))
+            result["matching"].append((best_match, suggested))
         else:
-            result['different_tags'].append((best_match, suggested))
+            result["different_tags"].append((best_match, suggested))
 
         # Remove from unmatched
         unmatched_timew.remove(best_match)
 
     # Remaining timew intervals are "extra" (not suggested by AW)
-    result['extra'] = unmatched_timew
+    result["extra"] = unmatched_timew
 
     return result
 
@@ -165,7 +168,7 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
     """
     lines = []
     lines.append("\n" + "=" * 80)
-    lines.append(colored("TimeWarrior vs ActivityWatch Comparison", attrs=['bold']))
+    lines.append(colored("TimeWarrior vs ActivityWatch Comparison", attrs=["bold"]))
     lines.append("=" * 80)
 
     # Summary
@@ -176,36 +179,52 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
     lines.append(f"  + Extra in TimeWarrior:     {len(comparison['extra'])}")
 
     # Missing intervals (suggested but not in timew)
-    if comparison['missing']:
-        lines.append(f"\n{colored('Missing from TimeWarrior (suggested by ActivityWatch):', 'red', attrs=['bold'])}")
-        for suggested in comparison['missing']:
+    if comparison["missing"]:
+        lines.append(
+            f"\n{colored('Missing from TimeWarrior (suggested by ActivityWatch):', 'red', attrs=['bold'])}"
+        )
+        for suggested in comparison["missing"]:
             duration = suggested.duration()
             # Convert to local time for display
-            start_local = suggested.start.astimezone().strftime('%H:%M:%S')
-            end_local = suggested.end.astimezone().strftime('%H:%M:%S')
-            lines.append(colored(f"  - {start_local} - {end_local} "
-                               f"({duration.total_seconds()/60:.1f}min)", 'red'))
-            lines.append(colored(f"    Tags: {', '.join(sorted(suggested.tags))}", 'red'))
+            start_local = suggested.start.astimezone().strftime("%H:%M:%S")
+            end_local = suggested.end.astimezone().strftime("%H:%M:%S")
+            lines.append(
+                colored(
+                    f"  - {start_local} - {end_local} " f"({duration.total_seconds()/60:.1f}min)",
+                    "red",
+                )
+            )
+            lines.append(colored(f"    Tags: {', '.join(sorted(suggested.tags))}", "red"))
 
     # Extra intervals (in timew but not suggested)
-    if comparison['extra']:
-        lines.append(f"\n{colored('Extra in TimeWarrior (not suggested by ActivityWatch):', 'yellow', attrs=['bold'])}")
-        for timew_int in comparison['extra']:
+    if comparison["extra"]:
+        lines.append(
+            f"\n{colored('Extra in TimeWarrior (not suggested by ActivityWatch):', 'yellow', attrs=['bold'])}"
+        )
+        for timew_int in comparison["extra"]:
             duration = timew_int.duration()
             # Convert to local time for display
-            start_local = timew_int.start.astimezone().strftime('%H:%M:%S')
-            end_local = timew_int.end.astimezone().strftime('%H:%M:%S') if timew_int.end else 'ongoing'
-            lines.append(colored(f"  + {start_local} - {end_local} "
-                               f"({duration.total_seconds()/60:.1f}min)", 'yellow'))
-            lines.append(colored(f"    Tags: {', '.join(sorted(timew_int.tags))}", 'yellow'))
+            start_local = timew_int.start.astimezone().strftime("%H:%M:%S")
+            end_local = (
+                timew_int.end.astimezone().strftime("%H:%M:%S") if timew_int.end else "ongoing"
+            )
+            lines.append(
+                colored(
+                    f"  + {start_local} - {end_local} " f"({duration.total_seconds()/60:.1f}min)",
+                    "yellow",
+                )
+            )
+            lines.append(colored(f"    Tags: {', '.join(sorted(timew_int.tags))}", "yellow"))
 
     # Different tags
-    if comparison['different_tags']:
+    if comparison["different_tags"]:
         lines.append(f"\n{colored('Intervals with different tags:', 'cyan', attrs=['bold'])}")
-        for timew_int, suggested in comparison['different_tags']:
+        for timew_int, suggested in comparison["different_tags"]:
             # Convert to local time for display
-            start_local = timew_int.start.astimezone().strftime('%H:%M:%S')
-            end_local = timew_int.end.astimezone().strftime('%H:%M:%S') if timew_int.end else 'ongoing'
+            start_local = timew_int.start.astimezone().strftime("%H:%M:%S")
+            end_local = (
+                timew_int.end.astimezone().strftime("%H:%M:%S") if timew_int.end else "ongoing"
+            )
             lines.append(f"  {start_local} - {end_local}")
 
             # Show tag differences
@@ -217,24 +236,32 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
             common = timew_tags & suggested_tags
 
             if common and verbose:
-                lines.append(colored(f"    Common:    {', '.join(sorted(common))}", 'white'))
+                lines.append(colored(f"    Common:    {', '.join(sorted(common))}", "white"))
             if only_in_timew:
-                lines.append(colored(f"    - In timew:  {', '.join(sorted(only_in_timew))}", 'red'))
+                lines.append(colored(f"    - In timew:  {', '.join(sorted(only_in_timew))}", "red"))
             if only_in_suggested:
-                lines.append(colored(f"    + Suggested: {', '.join(sorted(only_in_suggested))}", 'green'))
+                lines.append(
+                    colored(f"    + Suggested: {', '.join(sorted(only_in_suggested))}", "green")
+                )
 
     # Matching intervals (if verbose)
-    if verbose and comparison['matching']:
+    if verbose and comparison["matching"]:
         lines.append(f"\n{colored('Matching intervals:', 'green', attrs=['bold'])}")
-        for timew_int, _suggested in comparison['matching']:
+        for timew_int, _suggested in comparison["matching"]:
             duration = timew_int.duration()
             # Convert to local time for display
-            start_local = timew_int.start.astimezone().strftime('%H:%M:%S')
-            end_local = timew_int.end.astimezone().strftime('%H:%M:%S') if timew_int.end else 'ongoing'
-            lines.append(colored(f"  ✓ {start_local} - {end_local} "
-                               f"({duration.total_seconds()/60:.1f}min)", 'green'))
+            start_local = timew_int.start.astimezone().strftime("%H:%M:%S")
+            end_local = (
+                timew_int.end.astimezone().strftime("%H:%M:%S") if timew_int.end else "ongoing"
+            )
+            lines.append(
+                colored(
+                    f"  ✓ {start_local} - {end_local} " f"({duration.total_seconds()/60:.1f}min)",
+                    "green",
+                )
+            )
             if verbose:
-                lines.append(colored(f"    Tags: {', '.join(sorted(timew_int.tags))}", 'green'))
+                lines.append(colored(f"    Tags: {', '.join(sorted(timew_int.tags))}", "green"))
 
     lines.append("\n" + "=" * 80 + "\n")
 
@@ -265,9 +292,7 @@ def merge_consecutive_intervals(intervals: list[SuggestedInterval]) -> list[Sugg
         if current.end == next_interval.start and current.tags == next_interval.tags:
             # Merge: extend the current interval to include the next one
             current = SuggestedInterval(
-                start=current.start,
-                end=next_interval.end,
-                tags=current.tags
+                start=current.start, end=next_interval.end, tags=current.tags
             )
         else:
             # Not consecutive or different tags - add current to results and start new
@@ -299,32 +324,32 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     commands = []
 
     # Merge consecutive intervals with the same tags before generating commands
-    merged_missing = merge_consecutive_intervals(comparison['missing'])
+    merged_missing = merge_consecutive_intervals(comparison["missing"])
 
     # Add missing intervals using 'timew track'
     for suggested in merged_missing:
         # Format: timew track 2025-12-08T10:00:00 - 2025-12-08T11:00:00 tag1 tag2 :adjust
-        start_str = suggested.start.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
-        end_str = suggested.end.astimezone().strftime('%Y-%m-%dT%H:%M:%S')
-        tags = ' '.join(sorted(suggested.tags))
+        start_str = suggested.start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+        end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+        tags = " ".join(sorted(suggested.tags))
         commands.append(f"timew track {start_str} - {end_str} {tags} :adjust")
 
     # Fix intervals with different tags using 'timew retag'
-    for timew_int, suggested in comparison['different_tags']:
+    for timew_int, suggested in comparison["different_tags"]:
         # Use the timew interval's ID for retag command
         # Format: timew retag @<id> tag1 tag2 tag3
         # First, remove all existing tags, then add the suggested ones
         # This is done by specifying all new tags - timew retag replaces all tags
-        tags = ' '.join(sorted(suggested.tags))
+        tags = " ".join(sorted(suggested.tags))
 
         # Format timestamp for comment
-        timestamp_str = timew_int.start.astimezone().strftime('%Y-%m-%d %H:%M')
+        timestamp_str = timew_int.start.astimezone().strftime("%Y-%m-%d %H:%M")
 
         # Format old tags for comment
-        old_tags_str = ' '.join(sorted(timew_int.tags))
+        old_tags_str = " ".join(sorted(timew_int.tags))
 
         # Check if this is a manually-entered event (no ~aw tag)
-        is_manual = '~aw' not in timew_int.tags
+        is_manual = "~aw" not in timew_int.tags
 
         # Build the command with comment
         base_cmd = f"timew retag @{timew_int.id} {tags}"
@@ -337,15 +362,15 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
             commands.append(f"{base_cmd}{comment}")
 
     # Delete extra intervals using 'timew delete'
-    for timew_int in comparison['extra']:
+    for timew_int in comparison["extra"]:
         # Format timestamp for comment
-        timestamp_str = timew_int.start.astimezone().strftime('%Y-%m-%d %H:%M')
+        timestamp_str = timew_int.start.astimezone().strftime("%Y-%m-%d %H:%M")
 
         # Format tags for comment
-        tags_str = ' '.join(sorted(timew_int.tags))
+        tags_str = " ".join(sorted(timew_int.tags))
 
         # Check if this is a manually-entered event (no ~aw tag)
-        is_manual = '~aw' not in timew_int.tags
+        is_manual = "~aw" not in timew_int.tags
 
         # Build the command with comment
         # Note: timew delete requires confirmation unless :yes is used
@@ -361,10 +386,12 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     return commands
 
 
-def format_timeline(timew_intervals: list[TimewInterval],
-                   suggested_intervals: list[SuggestedInterval],
-                   start_time: datetime,
-                   end_time: datetime) -> str:
+def format_timeline(
+    timew_intervals: list[TimewInterval],
+    suggested_intervals: list[SuggestedInterval],
+    start_time: datetime,
+    end_time: datetime,
+) -> str:
     """
     Format a timeline view showing TimeWarrior vs ActivityWatch intervals side-by-side.
 
@@ -387,7 +414,9 @@ def format_timeline(timew_intervals: list[TimewInterval],
     start_local = start_time.astimezone()
     end_local = end_time.astimezone()
 
-    lines.append(f"Time range: {start_local.strftime('%Y-%m-%d %H:%M:%S')} - {end_local.strftime('%H:%M:%S')}")
+    lines.append(
+        f"Time range: {start_local.strftime('%Y-%m-%d %H:%M:%S')} - {end_local.strftime('%H:%M:%S')}"
+    )
     lines.append("")
 
     # Collect all time points from timew intervals (include those starting before start_time)
@@ -436,7 +465,7 @@ def format_timeline(timew_intervals: list[TimewInterval],
     for i, time_point in enumerate(time_points[:-1]):
         next_point = time_points[i + 1]
         time_local = time_point.astimezone()
-        time_str = time_local.strftime('%H:%M:%S')
+        time_str = time_local.strftime("%H:%M:%S")
 
         # Check if this time slice is within the requested window
         in_requested_window = time_point >= start_time and next_point <= end_time
@@ -472,7 +501,6 @@ def format_timeline(timew_intervals: list[TimewInterval],
         else:
             timew_str = colored("(no tracking)", "red")
 
-
         # Format the ActivityWatch intervals
         if not in_requested_window:
             # Outside requested window - mark as N/A
@@ -494,7 +522,13 @@ def format_timeline(timew_intervals: list[TimewInterval],
 
         # Color code based on match status (only for time slices within requested window)
         # Only color when we have actual text to display (not blank continuation lines)
-        if in_requested_window and timew_str and suggested_str and timew_active and suggested_active:
+        if (
+            in_requested_window
+            and timew_str
+            and suggested_str
+            and timew_active
+            and suggested_active
+        ):
             # Both have something - check if tags match
             timew_tags = set().union(*[iv.tags for iv in timew_active])
             suggested_tags = set().union(*[iv.tags for iv in suggested_active])

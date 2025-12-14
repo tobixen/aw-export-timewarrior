@@ -41,7 +41,7 @@ class EventFetcher:
         self,
         test_data: dict[str, Any] | None = None,
         client_name: str = "aw-export",
-        log_callback: Callable | None = None
+        log_callback: Callable | None = None,
     ) -> None:
         """Initialize event fetcher.
 
@@ -53,7 +53,7 @@ class EventFetcher:
         self.log_callback = log_callback or (lambda msg, **kwargs: logger.info(msg))
 
         if test_data:
-            self.buckets = test_data.get('buckets', {})
+            self.buckets = test_data.get("buckets", {})
             self.test_data = test_data
             self.aw = None
         else:
@@ -72,30 +72,27 @@ class EventFetcher:
 
         for bucket_id, bucket in self.buckets.items():
             # Parse last_updated timestamp
-            lu = bucket.get('last_updated')
+            lu = bucket.get("last_updated")
             if lu:
-                bucket['last_updated_dt'] = datetime.fromisoformat(lu)
+                bucket["last_updated_dt"] = datetime.fromisoformat(lu)
             else:
-                bucket['last_updated_dt'] = None
+                bucket["last_updated_dt"] = None
 
             # Index by client type
-            client = bucket['client']
+            client = bucket["client"]
             self.bucket_by_client[client].append(bucket_id)
 
             # Short name lookup (e.g., "aw-watcher-window" -> bucket)
-            bucket_short = bucket_id[:bucket_id.find('_')] if '_' in bucket_id else bucket_id
+            bucket_short = bucket_id[: bucket_id.find("_")] if "_" in bucket_id else bucket_id
             # Don't assert - just log warning if duplicate (allows flexibility)
             if bucket_short in self.bucket_short:
                 logger.warning(f"Duplicate bucket short name: {bucket_short}")
             self.bucket_short[bucket_short] = bucket
             # Also store the full bucket_id for convenience
-            self.bucket_short[bucket_short]['id'] = bucket_id
+            self.bucket_short[bucket_short]["id"] = bucket_id
 
     def get_events(
-        self,
-        bucket_id: str,
-        start: datetime | None = None,
-        end: datetime | None = None
+        self, bucket_id: str, start: datetime | None = None, end: datetime | None = None
     ) -> list[dict]:
         """Fetch events from a bucket.
 
@@ -114,26 +111,23 @@ class EventFetcher:
             return self._get_events_from_test_data(bucket_id, start, end)
 
     def _get_events_from_test_data(
-        self,
-        bucket_id: str,
-        start: datetime | None,
-        end: datetime | None
+        self, bucket_id: str, start: datetime | None, end: datetime | None
     ) -> list[dict]:
         """Get events from test data with time filtering.
 
         This is extracted from the original Exporter.get_events() method.
         """
-        events = self.test_data.get('events', {}).get(bucket_id, [])
+        events = self.test_data.get("events", {}).get(bucket_id, [])
 
         # Convert dict events to Event objects supporting both dict and attribute access
         class Event(dict):
             def _convert_value(self, key: str, val: Any) -> Any:
                 """Convert values for consistency between dict and attribute access."""
                 # Convert timestamp strings to datetime
-                if key == 'timestamp' and isinstance(val, str):
+                if key == "timestamp" and isinstance(val, str):
                     return datetime.fromisoformat(val)
                 # Convert duration to timedelta
-                if key == 'duration' and isinstance(val, (int, float)):
+                if key == "duration" and isinstance(val, int | float):
                     return timedelta(seconds=val)
                 return val
 
@@ -142,7 +136,7 @@ class EventFetcher:
                 return self._convert_value(key, val)
 
             def __getattr__(self, key: str) -> Any:
-                if key.startswith('_'):
+                if key.startswith("_"):
                     raise AttributeError(f"Event has no attribute '{key}'")
                 if key in self:
                     return self[key]  # Use __getitem__ for conversion
@@ -165,11 +159,7 @@ class EventFetcher:
         return event_objs
 
     def get_corresponding_event(
-        self,
-        window_event: dict,
-        bucket_id: str,
-        ignorable: bool = False,
-        retry: int = 6
+        self, window_event: dict, bucket_id: str, ignorable: bool = False, retry: int = 6
     ) -> dict | None:
         """Find corresponding sub-event (browser URL, editor file).
 
@@ -188,21 +178,22 @@ class EventFetcher:
         # Try to find events in a 1-second window around the window event
         ret = self.get_events(
             bucket_id,
-            start=window_event['timestamp'] - timedelta(seconds=1),
-            end=window_event['timestamp'] + window_event['duration']
+            start=window_event["timestamp"] - timedelta(seconds=1),
+            end=window_event["timestamp"] + window_event["duration"],
         )
 
         # If nothing found and this is a recent event, try waiting
         if not ret and not ignorable and retry:
-            event_end = window_event['timestamp'] + window_event['duration']
+            event_end = window_event["timestamp"] + window_event["duration"]
             # Only retry if event is recent (within SLEEP_INTERVAL*3 of current time)
             if time() - SLEEP_INTERVAL * 3 < event_end.timestamp():
                 # Event might not have reached ActivityWatch yet
                 self.log_callback(
                     f"Event details for {window_event} not in yet, attempting to sleep for a while",
-                    event=window_event
+                    event=window_event,
                 )
                 from time import sleep
+
                 sleep(SLEEP_INTERVAL * 3 / retry + 0.2)
                 retry -= 1
                 return self.get_corresponding_event(window_event, bucket_id, ignorable, retry)
@@ -211,27 +202,27 @@ class EventFetcher:
         if not ret and not ignorable:
             ret = self.get_events(
                 bucket_id,
-                start=window_event['timestamp'] - timedelta(seconds=15),
-                end=window_event['timestamp'] + window_event['duration'] + timedelta(seconds=15)
+                start=window_event["timestamp"] - timedelta(seconds=15),
+                end=window_event["timestamp"] + window_event["duration"] + timedelta(seconds=15),
             )
 
         # Log if nothing found (unless ignorable or very short event)
         if not ret:
-            if not ignorable and window_event['duration'] >= timedelta(seconds=IGNORE_INTERVAL * 4):
+            if not ignorable and window_event["duration"] >= timedelta(seconds=IGNORE_INTERVAL * 4):
                 self.log_callback(
                     f"No corresponding {bucket_id} found. Window title: {window_event['data']['title']}. "
                     f"If you see this often, you should verify that the relevant watchers are active and running.",
-                    event=window_event
+                    event=window_event,
                 )
             return None
 
         # If multiple events found, filter out short ones and pick longest
         if len(ret) > 1:
-            ret2 = [x for x in ret if x['duration'] > timedelta(seconds=IGNORE_INTERVAL)]
+            ret2 = [x for x in ret if x["duration"] > timedelta(seconds=IGNORE_INTERVAL)]
             if ret2:
                 ret = ret2
             # Sort by duration (longest first)
-            ret.sort(key=lambda x: -x['duration'])
+            ret.sort(key=lambda x: -x["duration"])
 
         return ret[0]
 
@@ -241,14 +232,14 @@ class EventFetcher:
         Args:
             warn_threshold: Warn if bucket older than this (seconds)
         """
-        for bucketclient in ('aw-watcher-window', 'aw-watcher-afk'):
+        for bucketclient in ("aw-watcher-window", "aw-watcher-afk"):
             if bucketclient not in self.bucket_by_client:
                 logger.warning(f"Required bucket client not found: {bucketclient}")
                 continue
 
             for bucket_id in self.bucket_by_client[bucketclient]:
                 bucket = self.buckets[bucket_id]
-                last_updated_dt = bucket.get('last_updated_dt')
+                last_updated_dt = bucket.get("last_updated_dt")
 
                 if not last_updated_dt or time() - last_updated_dt.timestamp() > warn_threshold:
                     logger.warning(f"Bucket {bucket['id']} seems not to have recent data!")
@@ -262,7 +253,7 @@ class EventFetcher:
         Raises:
             KeyError: If no window bucket found
         """
-        return self.bucket_by_client['aw-watcher-window'][0]
+        return self.bucket_by_client["aw-watcher-window"][0]
 
     def get_afk_bucket(self) -> str:
         """Get AFK watcher bucket ID.
@@ -273,7 +264,7 @@ class EventFetcher:
         Raises:
             KeyError: If no AFK bucket found
         """
-        return self.bucket_by_client['aw-watcher-afk'][0]
+        return self.bucket_by_client["aw-watcher-afk"][0]
 
     def has_bucket_client(self, client_type: str) -> bool:
         """Check if a bucket client type exists.

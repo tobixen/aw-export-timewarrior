@@ -26,10 +26,7 @@ def exporter_with_test_data(test_data_path: Path) -> Exporter:
     from src.aw_export_timewarrior.export import load_test_data
 
     test_data = load_test_data(test_data_path)
-    exporter = Exporter(
-        dry_run=True,
-        test_data=test_data
-    )
+    exporter = Exporter(dry_run=True, test_data=test_data)
     return exporter
 
 
@@ -54,40 +51,34 @@ def test_extract_specialized_data_browser(exporter_with_test_data: Exporter) -> 
     """Test extraction of browser URL data."""
     # Create a test window event with chromium
     window_event = {
-        'timestamp': datetime(2025, 12, 11, 9, 4, 43, tzinfo=UTC),
-        'duration': pytest.approx(0.0),
-        'data': {
-            'app': 'chromium',
-            'title': 'Chat - Test Chat - Chromium'
-        }
+        "timestamp": datetime(2025, 12, 11, 9, 4, 43, tzinfo=UTC),
+        "duration": pytest.approx(0.0),
+        "data": {"app": "chromium", "title": "Chat - Test Chat - Chromium"},
     }
 
     result = extract_specialized_data(exporter_with_test_data, window_event)
 
-    assert result['app'] == 'chromium'
-    assert result['specialized_type'] == 'browser'
+    assert result["app"] == "chromium"
+    assert result["specialized_type"] == "browser"
     # May or may not find a matching browser event depending on timing
     # Just verify the structure is correct
-    if result['specialized_data']:
-        assert 'https://' in result['specialized_data']
+    if result["specialized_data"]:
+        assert "https://" in result["specialized_data"]
 
 
 def test_extract_specialized_data_non_browser(exporter_with_test_data: Exporter) -> None:
     """Test that non-browser/editor apps return no specialized data."""
     window_event = {
-        'timestamp': datetime(2025, 12, 11, 9, 0, 1, tzinfo=UTC),
-        'duration': pytest.approx(0.0),
-        'data': {
-            'app': 'foot',
-            'title': 'ssh server1.example.com'
-        }
+        "timestamp": datetime(2025, 12, 11, 9, 0, 1, tzinfo=UTC),
+        "duration": pytest.approx(0.0),
+        "data": {"app": "foot", "title": "ssh server1.example.com"},
     }
 
     result = extract_specialized_data(exporter_with_test_data, window_event)
 
-    assert result['app'] == 'foot'
-    assert result['specialized_type'] is None
-    assert result['specialized_data'] is None
+    assert result["app"] == "foot"
+    assert result["specialized_type"] is None
+    assert result["specialized_data"] is None
 
 
 def test_collect_report_data(exporter_with_test_data: Exporter) -> None:
@@ -102,23 +93,23 @@ def test_collect_report_data(exporter_with_test_data: Exporter) -> None:
 
     # Check that data has required keys
     for row in data:
-        assert 'timestamp' in row
-        assert 'duration' in row
-        assert 'window_title' in row
-        assert 'app' in row
-        assert 'specialized_type' in row
-        assert 'specialized_data' in row
-        assert 'afk_status' in row
-        assert 'tags' in row
+        assert "timestamp" in row
+        assert "duration" in row
+        assert "window_title" in row
+        assert "app" in row
+        assert "specialized_type" in row
+        assert "specialized_data" in row
+        assert "afk_status" in row
+        assert "tags" in row
 
     # Find a browser event and verify it has URL
-    browser_events = [row for row in data if row['specialized_type'] == 'browser']
+    browser_events = [row for row in data if row["specialized_type"] == "browser"]
     assert len(browser_events) > 0
 
     # At least one browser event should have a URL
-    urls = [row['specialized_data'] for row in browser_events if row['specialized_data']]
+    urls = [row["specialized_data"] for row in browser_events if row["specialized_data"]]
     assert len(urls) > 0
-    assert any('https://' in url for url in urls)
+    assert any("https://" in url for url in urls)
 
 
 def test_report_data_sorted_by_timestamp(exporter_with_test_data: Exporter) -> None:
@@ -130,7 +121,7 @@ def test_report_data_sorted_by_timestamp(exporter_with_test_data: Exporter) -> N
 
     # Verify chronological order
     for i in range(len(data) - 1):
-        assert data[i]['timestamp'] <= data[i + 1]['timestamp']
+        assert data[i]["timestamp"] <= data[i + 1]["timestamp"]
 
 
 def test_report_includes_afk_status(exporter_with_test_data: Exporter) -> None:
@@ -141,10 +132,10 @@ def test_report_includes_afk_status(exporter_with_test_data: Exporter) -> None:
     data = collect_report_data(exporter_with_test_data, start_time, end_time)
 
     # Check that AFK status is populated
-    afk_statuses = {row['afk_status'] for row in data}
+    afk_statuses = {row["afk_status"] for row in data}
     # Should have at least one status (not-afk, afk, or unknown)
     assert len(afk_statuses) > 0
-    assert afk_statuses.issubset({'not-afk', 'afk', 'unknown'})
+    assert afk_statuses.issubset({"not-afk", "afk", "unknown"})
 
 
 def test_report_includes_tags(exporter_with_test_data: Exporter) -> None:
@@ -156,5 +147,5 @@ def test_report_includes_tags(exporter_with_test_data: Exporter) -> None:
 
     # All events should have tags (at minimum 'UNMATCHED' if no rules match)
     for row in data:
-        assert isinstance(row['tags'], set)
-        assert len(row['tags']) > 0
+        assert isinstance(row["tags"], set)
+        assert len(row["tags"]) > 0

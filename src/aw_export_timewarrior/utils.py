@@ -24,9 +24,9 @@ def parse_datetime(dt_string: str) -> datetime:
     dt = dateparser.parse(
         dt_string,
         settings={
-            'RETURN_AS_TIMEZONE_AWARE': True,
-            'TIMEZONE': 'local',
-        }
+            "RETURN_AS_TIMEZONE_AWARE": True,
+            "TIMEZONE": "local",
+        },
     )
 
     if dt is None:
