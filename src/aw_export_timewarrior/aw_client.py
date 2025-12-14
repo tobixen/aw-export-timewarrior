@@ -25,6 +25,16 @@ AW_WARN_THRESHOLD = 300.0  # Warn if bucket data older than this (seconds)
 SLEEP_INTERVAL = 30.0  # Sleep between retries
 IGNORE_INTERVAL = 3.0  # Ignore events shorter than this
 
+# Event matching buffer: time window (in seconds) to expand search when looking
+# for corresponding sub-events (browser, editor). Accounts for clock skew and
+# timing differences between different watchers.
+EVENT_MATCHING_BUFFER_SECONDS = 15
+
+# Logging threshold: minimum event duration (as multiple of IGNORE_INTERVAL)
+# before we log a warning about missing corresponding events.
+# 4x IGNORE_INTERVAL = 12 seconds by default.
+MIN_DURATION_FOR_MISSING_EVENT_WARNING = 4
+
 
 class EventFetcher:
     """Fetches events from ActivityWatch (or test data).
@@ -198,17 +208,21 @@ class EventFetcher:
                 retry -= 1
                 return self.get_corresponding_event(window_event, bucket_id, ignorable, retry)
 
-        # If still nothing found, try a wider 15-second window
+        # If still nothing found, try a wider window to account for timing differences
         if not ret and not ignorable:
             ret = self.get_events(
                 bucket_id,
-                start=window_event["timestamp"] - timedelta(seconds=15),
-                end=window_event["timestamp"] + window_event["duration"] + timedelta(seconds=15),
+                start=window_event["timestamp"] - timedelta(seconds=EVENT_MATCHING_BUFFER_SECONDS),
+                end=window_event["timestamp"]
+                + window_event["duration"]
+                + timedelta(seconds=EVENT_MATCHING_BUFFER_SECONDS),
             )
 
         # Log if nothing found (unless ignorable or very short event)
         if not ret:
-            if not ignorable and window_event["duration"] >= timedelta(seconds=IGNORE_INTERVAL * 4):
+            if not ignorable and window_event["duration"] >= timedelta(
+                seconds=IGNORE_INTERVAL * MIN_DURATION_FOR_MISSING_EVENT_WARNING
+            ):
                 self.log_callback(
                     f"No corresponding {bucket_id} found. Window title: {window_event['data']['title']}. "
                     f"If you see this often, you should verify that the relevant watchers are active and running.",
