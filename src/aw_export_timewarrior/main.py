@@ -1396,6 +1396,12 @@ class Exporter:
                 ## continue after handling { 'afk' } and
                 ## we will pick up "ghost" events that should be
                 ## ignored.  (we could add some logic to skip handled or skippable events)
+
+                # CRITICAL: Advance last_tick to prevent infinite loop
+                # Without this, the next call to find_next_activity() would
+                # fetch the same events again from self.state.last_tick
+                self.state.last_tick = event["timestamp"] + event["duration"]
+
                 if self.state.is_afk():
                     return True
                 continue
@@ -1536,7 +1542,18 @@ class Exporter:
 
         # If process_all is True, keep finding activity until there's none left
         if process_all:
+            iterations = 0
+            max_iterations = 10000  # Safety limit to prevent infinite loops
             while True:
+                iterations += 1
+                if iterations > max_iterations:
+                    self.log(
+                        f"ERROR: Reached maximum iteration limit ({max_iterations}). "
+                        f"Possible infinite loop detected at last_tick={self.state.last_tick}",
+                        level=logging.ERROR,
+                    )
+                    break
+
                 found_activity = self.find_next_activity()
                 if not found_activity:
                     # Check if we've reached end_time
