@@ -1190,12 +1190,17 @@ class Exporter:
         if len(afk_window_events) == 0:
             return [], None
 
-        # Separate the current ongoing event from completed events
-        # The last event is the "current" event still in progress
-        current_event = afk_window_events[-1] if len(afk_window_events) > 0 else None
-        completed_events = afk_window_events[:-1] if len(afk_window_events) > 1 else []
-
-        return completed_events, current_event
+        # When we have an end_time (test data or specific time range), treat ALL events as completed
+        # Only in live monitoring (no end_time) should we treat the last event as "current/ongoing"
+        if self.end_time:
+            # Historical mode: all events are completed
+            return afk_window_events, None
+        else:
+            # Live monitoring mode: separate the current ongoing event from completed events
+            # The last event is the "current" event still in progress
+            current_event = afk_window_events[-1] if len(afk_window_events) > 0 else None
+            completed_events = afk_window_events[:-1] if len(afk_window_events) > 1 else []
+            return completed_events, current_event
 
     def _should_skip_event(self, event: dict) -> bool:
         """Check if event should be skipped due to old timestamp.
@@ -1221,8 +1226,17 @@ class Exporter:
                 and event["timestamp"] > self.state.last_start_time
             ):
                 if event["duration"] > timedelta(seconds=DEBUG_SKIP_THRESHOLD_SECONDS):
-                    self.breakpoint()
-                self.log(f"skipping event as the timestamp is too old - {event}", event=event)
+                    # Log warning for potentially unexpected long event skip
+                    # Only breakpoint if PDB debugging is enabled
+                    self.log(
+                        f"Skipping long event ({event['duration'].total_seconds()}s) with old timestamp - {event}",
+                        event=event,
+                        level=logging.WARNING,
+                    )
+                    if self.enable_pdb:
+                        self.breakpoint()
+                else:
+                    self.log(f"skipping event as the timestamp is too old - {event}", event=event)
                 return True
 
         return False
@@ -1380,8 +1394,13 @@ class Exporter:
 
         cnt = 0
         for event in completed_events:
+            # CRITICAL: Always advance last_tick for every event, even if skipped/ignored
+            # Otherwise we can get stuck in an infinite loop fetching the same events
+            event_end = event["timestamp"] + event["duration"]
+
             # Skip events with old timestamps
             if self._should_skip_event(event):
+                self.state.last_tick = max(self.state.last_tick, event_end)
                 continue
 
             tag_result = self.find_tags_from_event(event)
@@ -1400,7 +1419,7 @@ class Exporter:
                 # CRITICAL: Advance last_tick to prevent infinite loop
                 # Without this, the next call to find_next_activity() would
                 # fetch the same events again from self.state.last_tick
-                self.state.last_tick = event["timestamp"] + event["duration"]
+                self.state.last_tick = max(self.state.last_tick, event_end)
 
                 if self.state.is_afk():
                     return True
@@ -1418,6 +1437,7 @@ class Exporter:
 
             # Continue to next event if this was IGNORED
             if tag_result.result == EventMatchResult.IGNORED:
+                self.state.last_tick = max(self.state.last_tick, event_end)
                 continue
 
             # Track unknown events count
@@ -1455,14 +1475,15 @@ class Exporter:
                 self.log(f"Ensuring tags export, tags={tags_to_export}")
                 self.ensure_tag_exported(tags_to_export, event, since)
 
-            self.state.last_tick = event["timestamp"] + event["duration"]
+            self.state.last_tick = max(self.state.last_tick, event_end)
             cnt += 1
 
         ## Process the current ongoing event incrementally (idempotent)
         if current_event:
             self._process_current_event_incrementally(current_event)
 
-        return cnt > 1
+        # Return True if we processed any events (cnt > 0) or have a current event
+        return cnt > 0 or current_event is not None
 
     def set_timew_info(self, timew_info):
         """Set the current TimeWarrior tracking info.
