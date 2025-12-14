@@ -166,13 +166,10 @@ class TimewTracker(TimeTracker):
         Returns:
             List of intervals with 'start', 'end', 'tags', 'id'
         """
-        # Format times for timew export (timew expects local time)
-        start_str = start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
-        end_str = end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
-
         try:
+            # Export all intervals (date range syntax varies by timew version, so export all and filter)
             result = subprocess.run(
-                ["timew", "export", start_str, "-", end_str],
+                ["timew", "export"],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -180,7 +177,7 @@ class TimewTracker(TimeTracker):
 
             data = json.loads(result.stdout)
 
-            # Convert to standard format
+            # Convert to standard format and filter by date range
             intervals = []
             for entry in data:
                 # Parse start time
@@ -193,14 +190,24 @@ class TimewTracker(TimeTracker):
                     interval_end = datetime.strptime(entry["end"], "%Y%m%dT%H%M%SZ")
                     interval_end = interval_end.replace(tzinfo=UTC)
 
-                intervals.append(
-                    {
-                        "id": entry.get("id", 0),
-                        "start": interval_start,
-                        "end": interval_end,
-                        "tags": set(entry.get("tags", [])),
-                    }
-                )
+                # Filter by date range
+                # Include if: interval_start is in range OR interval_end is in range OR interval spans the entire range
+                in_range = False
+                if start <= interval_start <= end or interval_end and start <= interval_end <= end:
+                    in_range = True
+                elif interval_end and interval_start < start and interval_end > end:
+                    # Interval spans the entire range
+                    in_range = True
+
+                if in_range:
+                    intervals.append(
+                        {
+                            "id": entry.get("id", 0),
+                            "start": interval_start,
+                            "end": interval_end,
+                            "tags": set(entry.get("tags", [])),
+                        }
+                    )
 
             return intervals
 

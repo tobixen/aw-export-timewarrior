@@ -1586,8 +1586,29 @@ class Exporter:
             # Use start_time if provided, otherwise use timew start
             if self.start_time:
                 self.state.last_tick = self.start_time
-            else:
+            elif self.timew_info:
                 self.state.last_tick = self.timew_info["start_dt"]
+            else:
+                # No active tracking and no start_time - query for last timew interval
+                try:
+                    intervals = self.tracker.get_intervals(
+                        datetime.now(UTC) - timedelta(days=7), datetime.now(UTC)
+                    )
+                    if intervals:
+                        # Find the last interval's end time
+                        last_end = max((i["end"] for i in intervals if i["end"]), default=None)
+                        if last_end:
+                            self.state.last_tick = last_end
+                        else:
+                            # No completed intervals, use lookback period
+                            self.state.last_tick = datetime.now(UTC) - timedelta(hours=1)
+                    else:
+                        # No intervals found, use lookback period
+                        self.state.last_tick = datetime.now(UTC) - timedelta(hours=1)
+                except Exception as e:
+                    # Query failed, fall back to lookback period
+                    self.log(f"Failed to query timew intervals: {e}", level=logging.WARNING)
+                    self.state.last_tick = datetime.now(UTC) - timedelta(hours=1)
             self.state.last_known_tick = self.state.last_tick
             self.state.last_start_time = self.state.last_tick
 
