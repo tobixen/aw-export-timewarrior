@@ -1212,9 +1212,8 @@ class Exporter:
             True if event should be skipped, False otherwise
         """
         # Skip events older than last_tick or last_known_tick
-        if (
-            event["timestamp"] < self.state.last_tick
-            or event["timestamp"] < self.state.last_known_tick
+        if (self.state.last_tick and event["timestamp"] < self.state.last_tick) or (
+            self.state.last_known_tick and event["timestamp"] < self.state.last_known_tick
         ):
             # Always skip not-afk status events with old timestamps
             if event["data"] == {"status": "not-afk"}:
@@ -1223,6 +1222,7 @@ class Exporter:
             # For other events, check additional conditions
             if (
                 event["data"] != {"status": "afk"}
+                and self.state.last_start_time
                 and event["timestamp"] > self.state.last_start_time
             ):
                 if event["duration"] > timedelta(seconds=DEBUG_SKIP_THRESHOLD_SECONDS):
@@ -1387,6 +1387,10 @@ class Exporter:
 
         total_time_skipped_events = timedelta(0)
 
+        # Initialize last_tick if None (first call with test data)
+        if self.state.last_tick is None and self.start_time:
+            self.state.last_tick = self.start_time
+
         # Fetch and prepare events
         completed_events, current_event = self._fetch_and_prepare_events()
         if not completed_events and not current_event:
@@ -1400,7 +1404,11 @@ class Exporter:
 
             # Skip events with old timestamps
             if self._should_skip_event(event):
-                self.state.last_tick = max(self.state.last_tick, event_end)
+                self.state.last_tick = (
+                    event_end
+                    if self.state.last_tick is None
+                    else max(self.state.last_tick, event_end)
+                )
                 continue
 
             tag_result = self.find_tags_from_event(event)
@@ -1419,7 +1427,11 @@ class Exporter:
                 # CRITICAL: Advance last_tick to prevent infinite loop
                 # Without this, the next call to find_next_activity() would
                 # fetch the same events again from self.state.last_tick
-                self.state.last_tick = max(self.state.last_tick, event_end)
+                self.state.last_tick = (
+                    event_end
+                    if self.state.last_tick is None
+                    else max(self.state.last_tick, event_end)
+                )
 
                 if self.state.is_afk():
                     return True
@@ -1437,7 +1449,11 @@ class Exporter:
 
             # Continue to next event if this was IGNORED
             if tag_result.result == EventMatchResult.IGNORED:
-                self.state.last_tick = max(self.state.last_tick, event_end)
+                self.state.last_tick = (
+                    event_end
+                    if self.state.last_tick is None
+                    else max(self.state.last_tick, event_end)
+                )
                 continue
 
             # Track unknown events count
@@ -1450,6 +1466,12 @@ class Exporter:
                 ## Theoretically, we may do lots of different things causing hundred of different independent tags to collect less than the minimum needed to record something.  In practice that doesn't happen.
                 # print(f"We're tossing data: {self.tags_accumulated_time}")
                 self.ensure_tag_exported(tag_result.tags, event)
+
+            # Calculate interval since last known tick
+            # If last_known_tick is None (first event), initialize it to event timestamp or start_time
+            if self.state.last_known_tick is None:
+                # Initialize last_known_tick to start_time or event timestamp
+                self.state.last_known_tick = self.start_time or event["timestamp"]
 
             interval_since_last_known_tick = (
                 event["timestamp"] + event["duration"] - self.state.last_known_tick
@@ -1475,7 +1497,9 @@ class Exporter:
                 self.log(f"Ensuring tags export, tags={tags_to_export}")
                 self.ensure_tag_exported(tags_to_export, event, since)
 
-            self.state.last_tick = max(self.state.last_tick, event_end)
+            self.state.last_tick = (
+                event_end if self.state.last_tick is None else max(self.state.last_tick, event_end)
+            )
             cnt += 1
 
         ## Process the current ongoing event incrementally (idempotent)
