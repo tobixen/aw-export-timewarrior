@@ -158,10 +158,9 @@ class DryRunTracker(TimeTracker):
             self.current_tracking["tags"] = tags
 
     def get_intervals(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
-        """Get tracked intervals in time range from real timew database.
+        """Get tracked intervals in time range.
 
-        In dry-run mode, we still need to query the actual timew database
-        to find the last tracked interval so we can continue from there.
+        In dry-run mode, returns simulated intervals filtered by time range.
 
         Args:
             start: Range start
@@ -170,11 +169,24 @@ class DryRunTracker(TimeTracker):
         Returns:
             List of intervals with 'start', 'end', 'tags'
         """
-        # Delegate to TimewTracker to query the real timew database
-        from .timew_tracker import TimewTracker
+        # Filter simulated intervals by time range
+        filtered = []
+        for interval in self.intervals:
+            interval_start = interval["start"]
+            interval_end = interval.get("end")
 
-        real_tracker = TimewTracker()
-        return real_tracker.get_intervals(start, end)
+            # Include if: interval_start is in range OR interval_end is in range OR interval spans the entire range
+            in_range = False
+            if start <= interval_start <= end or (interval_end and start <= interval_end <= end):
+                in_range = True
+            elif interval_end and interval_start < start and interval_end > end:
+                # Interval spans the entire range
+                in_range = True
+
+            if in_range:
+                filtered.append(interval)
+
+        return filtered
 
     def track_interval(self, start: datetime, end: datetime, tags: set[str]) -> None:
         """Record a simulated past interval.

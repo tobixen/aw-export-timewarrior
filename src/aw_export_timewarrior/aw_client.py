@@ -290,6 +290,16 @@ class EventFetcher:
             return self.bucket_by_client["aw-watcher-lid"][0]
         return None
 
+    def get_ask_away_bucket(self) -> str | None:
+        """Get ask-away watcher bucket ID.
+
+        Returns:
+            Bucket ID for aw-watcher-ask-away, or None if not available
+        """
+        if self.has_bucket_client("aw-watcher-ask-away"):
+            return self.bucket_by_client["aw-watcher-ask-away"][0]
+        return None
+
     def has_bucket_client(self, client_type: str) -> bool:
         """Check if a bucket client type exists.
 

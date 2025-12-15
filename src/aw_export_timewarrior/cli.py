@@ -291,6 +291,9 @@ Examples:
     analyze_parser.add_argument(
         "--min-duration", type=int, metavar="MINUTES", help="Only show events longer than X minutes"
     )
+    analyze_parser.add_argument(
+        "--limit", type=int, metavar="N", default=100, help="Limit output to N lines (default: 100)"
+    )
 
     # ===== EXPORT subcommand =====
     export_parser = subparsers.add_parser(
@@ -598,8 +601,8 @@ def run_analyze(args: argparse.Namespace) -> int:
     # Process all events
     exporter.tick(process_all=True)
 
-    # Show unmatched events report
-    exporter.show_unmatched_events_report()
+    # Show unmatched events report with limit
+    exporter.show_unmatched_events_report(limit=args.limit)
 
     return 0
 

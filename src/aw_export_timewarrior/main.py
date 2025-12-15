@@ -314,6 +314,9 @@ class Exporter:
     unmatched_events: list = field(
         default_factory=list
     )  # Tracks events that didn't match any rules
+    _ask_away_messages: dict = field(
+        default_factory=dict, init=False, repr=False
+    )  # Maps (timestamp, duration) to ask-away messages
 
     def __post_init__(self):
         if not self.config:
@@ -596,8 +599,12 @@ class Exporter:
 
         return comparison
 
-    def show_unmatched_events_report(self) -> None:
-        """Display a report of events that didn't match any rules."""
+    def show_unmatched_events_report(self, limit: int = 100) -> None:
+        """Display a report of events that didn't match any rules.
+
+        Args:
+            limit: Maximum number of output lines to show (default: 100)
+        """
         if not self.unmatched_events:
             print("\nNo unmatched events found - all events matched configuration rules.")
             return
@@ -628,9 +635,16 @@ class Exporter:
         ]
         app_durations.sort(key=lambda x: x[1], reverse=True)
 
+        lines_printed = 5  # Header + summary lines already printed
         for app, app_total_seconds in app_durations:
+            if lines_printed >= limit:
+                remaining_apps = len(app_durations) - app_durations.index((app, app_total_seconds))
+                print(f"\n... and {remaining_apps} more apps (use --limit to show more)")
+                break
+
             events = by_app[app]
             print(f"\n{app} ({len(events)} events, {app_total_seconds/60:.1f} min total):")
+            lines_printed += 2  # App header + blank line
 
             # Group by title and sum durations
             title_durations = defaultdict(float)
@@ -640,22 +654,30 @@ class Exporter:
                 title_durations[title] += event["duration"].total_seconds()
                 title_count[title] += 1
 
-            # Sort titles by duration (descending) and show top 5
+            # Sort titles by duration (descending) and show top titles
             sorted_titles = sorted(title_durations.items(), key=lambda x: x[1], reverse=True)
 
-            for title, duration_seconds in sorted_titles[:5]:
+            # Calculate how many titles we can show
+            remaining_lines = limit - lines_printed
+            max_titles = min(5, remaining_lines - 1)  # -1 for potential long tail summary
+
+            for title, duration_seconds in sorted_titles[:max_titles]:
                 count = title_count[title]
                 title_display = title[:60] + "..." if len(title) > 60 else title
                 print(f"  {duration_seconds/60:5.1f}min ({count:2d}x) - {title_display}")
+                lines_printed += 1
 
             # Show "long tail" summary
-            if len(sorted_titles) > 5:
-                remaining_count = len(sorted_titles) - 5
-                remaining_time = sum(duration for _, duration in sorted_titles[5:])
-                remaining_events = sum(title_count[title] for title, _ in sorted_titles[5:])
+            if len(sorted_titles) > max_titles:
+                remaining_count = len(sorted_titles) - max_titles
+                remaining_time = sum(duration for _, duration in sorted_titles[max_titles:])
+                remaining_events = sum(
+                    title_count[title] for title, _ in sorted_titles[max_titles:]
+                )
                 print(
                     f"  {remaining_time/60:5.1f}min ({remaining_events:2d}x) - ... and {remaining_count} other titles"
                 )
+                lines_printed += 1
 
         print("\n" + "=" * 80 + "\n")
 
@@ -809,6 +831,25 @@ class Exporter:
         final_tags = tags | {"~aw"}  # Add ~aw tag as it's always added
         if self.timew_info is not None and final_tags == self.timew_info["tags"]:
             return
+
+        # Look up ask-away message for this event and extract tags from it
+        if hasattr(self, "_ask_away_messages") and self._ask_away_messages:
+            event_key = (event["timestamp"], event["duration"])
+            message = self._ask_away_messages.get(event_key)
+            if message:
+                # Create synthetic event with message as title for tag extraction
+                synthetic_event = {
+                    "timestamp": event["timestamp"],
+                    "duration": event["duration"],
+                    "data": {"app": "ask-away", "title": message},
+                }
+                # Extract tags from the message using tag extraction rules
+                message_tags = self.tag_extractor.get_app_tags(synthetic_event)
+                if message_tags and message_tags is not False:
+                    if isinstance(message_tags, set):
+                        final_tags = final_tags | message_tags
+                    else:
+                        final_tags = final_tags | set(message_tags)
 
         # Start tracking with the final tags
         self.tracker.start_tracking(final_tags, since)
@@ -1276,6 +1317,22 @@ class Exporter:
         # Lid events take priority (system-level AFK overrides user AFK)
         merged_afk_events = self._merge_afk_and_lid_events(afk_events, lid_events)
 
+        # Fetch ask-away events if available
+        ask_away_bucket = self.event_fetcher.get_ask_away_bucket()
+        if ask_away_bucket:
+            ask_away_events = self.event_fetcher.get_events(
+                ask_away_bucket, start=self.state.last_tick, end=self.end_time
+            )
+            if ask_away_events:
+                logger.info(f"Fetched {len(ask_away_events)} ask-away events")
+                # Store ask-away messages for later annotation
+                self._ask_away_messages = {
+                    (e["timestamp"], e["duration"]): e["data"].get("message", "")
+                    for e in ask_away_events
+                }
+        else:
+            self._ask_away_messages = {}
+
         # Fetch window events and merge with merged AFK events
         afk_window_events = (
             self.event_fetcher.get_events(window_id, start=self.state.last_tick, end=self.end_time)
@@ -1499,12 +1556,9 @@ class Exporter:
             event_end = event["timestamp"] + event["duration"]
 
             # Skip events with old timestamps
+            # Note: We do NOT advance last_tick here because these events are out of order
+            # and advancing last_tick would cause time to jump forward incorrectly
             if self._should_skip_event(event):
-                self.state.last_tick = (
-                    event_end
-                    if self.state.last_tick is None
-                    else max(self.state.last_tick, event_end)
-                )
                 continue
 
             tag_result = self.find_tags_from_event(event)
