@@ -1894,7 +1894,11 @@ def timew_retag(timew_info, dry_run=False, capture_to=None):
 def main():
     exporter = Exporter()
     while True:
-        exporter.tick()
+        should_continue = exporter.tick()
+        if not should_continue:
+            break
+        # Always sleep briefly to prevent busy-waiting and reduce CPU usage
+        sleep(0.1)  # Small delay to prevent 100% CPU when processing events
 
 
 if __name__ == "__main__":
