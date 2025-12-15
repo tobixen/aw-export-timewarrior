@@ -599,11 +599,11 @@ class Exporter:
 
         return comparison
 
-    def show_unmatched_events_report(self, limit: int = 100) -> None:
+    def show_unmatched_events_report(self, limit: int = 10) -> None:
         """Display a report of events that didn't match any rules.
 
         Args:
-            limit: Maximum number of output lines to show (default: 100)
+            limit: Maximum number of output lines to show (default: 10)
         """
         if not self.unmatched_events:
             print("\nNo unmatched events found - all events matched configuration rules.")
@@ -659,7 +659,8 @@ class Exporter:
 
             # Calculate how many titles we can show
             remaining_lines = limit - lines_printed
-            max_titles = min(5, remaining_lines - 1)  # -1 for potential long tail summary
+            # Reserve 1 line for potential long tail summary, but show all titles if space allows
+            max_titles = max(0, remaining_lines - 1) if remaining_lines > 1 else 0
 
             for title, duration_seconds in sorted_titles[:max_titles]:
                 count = title_count[title]

@@ -292,7 +292,7 @@ Examples:
         "--min-duration", type=int, metavar="MINUTES", help="Only show events longer than X minutes"
     )
     analyze_parser.add_argument(
-        "--limit", type=int, metavar="N", default=100, help="Limit output to N lines (default: 100)"
+        "--limit", type=int, metavar="N", default=10, help="Limit output to N lines (default: 10)"
     )
 
     # ===== EXPORT subcommand =====
