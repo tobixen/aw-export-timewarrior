@@ -502,5 +502,47 @@ class TestDiffModeReadOnly:
         assert exporter.dry_run is False, "diff mode with --apply should have dry_run=False"
 
 
+class TestContinuousModeSleep:
+    """Tests that continuous mode doesn't busy-wait (regression test for CPU usage bug)."""
+
+    def test_sync_continuous_mode_calls_sleep(self) -> None:
+        """Test that continuous sync mode calls time.sleep() to prevent 100% CPU usage."""
+        from aw_export_timewarrior.cli import run_sync
+
+        # Create minimal args for sync in continuous mode
+        args = argparse.Namespace(
+            subcommand="sync",
+            config=None,
+            log_level="WARNING",
+            test_data=None,
+            start_time=None,
+            end_time=datetime.now(UTC),  # Set end_time so it doesn't run forever
+            once=False,  # Continuous mode (not --once)
+            dry_run=True,  # Dry run to avoid actual timewarrior calls
+            timew_config_override=None,
+            ignore_errors=False,
+            breakpoint_on_error=False,
+        )
+
+        # Mock the Exporter to control tick() behavior
+        with patch("aw_export_timewarrior.cli.create_exporter_from_args") as mock_create:
+            mock_exporter = Mock()
+            # tick() returns True once, then False to exit the loop
+            mock_exporter.tick.side_effect = [True, False]
+            mock_exporter.end_time = args.end_time
+            mock_create.return_value = mock_exporter
+
+            # Mock time.sleep to verify it's called
+            with patch("aw_export_timewarrior.cli.time.sleep") as mock_sleep:
+                run_sync(args)
+
+                # Verify sleep was called at least once during the continuous loop
+                assert (
+                    mock_sleep.call_count >= 1
+                ), "time.sleep() should be called in continuous mode to prevent busy-waiting"
+                # Verify it's a reasonable sleep duration (0.1s)
+                mock_sleep.assert_called_with(0.1)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

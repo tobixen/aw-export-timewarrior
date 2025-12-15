@@ -8,6 +8,7 @@ Provides subcommands for different operational modes: sync, diff, analyze, expor
 import argparse
 import logging
 import sys
+import time
 from dataclasses import fields
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -559,7 +560,8 @@ def run_sync(args: argparse.Namespace) -> int:
             print("Starting continuous monitoring (Ctrl+C to stop)...")
 
         while exporter.tick():
-            pass  # tick() returns False when we should stop
+            # Small sleep to prevent 100% CPU usage during continuous sync
+            time.sleep(0.1)
 
         if exporter.end_time:
             print(f"\nReached end of time range at {exporter.end_time}")
