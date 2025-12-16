@@ -368,6 +368,10 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     Returns:
         List of timew command strings (may include commented lines)
     """
+    # Import here to avoid circular dependency
+    from .config import config
+    from .main import retag_by_rules
+
     commands = []
 
     # Merge consecutive intervals with the same tags before generating commands
@@ -379,7 +383,9 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         # NOTE: Using :adjust to maintain continuous tracking without gaps
         start_str = suggested.start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
         end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
-        tags = " ".join(sorted(suggested.tags))
+        # Apply recursive tag rules before generating command
+        final_tags = retag_by_rules(suggested.tags, config)
+        tags = " ".join(sorted(final_tags))
         commands.append(f"timew track {start_str} - {end_str} {tags} :adjust")
 
     # Fix intervals with different tags using 'timew retag'
@@ -391,7 +397,9 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         # Format: timew retag @<id> tag1 tag2 tag3
         # First, remove all existing tags, then add the suggested ones
         # This is done by specifying all new tags - timew retag replaces all tags
-        tags = " ".join(sorted(suggested.tags))
+        # Apply recursive tag rules before generating command
+        final_tags = retag_by_rules(suggested.tags, config)
+        tags = " ".join(sorted(final_tags))
 
         # Format timestamp for comment
         timestamp_str = timew_int.start.astimezone().strftime("%Y-%m-%d %H:%M")

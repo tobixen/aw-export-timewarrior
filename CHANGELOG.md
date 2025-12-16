@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix assertion error in batch/diff mode when internal AFK state diverges from TimeWarrior state - normal when processing historical events
 - Fix assertion error in batch/diff mode when last_activity_run_time is less than min_recording_interval - normal when processing historical events
 - Fix diff comparison incorrectly marking previously synced intervals (with ~aw tag) as "extra" - now correctly identified as "previously_synced"
+- Fix diff mode not applying recursive tag rules - commands now properly expand tags (e.g., "food" → "food", "4BREAK")
 
 ### Changed
 - Diff mode now always runs in dry-run mode, use `--apply` flag to execute changes
