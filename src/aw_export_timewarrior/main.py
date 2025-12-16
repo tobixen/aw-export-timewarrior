@@ -842,23 +842,44 @@ class Exporter:
             return
 
         # Look up ask-away message for this event and extract tags from it
-        if hasattr(self, "_ask_away_messages") and self._ask_away_messages:
-            event_key = (event["timestamp"], event["duration"])
-            message = self._ask_away_messages.get(event_key)
-            if message:
-                # Create synthetic event with message as title for tag extraction
-                synthetic_event = {
-                    "timestamp": event["timestamp"],
-                    "duration": event["duration"],
-                    "data": {"app": "ask-away", "title": message},
-                }
-                # Extract tags from the message using tag extraction rules
-                message_tags = self.tag_extractor.get_app_tags(synthetic_event)
-                if message_tags and message_tags is not False:
-                    if isinstance(message_tags, set):
-                        final_tags = final_tags | message_tags
-                    else:
-                        final_tags = final_tags | set(message_tags)
+        if hasattr(self, "_ask_away_events") and self._ask_away_events:
+            # Try to find an ask-away event that overlaps with this event
+            # Ask-away events are based on gaps in non-afk events and may have slightly
+            # different timestamps/durations than the AFK events we're processing
+            event_start = event["timestamp"]
+            event_end = event_start + event["duration"]
+
+            for ask_event in self._ask_away_events:
+                ask_start = ask_event["timestamp"]
+                ask_end = ask_start + ask_event["duration"]
+
+                # Check if events overlap (any overlap qualifies)
+                if ask_start < event_end and ask_end > event_start:
+                    message = ask_event["data"].get("message", "")
+                    if message:
+                        # Try to extract tags using configured rules first
+                        synthetic_event = {
+                            "timestamp": event["timestamp"],
+                            "duration": event["duration"],
+                            "data": {"app": "ask-away", "title": message},
+                        }
+                        message_tags = self.tag_extractor.get_app_tags(synthetic_event)
+
+                        # If no rules matched, use the message text directly as tags
+                        # Split by whitespace and use each word as a tag
+                        if not message_tags or message_tags is False:
+                            # Clean up and split the message into tags
+                            words = message.strip().split()
+                            message_tags = {word.lower() for word in words if word}
+
+                        # Add the extracted/generated tags
+                        if message_tags:
+                            if isinstance(message_tags, set):
+                                final_tags = final_tags | message_tags
+                            else:
+                                final_tags = final_tags | set(message_tags)
+                        # Use the first overlapping ask-away event found
+                        break
 
         # Start tracking with the final tags
         self.tracker.start_tracking(final_tags, since)
@@ -1350,13 +1371,12 @@ class Exporter:
             )
             if ask_away_events:
                 logger.info(f"Fetched {len(ask_away_events)} ask-away events")
-                # Store ask-away messages for later annotation
-                self._ask_away_messages = {
-                    (e["timestamp"], e["duration"]): e["data"].get("message", "")
-                    for e in ask_away_events
-                }
+                # Store ask-away events for later annotation
+                self._ask_away_events = ask_away_events
+            else:
+                self._ask_away_events = []
         else:
-            self._ask_away_messages = {}
+            self._ask_away_events = []
 
         # Fetch window events and merge with merged AFK events
         afk_window_events = (
