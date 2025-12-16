@@ -998,10 +998,14 @@ class Exporter:
             return self.state.afk_state != AfkState.UNKNOWN and len(tags) == 1
         if self.state.is_afk():
             if tags == {"afk"}:
-                ## This should probably be checked up ... we're already afk, but now
-                ## we got a new afk tag?
-                ## (possible reason: we had some few tags in between the afk runs, but without any tags)
-                self.breakpoint()
+                ## We're already afk, but got another afk event.
+                ## This can happen with overlapping AFK periods or out-of-order events.
+                ## In batch/diff mode this is normal - just update the stats.
+                self.log(
+                    "Received AFK event while already in AFK state - likely overlapping AFK periods",
+                    event=event,
+                    level=logging.DEBUG,
+                )
                 self._afk_change_stats("afk", tags, event)
                 return True
             if "afk" not in self.timew_info["tags"]:
