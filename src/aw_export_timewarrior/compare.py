@@ -124,10 +124,11 @@ def compare_intervals(
 
     for suggested in suggested_intervals:
         # Find overlapping timew intervals
+        # Use < instead of <= to exclude intervals that only touch at a single point
         overlapping = [
             tw
             for tw in unmatched_timew
-            if tw.end and tw.start <= suggested.end and suggested.start <= tw.end
+            if tw.end and tw.start < suggested.end and suggested.start < tw.end
         ]
 
         if not overlapping:
