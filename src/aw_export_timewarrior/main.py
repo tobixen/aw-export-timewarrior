@@ -1467,6 +1467,11 @@ class Exporter:
         Returns:
             True if event should be skipped, False otherwise
         """
+        # In batch/diff mode with explicit time range, don't skip events based on state
+        # Process all events within the requested range
+        if self.start_time and self.end_time:
+            return False
+
         # Skip events older than last_tick or last_known_tick
         if (self.state.last_tick and event["timestamp"] < self.state.last_tick) or (
             self.state.last_known_tick and event["timestamp"] < self.state.last_known_tick

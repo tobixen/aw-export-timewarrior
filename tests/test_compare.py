@@ -341,15 +341,15 @@ class TestCompareIntervals:
 
         result = compare_intervals(timew_intervals, suggested_intervals)
 
-        # The algorithm matches overlapping intervals, so:
+        # The algorithm matches overlapping intervals (using < not <=, so touching doesn't count):
         # - First pair: perfect match (10-11)
         # - Second pair: different tags (11-12)
-        # - Third pair: timew (13-14) matches suggested (12-13) due to proximity/overlap
-        # So we get 1 matching, 2 different_tags, 0 missing, 0 extra
+        # - Third pair: timew (13-14) and suggested (12-13) only TOUCH, don't overlap
+        # So we get 1 matching, 1 different_tags, 1 missing (12-13), 1 extra (13-14)
         assert len(result["matching"]) == 1
-        assert len(result["different_tags"]) == 2  # Second and third pairs
-        assert len(result["missing"]) == 0
-        assert len(result["extra"]) == 0
+        assert len(result["different_tags"]) == 1
+        assert len(result["missing"]) == 1  # Suggested 12-13 not matched
+        assert len(result["extra"]) == 1  # Timew 13-14 not matched
 
 
 class TestFormatDiffOutput:
@@ -575,15 +575,15 @@ class TestGenerateFixCommands:
 
         commands = generate_fix_commands(comparison)
 
-        assert len(commands) == 1
-        # Should generate uncommented delete command (has ~aw)
-        assert commands[0].startswith("timew delete @42 :yes")
-        assert not commands[0].startswith("#")
-        assert "# 2025-12-10" in commands[0]  # Check date, not exact time (timezone conversion)
-        assert "tags: UNKNOWN not-afk ~aw" in commands[0]
+        # Should generate informational comments (no delete commands)
+        assert len(commands) == 3  # Empty line + header + interval info
+        assert commands[0] == ""
+        assert "Extra intervals" in commands[1]
+        assert "@42" in commands[2]
+        assert "UNKNOWN" in commands[2]
 
     def test_generate_delete_command_for_extra_manual(self) -> None:
-        """Test that extra manually-entered intervals get commented delete commands."""
+        """Test that extra manually-entered intervals are listed as comments."""
         comparison = {
             "matching": [],
             "different_tags": [],
@@ -600,14 +600,15 @@ class TestGenerateFixCommands:
 
         commands = generate_fix_commands(comparison)
 
-        assert len(commands) == 1
-        # Should generate commented delete command (no ~aw)
-        assert commands[0].startswith("# timew delete @99 :yes")
-        assert "# 2025-12-10" in commands[0]  # Check date, not exact time (timezone conversion)
-        assert "tags: manual-work meeting" in commands[0]
+        # Should generate informational comments (no delete commands)
+        assert len(commands) == 3
+        assert commands[0] == ""
+        assert "Extra intervals" in commands[1]
+        assert "@99" in commands[2]
+        assert "manual-work" in commands[2]
 
     def test_generate_delete_commands_mixed(self) -> None:
-        """Test generating delete commands for both auto and manual extra intervals."""
+        """Test generating informational comments for both auto and manual extra intervals."""
         comparison = {
             "matching": [],
             "different_tags": [],
@@ -632,12 +633,13 @@ class TestGenerateFixCommands:
 
         commands = generate_fix_commands(comparison)
 
-        assert len(commands) == 2
-        # First should be commented delete @2 (no ~aw) - higher ID comes first due to reverse sorting
-        assert commands[0].startswith("# timew delete @2 :yes")
-        # Second should be uncommented delete @1 (has ~aw)
-        assert commands[1].startswith("timew delete @1 :yes")
-        assert not commands[1].startswith("#")
+        # Should generate informational comments listing both intervals
+        assert len(commands) == 4  # Empty line + header + 2 interval infos
+        assert commands[0] == ""
+        assert "Extra intervals" in commands[1]
+        # Should list both intervals (sorted by start time)
+        assert "@1" in commands[2] or "@1" in commands[3]
+        assert "@2" in commands[2] or "@2" in commands[3]
 
     def test_generate_commands_with_only_extra_intervals(self) -> None:
         """Test that commands with only extra intervals contain comments/empty lines.
