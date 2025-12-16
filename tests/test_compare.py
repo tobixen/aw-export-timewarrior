@@ -638,3 +638,34 @@ class TestGenerateFixCommands:
         # Second should be uncommented delete @1 (has ~aw)
         assert commands[1].startswith("timew delete @1 :yes")
         assert not commands[1].startswith("#")
+
+    def test_generate_commands_with_only_extra_intervals(self) -> None:
+        """Test that commands with only extra intervals contain comments/empty lines.
+
+        This reproduces the bug where --apply would crash with 'list index out of range'
+        when trying to execute empty command strings.
+        """
+        comparison = {
+            "matching": [],
+            "different_tags": [],
+            "missing": [],
+            "extra": [
+                TimewInterval(
+                    id=123,
+                    start=datetime(2025, 12, 11, 10, 0, 0, tzinfo=UTC),
+                    end=datetime(2025, 12, 11, 11, 0, 0, tzinfo=UTC),
+                    tags={"4work", "python", "~aw"},
+                )
+            ],
+        }
+
+        commands = generate_fix_commands(comparison)
+
+        # Should contain comments about extra intervals but no executable commands
+        assert len(commands) > 0
+        # Should have at least one empty line and comment lines
+        assert any(cmd.strip() == "" for cmd in commands)
+        assert any(cmd.startswith("#") for cmd in commands)
+        # Should NOT have any executable commands (non-empty, non-comment lines)
+        executable_commands = [cmd for cmd in commands if cmd.strip() and not cmd.startswith("#")]
+        assert len(executable_commands) == 0
