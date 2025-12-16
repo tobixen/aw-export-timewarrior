@@ -330,6 +330,7 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     # Add missing intervals using 'timew track'
     for suggested in merged_missing:
         # Format: timew track 2025-12-08T10:00:00 - 2025-12-08T11:00:00 tag1 tag2 :adjust
+        # NOTE: Using :adjust to maintain continuous tracking without gaps
         start_str = suggested.start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
         end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
         tags = " ".join(sorted(suggested.tags))
@@ -365,31 +366,18 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         else:
             commands.append(f"{base_cmd}{comment}")
 
-    # Delete extra intervals using 'timew delete'
-    # IMPORTANT: Delete in reverse ID order (highest first) because deleting
-    # an interval causes all higher IDs to shift down by 1
-    sorted_extra = sorted(comparison["extra"], key=lambda x: x.id, reverse=True)
-
-    for timew_int in sorted_extra:
-        # Format timestamp for comment
-        timestamp_str = timew_int.start.astimezone().strftime("%Y-%m-%d %H:%M")
-
-        # Format tags for comment
-        tags_str = " ".join(sorted(timew_int.tags))
-
-        # Check if this is a manually-entered event (no ~aw tag)
-        is_manual = "~aw" not in timew_int.tags
-
-        # Build the command with comment
-        # Note: timew delete requires confirmation unless :yes is used
-        base_cmd = f"timew delete @{timew_int.id} :yes"
-        comment = f"  # {timestamp_str} - tags: {tags_str}"
-
-        # Comment out the entire command if it's a manually-entered event
-        if is_manual:
-            commands.append(f"# {base_cmd}{comment}")
-        else:
-            commands.append(f"{base_cmd}{comment}")
+    # NOTE: "extra" intervals (in TimeWarrior but not in ActivityWatch) are intentionally
+    # not deleted to maintain continuous tracking. The :adjust flag on track commands
+    # will handle merging/adjusting boundaries to absorb small gaps.
+    # For reference, extra intervals found (not generating delete commands):
+    if comparison["extra"]:
+        commands.append("")
+        commands.append("# Extra intervals in TimeWarrior (not deleting to maintain continuity):")
+        for timew_int in sorted(comparison["extra"], key=lambda x: x.start):
+            timestamp_str = timew_int.start.astimezone().strftime("%Y-%m-%d %H:%M")
+            end_str = timew_int.end.astimezone().strftime("%H:%M") if timew_int.end else "ongoing"
+            tags_str = " ".join(sorted(timew_int.tags))
+            commands.append(f"#   @{timew_int.id}: {timestamp_str} - {end_str} ({tags_str})")
 
     return commands
 
