@@ -1341,6 +1341,20 @@ class Exporter:
         )
         afk_window_events.sort(key=lambda x: x["timestamp"])
 
+        # Split window events that overlap with AFK periods
+        # This ensures window events are properly interrupted by AFK
+        afk_window_events = self._split_window_events_by_afk(afk_window_events, merged_afk_events)
+
+        # Filter out split events that end before or at last_tick to avoid reprocessing
+        # This can happen when we fetch an event that overlaps with last_tick, split it,
+        # and end up with segments that we've already processed
+        if self.state.last_tick:
+            afk_window_events = [
+                e
+                for e in afk_window_events
+                if e["timestamp"] + e["duration"] > self.state.last_tick
+            ]
+
         if len(afk_window_events) == 0:
             return [], None
 
@@ -1355,6 +1369,86 @@ class Exporter:
             current_event = afk_window_events[-1] if len(afk_window_events) > 0 else None
             completed_events = afk_window_events[:-1] if len(afk_window_events) > 1 else []
             return completed_events, current_event
+
+    def _split_window_events_by_afk(self, events: list[dict], afk_events: list[dict]) -> list[dict]:
+        """Split window events when they overlap with AFK periods.
+
+        When a window event spans across an AFK period, split it into:
+        1. Part before AFK (original tags)
+        2. AFK period (afk tag)
+        3. Part after AFK (original tags)
+
+        Args:
+            events: Combined list of window and AFK events
+            afk_events: List of AFK events to check for overlaps
+
+        Returns:
+            List of events with window events split at AFK boundaries
+        """
+        if not afk_events:
+            return events
+
+        # Separate window and AFK events
+        window_events = [e for e in events if "status" not in e["data"]]
+        status_events = [e for e in events if "status" in e["data"]]
+
+        result = []
+
+        for window_event in window_events:
+            window_start = window_event["timestamp"]
+            window_end = window_event["timestamp"] + window_event["duration"]
+
+            # Find overlapping AFK events
+            overlapping_afk = [
+                afk
+                for afk in afk_events
+                if afk["data"].get("status") == "afk"
+                and afk["timestamp"] < window_end
+                and (afk["timestamp"] + afk["duration"]) > window_start
+            ]
+
+            if not overlapping_afk:
+                # No overlap, keep window event as-is
+                result.append(window_event)
+                continue
+
+            # Sort AFK events by timestamp
+            overlapping_afk.sort(key=lambda x: x["timestamp"])
+
+            # Split window event at AFK boundaries
+            current_time = window_start
+            for afk_event in overlapping_afk:
+                afk_start = afk_event["timestamp"]
+                afk_end = afk_event["timestamp"] + afk_event["duration"]
+
+                # Add window portion before AFK (if any)
+                if current_time < afk_start and afk_start < window_end:
+                    result.append(
+                        {
+                            **window_event,
+                            "timestamp": current_time,
+                            "duration": afk_start - current_time,
+                        }
+                    )
+
+                # Move current_time to after this AFK period
+                current_time = max(current_time, afk_end)
+
+            # Add remaining window portion after all AFK periods (if any)
+            if current_time < window_end:
+                result.append(
+                    {
+                        **window_event,
+                        "timestamp": current_time,
+                        "duration": window_end - current_time,
+                    }
+                )
+
+        # Add all status events back and re-sort
+        result.extend(status_events)
+        result.sort(key=lambda x: x["timestamp"])
+
+        return result
 
     def _should_skip_event(self, event: dict) -> bool:
         """Check if event should be skipped due to old timestamp.
