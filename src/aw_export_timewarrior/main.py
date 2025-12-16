@@ -563,9 +563,10 @@ class Exporter:
                     print("=" * 80 + "\n")
 
                     for cmd in fix_commands:
-                        # Skip commented-out commands (manually-entered events)
-                        if cmd.startswith("#"):
-                            print(f"Skipping (manual entry): {cmd}")
+                        # Skip empty lines and commented-out commands
+                        if not cmd.strip() or cmd.startswith("#"):
+                            if cmd.startswith("#"):
+                                print(f"Skipping (manual entry): {cmd}")
                             continue
 
                         print(f"Executing: {cmd}")
