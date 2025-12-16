@@ -575,12 +575,19 @@ class Exporter:
                         try:
                             # Remove comment part if present (e.g., "  # 2025-12-10 - old tags: ...")
                             command_part = cmd.split("  #")[0].strip()
-                            subprocess.run(
+                            result = subprocess.run(
                                 command_part.split(), capture_output=True, text=True, check=True
                             )
                             print("  ✓ Success")
+                            if result.stdout:
+                                print(f"    Output: {result.stdout.strip()}")
                         except subprocess.CalledProcessError as e:
-                            print(f"  ✗ Failed: {e.stderr}")
+                            print(f"  ✗ Failed (exit code {e.returncode})")
+                            if e.stderr:
+                                print(f"    stderr: {e.stderr.strip()}")
+                            if e.stdout:
+                                print(f"    stdout: {e.stdout.strip()}")
+                            print(f"    Command: {command_part}")
 
                     print("\n" + "=" * 80 + "\n")
                 else:

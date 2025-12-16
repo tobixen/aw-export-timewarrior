@@ -551,11 +551,11 @@ class TestGenerateFixCommands:
         assert len(commands) == 3
         # First should be track command (for missing)
         assert commands[0].startswith("timew track")
-        # Second should be uncommented retag (has ~aw)
-        assert commands[1].startswith("timew retag @1")
-        assert not commands[1].startswith("# timew")
-        # Third should be commented retag (no ~aw)
-        assert commands[2].startswith("# timew retag @2")
+        # Second should be commented retag @2 (no ~aw) - higher ID comes first due to reverse sorting
+        assert commands[1].startswith("# timew retag @2")
+        # Third should be uncommented retag @1 (has ~aw)
+        assert commands[2].startswith("timew retag @1")
+        assert not commands[2].startswith("# timew")
 
     def test_generate_delete_command_for_extra_auto(self) -> None:
         """Test that extra auto-generated intervals get delete commands."""
@@ -633,8 +633,8 @@ class TestGenerateFixCommands:
         commands = generate_fix_commands(comparison)
 
         assert len(commands) == 2
-        # First should be uncommented delete (has ~aw)
-        assert commands[0].startswith("timew delete @1 :yes")
-        assert not commands[0].startswith("#")
-        # Second should be commented delete (no ~aw)
-        assert commands[1].startswith("# timew delete @2 :yes")
+        # First should be commented delete @2 (no ~aw) - higher ID comes first due to reverse sorting
+        assert commands[0].startswith("# timew delete @2 :yes")
+        # Second should be uncommented delete @1 (has ~aw)
+        assert commands[1].startswith("timew delete @1 :yes")
+        assert not commands[1].startswith("#")

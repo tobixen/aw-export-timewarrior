@@ -160,6 +160,30 @@ class TestCreateExporterFromArgs:
 
         assert exporter.config_path == Path("test_config.toml")
 
+    def test_arg_mapping_apply_to_apply_fix(self) -> None:
+        """Test that 'apply' arg maps to 'apply_fix' field.
+
+        This is a regression test for a bug where --apply flag was not
+        being mapped to apply_fix, causing diff --apply to show commands
+        but not execute them.
+        """
+        args = argparse.Namespace(
+            apply=True,  # CLI arg is 'apply'
+            config=None,
+            enable_pdb=False,
+            enable_assert=False,
+            start=None,
+            end=None,
+            test_data={"buckets": {}},  # Provide test data
+            subcommand="diff",
+        )
+
+        with patch("aw_export_timewarrior.cli._handle_start_stop_testdata_from_args"):
+            exporter = create_exporter_from_args(args, "diff")
+
+        # Exporter field is 'apply_fix', not 'apply'
+        assert exporter.apply_fix is True
+
     def test_overrides_take_precedence(self) -> None:
         """Test that explicit overrides take precedence over args."""
         args = argparse.Namespace(
@@ -420,7 +444,7 @@ class TestDiffModeReadOnly:
     """Test that diff mode is read-only and doesn't execute timew commands."""
 
     def test_diff_without_apply_doesnt_execute_commands(self) -> None:
-        """Test that diff mode without --apply doesn't execute timew start commands."""
+        """Test that diff mode without --apply doesn't execute timew commands."""
         from aw_export_timewarrior.cli import create_exporter_from_args
 
         # Use real test data
@@ -442,17 +466,19 @@ class TestDiffModeReadOnly:
             enable_assert=True,
         )
 
-        # Create exporter with diff mode settings
+        # Create exporter with diff mode settings (as run_diff does)
         exporter = create_exporter_from_args(
             args,
             "diff",
-            dry_run=not args.apply,  # Should be True
+            dry_run=True,  # Always True in diff mode
             show_diff=True,
             show_fix_commands=False,
         )
 
         # Verify dry_run is True
-        assert exporter.dry_run is True, "diff mode without --apply should have dry_run=True"
+        assert exporter.dry_run is True, "diff mode should always have dry_run=True"
+        # Verify apply_fix is False (no --apply flag)
+        assert exporter.apply_fix is False, "diff mode without --apply should have apply_fix=False"
 
         # Process all events
         exporter.tick(process_all=True)
@@ -468,7 +494,12 @@ class TestDiffModeReadOnly:
         ), f"diff mode should not execute 'timew start' commands, but got: {start_commands}"
 
     def test_diff_with_apply_allows_execution(self) -> None:
-        """Test that diff mode with --apply allows command execution."""
+        """Test that diff mode with --apply has apply_fix=True.
+
+        Important: diff mode should ALWAYS use dry_run=True for tick() to avoid
+        modifying timew during comparison. Only apply_fix controls whether fix
+        commands are executed.
+        """
         from aw_export_timewarrior.cli import create_exporter_from_args
 
         test_data_path = Path(__file__).parent / "fixtures" / "sample_15min.json"
@@ -489,17 +520,19 @@ class TestDiffModeReadOnly:
             enable_assert=True,
         )
 
-        # Create exporter with diff mode settings
+        # Create exporter with diff mode settings (as run_diff does)
         exporter = create_exporter_from_args(
             args,
             "diff",
-            dry_run=not args.apply,  # Should be False
+            dry_run=True,  # Always True in diff mode to avoid modifying timew during tick()
             show_diff=True,
             show_fix_commands=True,
         )
 
-        # Verify dry_run is False
-        assert exporter.dry_run is False, "diff mode with --apply should have dry_run=False"
+        # Verify dry_run is True (tick() won't modify timew)
+        assert exporter.dry_run is True, "diff mode should always have dry_run=True"
+        # Verify apply_fix is True (fix commands will be executed)
+        assert exporter.apply_fix is True, "diff mode with --apply should have apply_fix=True"
 
 
 class TestContinuousModeSleep:

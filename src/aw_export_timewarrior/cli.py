@@ -10,7 +10,7 @@ import logging
 import sys
 import time
 from dataclasses import fields
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .export import load_test_data
@@ -35,7 +35,7 @@ def create_exporter_from_args(args: argparse.Namespace, method: str, **overrides
     # Build kwargs from args
     kwargs = {}
 
-    arg_mapping = {"timeline": "show_timeline", "config": "config_path"}
+    arg_mapping = {"timeline": "show_timeline", "config": "config_path", "apply": "apply_fix"}
 
     exporter_field_names = {f.name for f in fields(Exporter)}
 
@@ -549,6 +549,21 @@ def run_sync(args: argparse.Namespace) -> int:
     # Create exporter with options
     exporter = create_exporter_from_args(args, "sync")
 
+    # Warn if using sync mode for historical batch processing
+    if (
+        not args.dry_run
+        and args.start
+        and args.end
+        and args.once
+        and exporter.end_time
+        and exporter.end_time < datetime.now(UTC)
+    ):
+        print("WARNING: Sync mode is designed for live tracking, not historical batch processing.")
+        print("For processing historical data, use 'diff' mode instead:")
+        print(f"  aw-export-timewarrior diff --from {args.start} --to {args.end} --apply")
+        print("\nSync mode may create intervals that extend to NOW, causing overlaps.")
+        print("Continuing anyway...\n")
+
     # Run exporter
     if args.dry_run:
         print("=== DRY RUN MODE ===")
@@ -575,19 +590,23 @@ def run_sync(args: argparse.Namespace) -> int:
 def run_diff(args: argparse.Namespace) -> int:
     """Execute the diff subcommand."""
 
-    # Create exporter in dry-run mode (diff doesn't modify unless --apply)
+    # Create exporter in dry-run mode for comparison
+    # IMPORTANT: Always use dry_run=True so tick() doesn't modify timew
+    # Only the fix commands (when --apply is set) should modify timew
     exporter = create_exporter_from_args(
         args,
         "diff",
-        dry_run=not args.apply,  # Only modify timew if --apply is set
+        dry_run=True,  # Always dry-run for tick() - don't modify timew during comparison
         show_diff=True,
         show_fix_commands=args.show_commands or args.apply,
     )
 
     # Process all events first (to build suggested intervals)
+    # This runs in dry-run mode and doesn't modify timew
     exporter.tick(process_all=True)
 
-    # Run comparison
+    # Run comparison and optionally apply fixes
+    # The apply_fix flag controls whether fix commands are executed
     exporter.run_comparison()
 
     return 0
