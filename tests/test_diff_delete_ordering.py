@@ -10,22 +10,14 @@ from aw_export_timewarrior.compare import (
 )
 
 
-def test_delete_commands_ordered_by_reverse_id() -> None:
-    """Test that delete commands are generated in reverse ID order.
+def test_extra_intervals_not_deleted() -> None:
+    """Test that extra intervals are NOT deleted but instead listed in comments.
 
-    This is critical because when you delete an interval in TimeWarrior,
-    all subsequent interval IDs shift down by 1. If we delete in forward
-    order (e.g., @110, @111, @112), after deleting @110, interval @111
-    becomes @110, so we end up deleting the wrong intervals.
-
-    The fix is to delete in REVERSE order (@112, @111, @110) so that
-    deleting a higher ID doesn't affect lower IDs.
-
-    This test would FAIL before the fix (commands in wrong order) and
-    PASS after the fix (commands in correct order).
+    The behavior changed to preserve continuous tracking by not deleting extra
+    intervals. The :adjust flag on track commands handles boundary adjustments.
     """
     # Create timew intervals with increasing IDs
-    # These represent "extra" intervals that need to be deleted
+    # These represent "extra" intervals (in TimeWarrior but not ActivityWatch)
     timew_intervals = [
         TimewInterval(
             id=110,
@@ -47,7 +39,7 @@ def test_delete_commands_ordered_by_reverse_id() -> None:
         ),
     ]
 
-    # No suggested intervals (we want to delete all timew intervals)
+    # No suggested intervals (all timew intervals are "extra")
     suggested_intervals = []
 
     # Compare - all timew intervals should be marked as "extra"
@@ -61,34 +53,23 @@ def test_delete_commands_ordered_by_reverse_id() -> None:
     # Generate fix commands
     commands = generate_fix_commands(comparison)
 
-    # Extract delete commands (filter out any retag/track commands)
+    # Verify NO delete commands are generated
     delete_commands = [cmd for cmd in commands if cmd.startswith("timew delete")]
+    assert (
+        len(delete_commands) == 0
+    ), f"Expected 0 delete commands (extra intervals are preserved), got {len(delete_commands)}"
 
-    assert len(delete_commands) == 3, f"Expected 3 delete commands, got {len(delete_commands)}"
+    # Verify extra intervals are documented in comments
+    comment_lines = [cmd for cmd in commands if cmd.startswith("#")]
+    assert len(comment_lines) > 0, "Expected comment lines documenting extra intervals"
 
-    # Extract IDs from delete commands
-    # Format: "timew delete @<id> :yes  # ..."
-    ids = []
-    for cmd in delete_commands:
-        # Parse "@<id>" from command
-        import re
+    # Check that all interval IDs are mentioned in comments
+    all_comments = "\n".join(comment_lines)
+    assert "@110" in all_comments, "Expected @110 to be documented in comments"
+    assert "@111" in all_comments, "Expected @111 to be documented in comments"
+    assert "@112" in all_comments, "Expected @112 to be documented in comments"
 
-        match = re.search(r"@(\d+)", cmd)
-        assert match, f"Could not find @ID in command: {cmd}"
-        ids.append(int(match.group(1)))
-
-    print(f"\nDelete commands generated in order: {ids}")
-
-    # CRITICAL ASSERTION: IDs must be in DESCENDING order (highest first)
-    # This ensures that deleting @112 doesn't affect @111 and @110
-    assert ids == [112, 111, 110], (
-        f"Delete commands must be in REVERSE ID order (highest first)!\n"
-        f"Got: {ids}\n"
-        f"Expected: [112, 111, 110]\n"
-        f"This prevents ID shifting when deleting intervals in TimeWarrior."
-    )
-
-    print("✓ Delete commands correctly ordered in reverse ID sequence")
+    print("✓ Extra intervals correctly preserved and documented in comments")
 
 
 def test_retag_commands_ordered_by_reverse_id() -> None:
@@ -175,15 +156,15 @@ def test_retag_commands_ordered_by_reverse_id() -> None:
     print("✓ Retag commands correctly ordered in reverse ID sequence")
 
 
-def test_mixed_commands_delete_after_track_and_retag() -> None:
-    """Test that when we have track, retag, and delete commands, they're in the right order.
+def test_mixed_commands_track_then_retag() -> None:
+    """Test that when we have track and retag commands, they're in the right order.
 
     The order should be:
     1. track (creates new intervals)
     2. retag (modifies existing intervals)
-    3. delete (removes intervals) - in reverse ID order
+    3. extra intervals documented in comments (not deleted)
 
-    This ensures we don't delete intervals before retagging them.
+    This ensures we don't have ordering issues.
     """
     # Timew has: @100 (extra), @101 (needs retag)
     timew_intervals = [
@@ -191,7 +172,7 @@ def test_mixed_commands_delete_after_track_and_retag() -> None:
             id=100,
             start=datetime(2025, 12, 15, 12, 0, 0, tzinfo=UTC),
             end=datetime(2025, 12, 15, 12, 5, 0, tzinfo=UTC),
-            tags={"to-delete", "~aw"},
+            tags={"extra-interval", "~aw"},
         ),
         TimewInterval(
             id=101,
@@ -224,15 +205,19 @@ def test_mixed_commands_delete_after_track_and_retag() -> None:
     retag_cmds = [i for i, cmd in enumerate(commands) if cmd.startswith("timew retag")]
     delete_cmds = [i for i, cmd in enumerate(commands) if cmd.startswith("timew delete")]
 
-    # Verify we have all three types
+    # Verify we have track and retag, but NO delete
     assert len(track_cmds) == 1, "Should have 1 track command"
     assert len(retag_cmds) == 1, "Should have 1 retag command"
-    assert len(delete_cmds) == 1, "Should have 1 delete command"
+    assert len(delete_cmds) == 0, "Should have 0 delete commands (extra intervals preserved)"
 
-    # Verify order: track < retag < delete
-    assert track_cmds[0] < retag_cmds[0] < delete_cmds[0], (
-        "Commands must be ordered: track, then retag, then delete. "
-        f"Got indices: track={track_cmds[0]}, retag={retag_cmds[0]}, delete={delete_cmds[0]}"
+    # Verify order: track < retag
+    assert track_cmds[0] < retag_cmds[0], (
+        "Commands must be ordered: track, then retag. "
+        f"Got indices: track={track_cmds[0]}, retag={retag_cmds[0]}"
     )
 
-    print("✓ Mixed commands in correct order: track → retag → delete")
+    # Verify extra interval is documented in comments
+    all_commands = "\n".join(commands)
+    assert "@100" in all_commands, "Extra interval @100 should be documented"
+
+    print("✓ Mixed commands in correct order: track → retag, extra documented")
