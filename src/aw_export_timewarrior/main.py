@@ -1489,7 +1489,9 @@ class Exporter:
 
         if tag_result.result == EventMatchResult.NO_MATCH:
             self.state.stats.unknown_events_time += event["duration"]
-            # Track unmatched event if requested
+            # Track unmatched event if requested (for analyze command)
+            # Note: We track ALL NO_MATCH events here, even ones that later get
+            # exported as UNKNOWN tags, because they represent unmatched activity
             if self.show_unmatched:
                 self.unmatched_events.append(event)
             if self.state.stats.unknown_events_time.total_seconds() > self.max_mixed_interval * 2:
