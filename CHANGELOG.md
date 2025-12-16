@@ -7,12 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add support for aw-watcher-ask-away integration - user-entered messages during AFK periods now appear as tags
+- Add overlap-based matching for ask-away events (handles timestamp/duration mismatches)
+- Add automatic tag extraction from ask-away messages (multi-word messages split into tags)
+
 ### Fixed
 - Fix interval touching-point false matches in overlap detection by using `<` instead of `<=`
 - Remove `timew delete` commands to maintain continuous tracking without gaps - extra intervals are preserved and boundaries adjusted using `:adjust` flag
 - Fix crash when `--apply` encounters empty command list (only comments/extra intervals)
 - Disable old timestamp check in batch/diff mode to prevent spurious "skipping event" warnings for legitimate events within requested time range
 - Fix assertion error in batch/diff mode when internal AFK state diverges from TimeWarrior state - normal when processing historical events
+- Fix assertion error in batch/diff mode when last_activity_run_time is less than min_recording_interval - normal when processing historical events
 
 ### Changed
 - Diff mode now always runs in dry-run mode, use `--apply` flag to execute changes

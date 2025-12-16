@@ -778,9 +778,18 @@ class Exporter:
                 and not self.state.manual_tracking
                 and last_activity_run_time.total_seconds() < self.min_recording_interval - 3
             ):
-                self.breakpoint(
-                    f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < self.min_recording_interval-3 ({self.min_recording_interval-3}s), last_start_time={self.state.last_start_time}, since={since}"
-                )
+                if self.start_time and self.end_time:
+                    # Batch/diff mode - log and continue
+                    self.log(
+                        f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < min_recording_interval-3 ({self.min_recording_interval-3}s) - normal in batch/diff mode",
+                        event=event,
+                        level=logging.DEBUG,
+                    )
+                else:
+                    # Sync mode - this indicates a real problem
+                    self.breakpoint(
+                        f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < self.min_recording_interval-3 ({self.min_recording_interval-3}s), last_start_time={self.state.last_start_time}, since={since}"
+                    )
 
             ## If the tracked time is less than the known events time we've counted
             ## then something is a little bit wrong.
