@@ -127,3 +127,118 @@ class TestSyncWithRealDataHS:
         # 2. Created at least one active interval in TimeWarrior
         # 3. Diff successfully compared TimeWarrior with the suggestions
         # 4. The comparison logic is working (detecting extra/missing/matching)
+
+    def test_diff_apply_convergence_with_rich_data(self, test_env) -> None:
+        """Test that diff --apply converges and doesn't create an infinite loop.
+
+        This test reproduces the issue where running diff --apply multiple times
+        keeps finding differences instead of converging to a stable state.
+
+        Uses rich_accumulator_test.json which has:
+        - Many short events (stress tests tag accumulator)
+        - Events matching different rule types
+        - AFK transitions
+        - Rapid tag switches
+        """
+        from pathlib import Path
+
+        from aw_export_timewarrior.export import load_test_data
+        from aw_export_timewarrior.main import Exporter
+        from aw_export_timewarrior.utils import parse_datetime
+
+        sample_file = Path(__file__).parent / "fixtures" / "rich_accumulator_test.json"
+        config_file = Path(__file__).parent / "fixtures" / "test_config.toml"
+
+        # Load test data
+        test_data = load_test_data(sample_file)
+        start_time = parse_datetime(test_data["metadata"]["start_time"])
+        end_time = parse_datetime(test_data["metadata"]["end_time"])
+
+        print(f"\n=== Testing with time range {start_time} to {end_time} ===")
+
+        # Setup args for sync
+        args = MockNamespace()
+        args.test_data = sample_file
+        args.config = config_file
+        args.dry_run = False
+        args.no_dry_run = True
+        args.once = True
+        args.start = None
+        args.end = None
+        args.pdb = False
+        args.verbose = False
+        args.hide_processing_output = False
+
+        # Step 1: Initial sync
+        print("\n=== Step 1: Initial sync ===")
+        run_sync(args)
+
+        # Step 2: First diff - should show no differences (everything matches)
+        print("\n=== Step 2: First diff (should match) ===")
+        exporter1 = Exporter(
+            dry_run=True,
+            config_path=config_file,
+            show_diff=True,
+            show_fix_commands=False,
+            hide_diff_report=True,
+            start_time=start_time,
+            end_time=end_time,
+            test_data=test_data,
+        )
+        exporter1.tick(process_all=True)
+        comparison1 = exporter1.run_comparison()
+
+        print(
+            f"First diff - Matching: {len(comparison1['matching'])}, "
+            f"Different: {len(comparison1['different_tags'])}, "
+            f"Missing: {len(comparison1['missing'])}, "
+            f"Extra: {len(comparison1['extra'])}"
+        )
+
+        # Step 3: If there are differences, apply fixes
+        if comparison1["missing"] or comparison1["different_tags"]:
+            print("\n=== Step 3: Applying fixes ===")
+            # Setup args for diff --apply
+            args.apply = True
+            args.show_commands = True
+            args.timeline = False
+            run_diff(args)
+
+            # Step 4: Second diff - should now show no differences (convergence test)
+            print("\n=== Step 4: Second diff (should converge) ===")
+            exporter2 = Exporter(
+                dry_run=True,
+                config_path=config_file,
+                show_diff=True,
+                show_fix_commands=False,
+                hide_diff_report=True,
+                start_time=start_time,
+                end_time=end_time,
+                test_data=test_data,
+            )
+            exporter2.tick(process_all=True)
+            comparison2 = exporter2.run_comparison()
+
+            print(
+                f"Second diff - Matching: {len(comparison2['matching'])}, "
+                f"Different: {len(comparison2['different_tags'])}, "
+                f"Missing: {len(comparison2['missing'])}, "
+                f"Extra: {len(comparison2['extra'])}"
+            )
+
+            # CRITICAL ASSERTION: Second diff should show no missing intervals
+            # This tests that diff --apply converged to a stable state
+            assert len(comparison2["missing"]) == 0, (
+                f"diff --apply did not converge! Still have {len(comparison2['missing'])} "
+                f"missing intervals after applying fixes. This indicates an infinite loop bug."
+            )
+
+            # Also check for different tags - there should be none after applying fixes
+            assert len(comparison2["different_tags"]) == 0, (
+                f"diff --apply did not converge! Still have {len(comparison2['different_tags'])} "
+                f"intervals with different tags after applying fixes."
+            )
+
+            print("✓ CONVERGENCE TEST PASSED: diff --apply successfully converged to stable state")
+        else:
+            print("✓ First sync already matched perfectly - no fixes needed")

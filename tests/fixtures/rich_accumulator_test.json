@@ -1,0 +1,580 @@
+{
+  "metadata": {
+    "export_time": "2025-12-16T01:02:38.822335+00:00",
+    "start_time": "2025-12-15T09:00:00+00:00",
+    "end_time": "2025-12-15T09:59:50+00:00",
+    "duration_seconds": 3590.0,
+    "anonymized": false,
+    "test_data": true
+  },
+  "buckets": {
+    "aw-watcher-window_test": {
+      "id": "aw-watcher-window_test",
+      "name": "aw-watcher-window_test",
+      "type": "currentwindow",
+      "client": "aw-watcher-window",
+      "hostname": "test-host",
+      "created": "2025-12-15T09:00:00+00:00",
+      "last_updated": "2025-12-15T09:00:00+00:00"
+    },
+    "aw-watcher-afk_test": {
+      "id": "aw-watcher-afk_test",
+      "name": "aw-watcher-afk_test",
+      "type": "afkstatus",
+      "client": "aw-watcher-afk",
+      "hostname": "test-host",
+      "created": "2025-12-15T09:00:00+00:00",
+      "last_updated": "2025-12-15T09:00:00+00:00"
+    },
+    "aw-watcher-web-chrome_test": {
+      "id": "aw-watcher-web-chrome_test",
+      "name": "aw-watcher-web-chrome_test",
+      "type": "web.tab.current",
+      "client": "aw-watcher-web-chrome",
+      "hostname": "test-host",
+      "created": "2025-12-15T09:00:00+00:00",
+      "last_updated": "2025-12-15T09:00:00+00:00"
+    },
+    "aw-watcher-emacs_test": {
+      "id": "aw-watcher-emacs_test",
+      "name": "aw-watcher-emacs_test",
+      "type": "app.editor.activity",
+      "client": "aw-watcher-emacs",
+      "hostname": "test-host",
+      "created": "2025-12-15T09:00:00+00:00",
+      "last_updated": "2025-12-15T09:00:00+00:00"
+    },
+    "aw-watcher-lid_test": {
+      "id": "aw-watcher-lid_test",
+      "name": "aw-watcher-lid_test",
+      "type": "systemafkstatus",
+      "client": "aw-watcher-lid",
+      "hostname": "test-host",
+      "created": "2025-12-15T09:00:00+00:00",
+      "last_updated": "2025-12-15T09:00:00+00:00"
+    }
+  },
+  "events": {
+    "aw-watcher-window_test": [
+      {
+        "id": 1,
+        "timestamp": "2025-12-15T09:00:00+00:00",
+        "duration": 120.0,
+        "data": {
+          "app": "chromium",
+          "title": "Gmail - Inbox"
+        }
+      },
+      {
+        "id": 2,
+        "timestamp": "2025-12-15T09:02:00+00:00",
+        "duration": 180.0,
+        "data": {
+          "app": "chromium",
+          "title": "Python Documentation"
+        }
+      },
+      {
+        "id": 3,
+        "timestamp": "2025-12-15T09:05:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "app": "Code",
+          "title": "main.py - VSCode"
+        }
+      },
+      {
+        "id": 4,
+        "timestamp": "2025-12-15T09:05:50+00:00",
+        "duration": 60.0,
+        "data": {
+          "app": "Code",
+          "title": "utils.py - VSCode"
+        }
+      },
+      {
+        "id": 5,
+        "timestamp": "2025-12-15T09:06:50+00:00",
+        "duration": 70.0,
+        "data": {
+          "app": "Code",
+          "title": "test_main.py - VSCode"
+        }
+      },
+      {
+        "id": 6,
+        "timestamp": "2025-12-15T09:08:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "app": "Code",
+          "title": "config.py - VSCode"
+        }
+      },
+      {
+        "id": 7,
+        "timestamp": "2025-12-15T09:08:50+00:00",
+        "duration": 60.0,
+        "data": {
+          "app": "Code",
+          "title": "main.py - VSCode"
+        }
+      },
+      {
+        "id": 8,
+        "timestamp": "2025-12-15T09:09:50+00:00",
+        "duration": 70.0,
+        "data": {
+          "app": "Code",
+          "title": "utils.py - VSCode"
+        }
+      },
+      {
+        "id": 9,
+        "timestamp": "2025-12-15T09:11:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "app": "Code",
+          "title": "README.md - VSCode"
+        }
+      },
+      {
+        "id": 10,
+        "timestamp": "2025-12-15T09:11:50+00:00",
+        "duration": 60.0,
+        "data": {
+          "app": "Code",
+          "title": "main.py - VSCode"
+        }
+      },
+      {
+        "id": 11,
+        "timestamp": "2025-12-15T09:12:50+00:00",
+        "duration": 70.0,
+        "data": {
+          "app": "Code",
+          "title": "test_utils.py - VSCode"
+        }
+      },
+      {
+        "id": 12,
+        "timestamp": "2025-12-15T09:14:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "app": "Code",
+          "title": "main.py - VSCode"
+        }
+      },
+      {
+        "id": 13,
+        "timestamp": "2025-12-15T09:14:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "app": "foot",
+          "title": "git status"
+        }
+      },
+      {
+        "id": 14,
+        "timestamp": "2025-12-15T09:16:50+00:00",
+        "duration": 300.0,
+        "data": {
+          "app": "chromium",
+          "title": "Pull Request #123 - GitHub"
+        }
+      },
+      {
+        "id": 15,
+        "timestamp": "2025-12-15T09:39:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "app": "chromium",
+          "title": "Pull Request #123 - GitHub"
+        }
+      },
+      {
+        "id": 16,
+        "timestamp": "2025-12-15T09:41:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "app": "Code",
+          "title": "main.py - VSCode"
+        }
+      },
+      {
+        "id": 17,
+        "timestamp": "2025-12-15T09:43:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "app": "chromium",
+          "title": "Pull Request #123 - GitHub"
+        }
+      },
+      {
+        "id": 18,
+        "timestamp": "2025-12-15T09:45:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "app": "Code",
+          "title": "utils.py - VSCode"
+        }
+      },
+      {
+        "id": 19,
+        "timestamp": "2025-12-15T09:47:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "app": "chromium",
+          "title": "Pull Request #123 - GitHub"
+        }
+      },
+      {
+        "id": 20,
+        "timestamp": "2025-12-15T09:49:50+00:00",
+        "duration": 600.0,
+        "data": {
+          "app": "Code",
+          "title": "main.py - VSCode"
+        }
+      }
+    ],
+    "aw-watcher-afk_test": [
+      {
+        "id": 1,
+        "timestamp": "2025-12-15T09:00:00+00:00",
+        "duration": 120.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 2,
+        "timestamp": "2025-12-15T09:02:00+00:00",
+        "duration": 180.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 3,
+        "timestamp": "2025-12-15T09:05:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 4,
+        "timestamp": "2025-12-15T09:05:50+00:00",
+        "duration": 60.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 5,
+        "timestamp": "2025-12-15T09:06:50+00:00",
+        "duration": 70.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 6,
+        "timestamp": "2025-12-15T09:08:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 7,
+        "timestamp": "2025-12-15T09:08:50+00:00",
+        "duration": 60.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 8,
+        "timestamp": "2025-12-15T09:09:50+00:00",
+        "duration": 70.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 9,
+        "timestamp": "2025-12-15T09:11:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 10,
+        "timestamp": "2025-12-15T09:11:50+00:00",
+        "duration": 60.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 11,
+        "timestamp": "2025-12-15T09:12:50+00:00",
+        "duration": 70.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 12,
+        "timestamp": "2025-12-15T09:14:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 13,
+        "timestamp": "2025-12-15T09:14:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 14,
+        "timestamp": "2025-12-15T09:16:50+00:00",
+        "duration": 300.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 15,
+        "timestamp": "2025-12-15T09:21:50+00:00",
+        "duration": 1080.0,
+        "data": {
+          "status": "afk"
+        }
+      },
+      {
+        "id": 16,
+        "timestamp": "2025-12-15T09:39:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 17,
+        "timestamp": "2025-12-15T09:41:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 18,
+        "timestamp": "2025-12-15T09:43:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 19,
+        "timestamp": "2025-12-15T09:45:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 20,
+        "timestamp": "2025-12-15T09:47:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "status": "not-afk"
+        }
+      },
+      {
+        "id": 21,
+        "timestamp": "2025-12-15T09:49:50+00:00",
+        "duration": 600.0,
+        "data": {
+          "status": "not-afk"
+        }
+      }
+    ],
+    "aw-watcher-web-chrome_test": [
+      {
+        "id": 1,
+        "timestamp": "2025-12-15T09:00:00+00:00",
+        "duration": 120.0,
+        "data": {
+          "url": "https://mail.google.com/inbox",
+          "title": "Gmail - Inbox"
+        }
+      },
+      {
+        "id": 2,
+        "timestamp": "2025-12-15T09:02:00+00:00",
+        "duration": 180.0,
+        "data": {
+          "url": "https://docs.python.org/3/library/datetime.html",
+          "title": "Python Documentation"
+        }
+      },
+      {
+        "id": 3,
+        "timestamp": "2025-12-15T09:16:50+00:00",
+        "duration": 300.0,
+        "data": {
+          "url": "https://github.com/user/repo/pull/123",
+          "title": "Pull Request #123 - GitHub"
+        }
+      },
+      {
+        "id": 4,
+        "timestamp": "2025-12-15T09:39:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "url": "https://github.com/user/repo/pull/123",
+          "title": "Pull Request #123 - GitHub"
+        }
+      },
+      {
+        "id": 5,
+        "timestamp": "2025-12-15T09:43:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "url": "https://github.com/user/repo/pull/123",
+          "title": "Pull Request #123 - GitHub"
+        }
+      },
+      {
+        "id": 6,
+        "timestamp": "2025-12-15T09:47:50+00:00",
+        "duration": 120.0,
+        "data": {
+          "url": "https://github.com/user/repo/pull/123",
+          "title": "Pull Request #123 - GitHub"
+        }
+      }
+    ],
+    "aw-watcher-emacs_test": [
+      {
+        "id": 1,
+        "timestamp": "2025-12-15T09:05:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "file": "/home/user/project/main.py",
+          "project": "my-project",
+          "language": "python"
+        }
+      },
+      {
+        "id": 2,
+        "timestamp": "2025-12-15T09:05:50+00:00",
+        "duration": 60.0,
+        "data": {
+          "file": "/home/user/project/utils.py",
+          "project": "my-project",
+          "language": "python"
+        }
+      },
+      {
+        "id": 3,
+        "timestamp": "2025-12-15T09:06:50+00:00",
+        "duration": 70.0,
+        "data": {
+          "file": "/home/user/project/test_main.py",
+          "project": "my-project",
+          "language": "python"
+        }
+      },
+      {
+        "id": 4,
+        "timestamp": "2025-12-15T09:08:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "file": "/home/user/project/config.py",
+          "project": "my-project",
+          "language": "python"
+        }
+      },
+      {
+        "id": 5,
+        "timestamp": "2025-12-15T09:08:50+00:00",
+        "duration": 60.0,
+        "data": {
+          "file": "/home/user/project/main.py",
+          "project": "my-project",
+          "language": "python"
+        }
+      },
+      {
+        "id": 6,
+        "timestamp": "2025-12-15T09:09:50+00:00",
+        "duration": 70.0,
+        "data": {
+          "file": "/home/user/project/utils.py",
+          "project": "my-project",
+          "language": "python"
+        }
+      },
+      {
+        "id": 7,
+        "timestamp": "2025-12-15T09:11:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "file": "/home/user/project/README.md",
+          "project": "my-project",
+          "language": "python"
+        }
+      },
+      {
+        "id": 8,
+        "timestamp": "2025-12-15T09:11:50+00:00",
+        "duration": 60.0,
+        "data": {
+          "file": "/home/user/project/main.py",
+          "project": "my-project",
+          "language": "python"
+        }
+      },
+      {
+        "id": 9,
+        "timestamp": "2025-12-15T09:12:50+00:00",
+        "duration": 70.0,
+        "data": {
+          "file": "/home/user/project/test_utils.py",
+          "project": "my-project",
+          "language": "python"
+        }
+      },
+      {
+        "id": 10,
+        "timestamp": "2025-12-15T09:14:00+00:00",
+        "duration": 50.0,
+        "data": {
+          "file": "/home/user/project/main.py",
+          "project": "my-project",
+          "language": "python"
+        }
+      },
+      {
+        "id": 11,
+        "timestamp": "2025-12-15T09:49:50+00:00",
+        "duration": 600.0,
+        "data": {
+          "file": "/home/user/project/main.py",
+          "project": "my-project",
+          "language": "python"
+        }
+      }
+    ],
+    "aw-watcher-lid_test": []
+  }
+}

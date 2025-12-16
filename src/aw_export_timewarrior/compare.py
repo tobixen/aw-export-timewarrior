@@ -335,7 +335,10 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         commands.append(f"timew track {start_str} - {end_str} {tags} :adjust")
 
     # Fix intervals with different tags using 'timew retag'
-    for timew_int, suggested in comparison["different_tags"]:
+    # Sort in reverse ID order to avoid issues if any intervals get deleted during retag
+    sorted_different = sorted(comparison["different_tags"], key=lambda x: x[0].id, reverse=True)
+
+    for timew_int, suggested in sorted_different:
         # Use the timew interval's ID for retag command
         # Format: timew retag @<id> tag1 tag2 tag3
         # First, remove all existing tags, then add the suggested ones
@@ -362,7 +365,11 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
             commands.append(f"{base_cmd}{comment}")
 
     # Delete extra intervals using 'timew delete'
-    for timew_int in comparison["extra"]:
+    # IMPORTANT: Delete in reverse ID order (highest first) because deleting
+    # an interval causes all higher IDs to shift down by 1
+    sorted_extra = sorted(comparison["extra"], key=lambda x: x.id, reverse=True)
+
+    for timew_int in sorted_extra:
         # Format timestamp for comment
         timestamp_str = timew_int.start.astimezone().strftime("%Y-%m-%d %H:%M")
 
