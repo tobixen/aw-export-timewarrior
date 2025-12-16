@@ -2,6 +2,15 @@
 
 ## High Priority
 
+- [ ] Fix diff --apply convergence issue
+  - Currently requires multiple runs to reach stable state
+  - Root cause: Likely interaction between :adjust and interval ID changes
+  - Expected behavior: Single --apply run should converge to final state
+  - Investigation needed:
+    - How :adjust affects adjacent intervals
+    - Whether interval operations need reordering
+    - If we need to reload TimeWarrior state between operations
+
 ## Medium Priority
 
 ## Low Priority
