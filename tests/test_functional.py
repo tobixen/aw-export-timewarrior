@@ -106,21 +106,22 @@ class TestSyncWithRealDataHS:
 
         # Verify the sync created at least one interval in TimeWarrior
         # Note: sync mode creates ONE active interval that gets updated as activity changes,
-        # rather than multiple completed intervals. So we expect to see "extra" intervals
-        # (active intervals in timew) rather than "matching" completed intervals.
+        # rather than multiple completed intervals. Intervals with ~aw tag will be marked as
+        # "previously_synced" when running diff on the same time range.
 
         total_in_timew = (
             len(comparison["matching"])
             + len(comparison["different_tags"])
             + len(comparison["extra"])
+            + len(comparison.get("previously_synced", []))
         )
         assert total_in_timew > 0, "Expected at least one interval to be in TimeWarrior after sync"
 
         # The key assertion: sync should have created at least one interval
-        # It will show as "extra" because it's an active interval
+        # It will show as "previously_synced" (has ~aw tag from the sync)
         assert (
-            len(comparison["extra"]) > 0
-        ), "Expected at least one active interval in TimeWarrior (shown as 'extra')"
+            len(comparison.get("previously_synced", [])) > 0
+        ), "Expected at least one synced interval in TimeWarrior (shown as 'previously_synced')"
 
         # Success: The test demonstrates that:
         # 1. Sync successfully processed the sample data

@@ -39,13 +39,16 @@ def test_extra_intervals_not_deleted() -> None:
         ),
     ]
 
-    # No suggested intervals (all timew intervals are "extra")
+    # No suggested intervals (all timew intervals have ~aw so they're "previously_synced")
     suggested_intervals = []
 
-    # Compare - all timew intervals should be marked as "extra"
+    # Compare - all timew intervals should be marked as "previously_synced" (they have ~aw tag)
     comparison = compare_intervals(timew_intervals, suggested_intervals)
 
-    assert len(comparison["extra"]) == 3, "All 3 intervals should be marked as extra"
+    assert (
+        len(comparison["previously_synced"]) == 3
+    ), "All 3 intervals should be marked as previously_synced"
+    assert len(comparison["extra"]) == 0
     assert len(comparison["matching"]) == 0
     assert len(comparison["missing"]) == 0
     assert len(comparison["different_tags"]) == 0
@@ -57,19 +60,13 @@ def test_extra_intervals_not_deleted() -> None:
     delete_commands = [cmd for cmd in commands if cmd.startswith("timew delete")]
     assert (
         len(delete_commands) == 0
-    ), f"Expected 0 delete commands (extra intervals are preserved), got {len(delete_commands)}"
+    ), f"Expected 0 delete commands (previously synced intervals are ignored), got {len(delete_commands)}"
 
-    # Verify extra intervals are documented in comments
-    comment_lines = [cmd for cmd in commands if cmd.startswith("#")]
-    assert len(comment_lines) > 0, "Expected comment lines documenting extra intervals"
+    # Verify no commands are generated for previously_synced intervals (they're already synced)
+    # Previously synced intervals with ~aw tag are from previous runs and should be left alone
+    assert len(commands) == 0, "Expected no commands for previously_synced intervals"
 
-    # Check that all interval IDs are mentioned in comments
-    all_comments = "\n".join(comment_lines)
-    assert "@110" in all_comments, "Expected @110 to be documented in comments"
-    assert "@111" in all_comments, "Expected @111 to be documented in comments"
-    assert "@112" in all_comments, "Expected @112 to be documented in comments"
-
-    print("✓ Extra intervals correctly preserved and documented in comments")
+    print("✓ Previously synced intervals correctly ignored (no commands generated)")
 
 
 def test_retag_commands_ordered_by_reverse_id() -> None:
@@ -216,8 +213,9 @@ def test_mixed_commands_track_then_retag() -> None:
         f"Got indices: track={track_cmds[0]}, retag={retag_cmds[0]}"
     )
 
-    # Verify extra interval is documented in comments
-    all_commands = "\n".join(commands)
-    assert "@100" in all_commands, "Extra interval @100 should be documented"
+    # Verify previously_synced interval (@100 with ~aw tag) doesn't generate commands
+    # It's from a previous sync and should be left alone
+    assert len(comparison["previously_synced"]) == 1, "Should have 1 previously_synced interval"
+    assert comparison["previously_synced"][0].id == 100, "Interval @100 should be previously_synced"
 
-    print("✓ Mixed commands in correct order: track → retag, extra documented")
+    print("✓ Mixed commands in correct order: track → retag, previously_synced ignored")

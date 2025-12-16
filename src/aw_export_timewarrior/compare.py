@@ -110,11 +110,12 @@ def compare_intervals(
     Compare TimeWarrior intervals with suggested intervals.
 
     Returns:
-        Dict with keys: 'missing', 'extra', 'different_tags', 'matching'
+        Dict with keys: 'missing', 'extra', 'different_tags', 'matching', 'previously_synced'
     """
     result = {
         "missing": [],  # Intervals suggested but not in timew
-        "extra": [],  # Intervals in timew but not suggested
+        "extra": [],  # Intervals in timew but not suggested (manual or external)
+        "previously_synced": [],  # Intervals tagged with ~aw but not in current suggestion
         "different_tags": [],  # Intervals that exist but with different tags
         "matching": [],  # Intervals that match perfectly
     }
@@ -150,8 +151,12 @@ def compare_intervals(
         # Remove from unmatched
         unmatched_timew.remove(best_match)
 
-    # Remaining timew intervals are "extra" (not suggested by AW)
-    result["extra"] = unmatched_timew
+    # Separate unmatched timew intervals into "previously_synced" and "extra"
+    for tw in unmatched_timew:
+        if "~aw" in tw.tags:
+            result["previously_synced"].append(tw)
+        else:
+            result["extra"].append(tw)
 
     return result
 
@@ -174,10 +179,14 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
 
     # Summary
     lines.append(f"\n{colored('Summary:', attrs=['bold'])}")
-    lines.append(f"  ✓ Matching intervals:      {len(comparison['matching'])}")
-    lines.append(f"  ⚠ Different tags:          {len(comparison['different_tags'])}")
-    lines.append(f"  - Missing from TimeWarrior: {len(comparison['missing'])}")
-    lines.append(f"  + Extra in TimeWarrior:     {len(comparison['extra'])}")
+    lines.append(f"  ✓ Matching intervals:       {len(comparison['matching'])}")
+    lines.append(f"  ⚠ Different tags:           {len(comparison['different_tags'])}")
+    lines.append(f"  - Missing from TimeWarrior:  {len(comparison['missing'])}")
+    lines.append(f"  + Extra in TimeWarrior:      {len(comparison['extra'])}")
+    if comparison.get("previously_synced"):
+        lines.append(
+            f"  • Previously synced (~aw):   {len(comparison['previously_synced'])} (outside diff range)"
+        )
 
     # Missing intervals (suggested but not in timew)
     if comparison["missing"]:
@@ -216,6 +225,43 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
                 )
             )
             lines.append(colored(f"    Tags: {', '.join(sorted(timew_int.tags))}", "yellow"))
+
+    # Previously synced intervals (verbose mode or when explicitly requested)
+    if comparison.get("previously_synced") and verbose:
+        lines.append(
+            f"\n{colored('Previously synced intervals (outside current diff range):', 'blue', attrs=['bold'])}"
+        )
+        lines.append(
+            colored(
+                "  Note: These intervals have ~aw tag but don't match current suggestions.",
+                "blue",
+            )
+        )
+        lines.append(
+            colored(
+                "  This is normal when running diff on a time range subset of a previous sync.",
+                "blue",
+            )
+        )
+        for timew_int in comparison["previously_synced"][:5]:  # Limit to first 5
+            duration = timew_int.duration()
+            start_local = timew_int.start.astimezone().strftime("%H:%M:%S")
+            end_local = (
+                timew_int.end.astimezone().strftime("%H:%M:%S") if timew_int.end else "ongoing"
+            )
+            lines.append(
+                colored(
+                    f"  • {start_local} - {end_local} " f"({duration.total_seconds()/60:.1f}min)",
+                    "blue",
+                )
+            )
+        if len(comparison["previously_synced"]) > 5:
+            lines.append(
+                colored(
+                    f"  ... and {len(comparison['previously_synced']) - 5} more",
+                    "blue",
+                )
+            )
 
     # Different tags
     if comparison["different_tags"]:
