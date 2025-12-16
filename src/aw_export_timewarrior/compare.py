@@ -109,9 +109,16 @@ def compare_intervals(
     """
     Compare TimeWarrior intervals with suggested intervals.
 
+    Applies recursive tag rules to both TimeWarrior and suggested tags before comparison,
+    so that manually-entered tags that imply other tags are recognized as equivalent.
+
     Returns:
         Dict with keys: 'missing', 'extra', 'different_tags', 'matching', 'previously_synced'
     """
+    # Import here to avoid circular dependency
+    from .config import config
+    from .main import retag_by_rules
+
     result = {
         "missing": [],  # Intervals suggested but not in timew
         "extra": [],  # Intervals in timew but not suggested (manual or external)
@@ -142,8 +149,14 @@ def compare_intervals(
             overlapping, key=lambda tw: min(tw.end, suggested.end) - max(tw.start, suggested.start)
         )
 
-        # Check if tags match
-        if best_match.tags == suggested.tags:
+        # Apply recursive tag rules to both sides before comparing
+        # This allows manually-entered tags (e.g., "food") to match suggested tags
+        # when they expand to the same set (e.g., both become {"food", "4BREAK"})
+        timew_tags_expanded = retag_by_rules(best_match.tags, config)
+        suggested_tags_expanded = retag_by_rules(suggested.tags, config)
+
+        # Check if tags match after rule expansion
+        if timew_tags_expanded == suggested_tags_expanded:
             result["matching"].append((best_match, suggested))
         else:
             result["different_tags"].append((best_match, suggested))
