@@ -112,6 +112,15 @@ class FixtureDataBuilder:
                 "created": current_time_iso,
                 "last_updated": current_time_iso,
             },
+            "aw-watcher-ask-away_test": {
+                "id": "aw-watcher-ask-away_test",
+                "name": "aw-watcher-ask-away_test",
+                "type": "afktask",
+                "client": "aw-watcher-ask-away",
+                "hostname": "test-host",
+                "created": current_time_iso,
+                "last_updated": current_time_iso,
+            },
         }
 
         # Initialize empty event lists for each bucket
@@ -223,6 +232,39 @@ class FixtureDataBuilder:
         }
 
         self.events["aw-watcher-lid_test"].append(event)
+        self.current_time = event_time + duration
+
+        return self
+
+    def add_ask_away_event(
+        self, message: str, duration: int | timedelta, timestamp: datetime | None = None
+    ) -> "FixtureDataBuilder":
+        """
+        Add an ask-away event with a user message.
+
+        Args:
+            message: User-entered message (e.g., "housework", "lunch break")
+            duration: Duration in seconds or timedelta
+            timestamp: Event timestamp (uses current_time if not specified)
+
+        Returns:
+            Self for chaining
+        """
+        if isinstance(duration, int):
+            duration = timedelta(seconds=duration)
+
+        event_time = timestamp or self.current_time
+
+        event = {
+            "id": len(self.events["aw-watcher-ask-away_test"]) + 1,
+            "timestamp": event_time.isoformat(),
+            "duration": duration.total_seconds(),
+            "data": {
+                "message": message,
+            },
+        }
+
+        self.events["aw-watcher-ask-away_test"].append(event)
         self.current_time = event_time + duration
 
         return self
