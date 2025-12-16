@@ -1010,8 +1010,20 @@ class Exporter:
                 return True
             if "afk" not in self.timew_info["tags"]:
                 ## I'm apparently afk, but we're not tracking it in timew?
-                ## Something must have gone wrong somewhere?
-                self.breakpoint()
+                ## In batch/diff mode with historical data, this can happen when:
+                ## - Processing events from the past and building up state
+                ## - TimeWarrior's current state doesn't match the historical timestamp
+                ## - In dry-run mode where we haven't applied changes yet
+                if self.start_time and self.end_time:
+                    # Batch/diff mode - log and continue
+                    self.log(
+                        "Internal state shows AFK but TimeWarrior not tracking afk tag - normal in batch/diff mode",
+                        event=event,
+                        level=logging.DEBUG,
+                    )
+                else:
+                    # Sync mode - this indicates a real problem
+                    self.breakpoint()
             if "not-afk" in tags:
                 self._afk_change_stats("not-afk", tags, event)
                 self.log(

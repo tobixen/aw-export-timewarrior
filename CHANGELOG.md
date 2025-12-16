@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove `timew delete` commands to maintain continuous tracking without gaps - extra intervals are preserved and boundaries adjusted using `:adjust` flag
 - Fix crash when `--apply` encounters empty command list (only comments/extra intervals)
 - Disable old timestamp check in batch/diff mode to prevent spurious "skipping event" warnings for legitimate events within requested time range
+- Fix assertion error in batch/diff mode when internal AFK state diverges from TimeWarrior state - normal when processing historical events
 
 ### Changed
 - Diff mode now always runs in dry-run mode, use `--apply` flag to execute changes
