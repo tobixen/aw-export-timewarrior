@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix diff comparison incorrectly marking previously synced intervals (with ~aw tag) as "extra" - now correctly identified as "previously_synced"
 - Fix diff mode not applying recursive tag rules to suggested tags - commands now properly expand tags (e.g., "food" → "food", "4BREAK")
 - Fix diff comparison not applying recursive tag rules to TimeWarrior tags - manually-entered tags now recognized as matching when they expand to same set
+- Fix diff mode not detecting gaps in TimeWarrior coverage - now detects when suggested intervals are only partially covered and generates track commands to fill gaps (minimum 1 second to avoid timestamp precision issues)
 
 ### Changed
 - Diff mode now always runs in dry-run mode, use `--apply` flag to execute changes

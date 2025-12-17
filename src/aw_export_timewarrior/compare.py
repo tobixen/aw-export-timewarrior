@@ -112,6 +112,9 @@ def compare_intervals(
     Applies recursive tag rules to both TimeWarrior and suggested tags before comparison,
     so that manually-entered tags that imply other tags are recognized as equivalent.
 
+    Detects partial coverage: if a suggested interval is only partially covered by TimeWarrior,
+    generates "missing" intervals for the uncovered gaps to ensure continuous tracking.
+
     Returns:
         Dict with keys: 'missing', 'extra', 'different_tags', 'matching', 'previously_synced'
     """
@@ -129,40 +132,81 @@ def compare_intervals(
 
     # Create a working copy of timew intervals
     unmatched_timew = list(timew_intervals)
+    matched_timew = []  # Track which timew intervals have been matched
 
     for suggested in suggested_intervals:
-        # Find overlapping timew intervals
+        # Find ALL overlapping timew intervals (not just the best one)
         # Use < instead of <= to exclude intervals that only touch at a single point
         overlapping = [
             tw
-            for tw in unmatched_timew
+            for tw in timew_intervals
             if tw.end and tw.start < suggested.end and suggested.start < tw.end
         ]
 
         if not overlapping:
-            # No timew interval found for this suggestion
+            # No timew interval found for this suggestion - completely missing
             result["missing"].append(suggested)
             continue
 
-        # Find best matching interval (most overlap)
-        best_match = max(
-            overlapping, key=lambda tw: min(tw.end, suggested.end) - max(tw.start, suggested.start)
-        )
+        # Calculate total coverage by merging overlapping TimeWarrior intervals
+        # Sort by start time to make merging easier
+        overlapping_sorted = sorted(overlapping, key=lambda tw: tw.start)
 
-        # Apply recursive tag rules to both sides before comparing
-        # This allows manually-entered tags (e.g., "food") to match suggested tags
-        # when they expand to the same set (e.g., both become {"food", "4BREAK"})
-        timew_tags_expanded = retag_by_rules(best_match.tags, config)
-        suggested_tags_expanded = retag_by_rules(suggested.tags, config)
+        # Find gaps in coverage and portions with different tags
+        uncovered_gaps = []
+        current_pos = suggested.start
 
-        # Check if tags match after rule expansion
-        if timew_tags_expanded == suggested_tags_expanded:
-            result["matching"].append((best_match, suggested))
-        else:
-            result["different_tags"].append((best_match, suggested))
+        for tw in overlapping_sorted:
+            # Gap before this timew interval?
+            if tw.start > current_pos:
+                # There's a gap - create a missing interval for it
+                gap_start = current_pos
+                gap_end = min(tw.start, suggested.end)
+                # Only create missing interval if gap is at least 1 second
+                # (ignore tiny gaps due to timestamp precision)
+                if (gap_end - gap_start).total_seconds() >= 1.0:
+                    uncovered_gaps.append(
+                        SuggestedInterval(start=gap_start, end=gap_end, tags=suggested.tags)
+                    )
 
-        # Remove from unmatched
-        unmatched_timew.remove(best_match)
+            # Calculate overlap between suggested and this timew interval
+            overlap_start = max(current_pos, tw.start)
+            overlap_end = min(suggested.end, tw.end)
+
+            if overlap_start < overlap_end:
+                # There's actual overlap - check if tags match
+                timew_tags_expanded = retag_by_rules(tw.tags, config)
+                suggested_tags_expanded = retag_by_rules(suggested.tags, config)
+
+                # Create interval objects for the overlapping portion
+                overlapping_suggested = SuggestedInterval(
+                    start=overlap_start, end=overlap_end, tags=suggested.tags
+                )
+
+                if timew_tags_expanded == suggested_tags_expanded:
+                    # Tags match - this portion is "matching"
+                    result["matching"].append((tw, overlapping_suggested))
+                else:
+                    # Tags differ - this portion needs retagging
+                    result["different_tags"].append((tw, overlapping_suggested))
+
+                # Mark this timew interval as matched
+                if tw in unmatched_timew:
+                    unmatched_timew.remove(tw)
+                if tw not in matched_timew:
+                    matched_timew.append(tw)
+
+                # Move current position forward
+                current_pos = overlap_end
+
+        # Check if there's a gap at the end (minimum 1 second to avoid timestamp precision issues)
+        if current_pos < suggested.end and (suggested.end - current_pos).total_seconds() >= 1.0:
+            uncovered_gaps.append(
+                SuggestedInterval(start=current_pos, end=suggested.end, tags=suggested.tags)
+            )
+
+        # Add all gaps to "missing"
+        result["missing"].extend(uncovered_gaps)
 
     # Separate unmatched timew intervals into "previously_synced" and "extra"
     for tw in unmatched_timew:
