@@ -852,11 +852,10 @@ class Exporter:
 
         # Look up ask-away message for this event and extract tags from it
         if hasattr(self, "_ask_away_events") and self._ask_away_events:
-            # Try to find an ask-away event that overlaps with this event
-            # Ask-away events are based on gaps in non-afk events and may have slightly
-            # different timestamps/durations than the AFK events we're processing
+            # Find ALL overlapping ask-away events (not just the first)
             event_start = event["timestamp"]
             event_end = event_start + event["duration"]
+            overlapping_events = []
 
             for ask_event in self._ask_away_events:
                 ask_start = ask_event["timestamp"]
@@ -864,9 +863,77 @@ class Exporter:
 
                 # Check if events overlap (any overlap qualifies)
                 if ask_start < event_end and ask_end > event_start:
+                    overlapping_events.append(ask_event)
+
+            # Check if these are split events (have split metadata)
+            if overlapping_events:
+                # Check if first event has split metadata
+                first_event = overlapping_events[0]
+                is_split = first_event["data"].get("split", False)
+
+                if is_split:
+                    # This AFK period was split by the user
+                    # Sort split events by split_index to ensure correct order
+                    split_events = sorted(
+                        overlapping_events, key=lambda e: e["data"].get("split_index", 0)
+                    )
+
+                    logger.info(f"Found {len(split_events)} split activities for AFK period")
+
+                    # For each split event, create a separate tracking entry
+                    for i, split_event in enumerate(split_events):
+                        message = split_event["data"].get("message", "")
+                        if not message:
+                            continue
+
+                        # Extract tags for this specific split activity
+                        synthetic_event = {
+                            "timestamp": split_event["timestamp"],
+                            "duration": split_event["duration"],
+                            "data": {"app": "ask-away", "title": message},
+                        }
+                        message_tags = self.tag_extractor.get_app_tags(synthetic_event)
+
+                        # If no rules matched, use the message text directly as tags
+                        if not message_tags or message_tags is False:
+                            words = message.strip().split()
+                            message_tags = {word.lower() for word in words if word}
+
+                        # Combine with base tags
+                        split_tags = tags | {"~aw"}
+                        if message_tags:
+                            if isinstance(message_tags, set):
+                                split_tags = split_tags | message_tags
+                            else:
+                                split_tags = split_tags | set(message_tags)
+
+                        # Start tracking for this split activity with its specific timestamp
+                        split_since = split_event["timestamp"]
+                        logger.info(
+                            f"  Split {i+1}/{len(split_events)}: '{message}' at {split_since} ({split_event['duration']})"
+                        )
+                        self.tracker.start_tracking(split_tags, split_since)
+
+                        # Update state after each split (simulate sequential tracking)
+                        if not self.dry_run:
+                            self.set_timew_info(self.retag_current_interval())
+                        else:
+                            self.set_timew_info(
+                                {
+                                    "start": split_since.strftime("%Y%m%dT%H%M%SZ"),
+                                    "start_dt": split_since,
+                                    "tags": split_tags,
+                                }
+                            )
+
+                    # Split events handled - return early, don't call start_tracking again
+                    return
+
+                else:
+                    # Not split events - use the first overlapping event (old behavior)
+                    ask_event = overlapping_events[0]
                     message = ask_event["data"].get("message", "")
                     if message:
-                        # Try to extract tags using configured rules first
                         synthetic_event = {
                             "timestamp": event["timestamp"],
                             "duration": event["duration"],
@@ -874,21 +941,15 @@ class Exporter:
                         }
                         message_tags = self.tag_extractor.get_app_tags(synthetic_event)
 
-                        # If no rules matched, use the message text directly as tags
-                        # Split by whitespace and use each word as a tag
                         if not message_tags or message_tags is False:
-                            # Clean up and split the message into tags
                             words = message.strip().split()
                             message_tags = {word.lower() for word in words if word}
 
-                        # Add the extracted/generated tags
                         if message_tags:
                             if isinstance(message_tags, set):
                                 final_tags = final_tags | message_tags
                             else:
                                 final_tags = final_tags | set(message_tags)
-                        # Use the first overlapping ask-away event found
-                        break
 
         # Start tracking with the final tags
         self.tracker.start_tracking(final_tags, since)
