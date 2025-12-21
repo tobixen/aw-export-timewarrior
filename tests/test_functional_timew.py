@@ -329,8 +329,8 @@ class TestApplyFix:
         assert len(new_intervals) == 1
         assert new_intervals[0].tags == {"work", "python"}
 
-    def test_apply_retag(self, timew_db: TimewTestDatabase) -> None:
-        """Test retagging an interval using generated commands."""
+    def test_apply_track_adjust(self, timew_db: TimewTestDatabase) -> None:
+        """Test changing tags using track :adjust command."""
         start = datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC)
         end = datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC)
 
@@ -340,7 +340,6 @@ class TestApplyFix:
         # Fetch it
         timew_intervals = fetch_timew_intervals(start, end)
         assert len(timew_intervals) == 1
-        original_id = timew_intervals[0].id
 
         # Suggest new tags
         suggested = [SuggestedInterval(start, end, {"new-tag", "work"})]
@@ -350,10 +349,10 @@ class TestApplyFix:
         comparison = compare_intervals(timew_intervals, suggested)
         commands = generate_fix_commands(comparison)
 
-        # Should generate one retag command
+        # Should generate one track :adjust command
         assert len(commands) == 1
-        assert commands[0].startswith("timew retag")
-        assert f"@{original_id}" in commands[0]
+        assert commands[0].startswith("timew track")
+        assert ":adjust" in commands[0]
         assert "new-tag" in commands[0]
         assert "work" in commands[0]
 
@@ -368,7 +367,7 @@ class TestApplyFix:
         assert len(new_intervals) == 1
         # Note: suggested tags don't include ~aw, so it won't be in the new tags
         assert new_intervals[0].tags == {"new-tag", "work"}
-        assert new_intervals[0].id == original_id  # Same interval
+        # Note: track :adjust may create a new interval ID
 
 
 class TestSyncWithRealData:

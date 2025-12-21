@@ -413,11 +413,12 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     """
     Generate timew commands to fix differences.
 
-    Uses 'timew track' for missing intervals, 'timew retag' for intervals
-    with different tags, and 'timew delete' for extra intervals.
-
-    Commands for manually-entered events (those without ~aw tag) are commented out
-    to prevent accidental deletion/overwriting.
+    Uses only 'timew track :adjust' for all changes. The :adjust flag automatically
+    handles both creating new intervals in gaps AND adjusting/replacing existing
+    intervals with different tags. This approach:
+    - Avoids convergence issues from multiple retag commands on same interval
+    - Maintains continuous tracking without gaps
+    - Simplifies command generation logic
 
     Args:
         comparison: Result from compare_intervals
@@ -431,51 +432,32 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
 
     commands = []
 
-    # Merge consecutive intervals with the same tags before generating commands
-    merged_missing = merge_consecutive_intervals(comparison["missing"])
+    # Collect all suggested intervals that need to be tracked:
+    # 1. Missing intervals (gaps in TimeWarrior)
+    # 2. Intervals with different tags (extract the suggested portion)
+    all_suggested = []
 
-    # Add missing intervals using 'timew track'
-    for suggested in merged_missing:
+    # Add missing intervals
+    all_suggested.extend(comparison["missing"])
+
+    # Add suggested portions from intervals with different tags
+    # These are tuples of (timew_int, suggested_interval)
+    for _timew_int, suggested in comparison["different_tags"]:
+        all_suggested.append(suggested)
+
+    # Merge consecutive intervals with the same tags before generating commands
+    merged_suggested = merge_consecutive_intervals(all_suggested)
+
+    # Generate track commands for all suggested intervals
+    for suggested in merged_suggested:
         # Format: timew track 2025-12-08T10:00:00 - 2025-12-08T11:00:00 tag1 tag2 :adjust
-        # NOTE: Using :adjust to maintain continuous tracking without gaps
+        # NOTE: Using :adjust to handle both gaps AND retagging existing intervals
         start_str = suggested.start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
         end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
         # Apply recursive tag rules before generating command
         final_tags = retag_by_rules(suggested.tags, config)
         tags = " ".join(sorted(final_tags))
         commands.append(f"timew track {start_str} - {end_str} {tags} :adjust")
-
-    # Fix intervals with different tags using 'timew retag'
-    # Sort in reverse ID order to avoid issues if any intervals get deleted during retag
-    sorted_different = sorted(comparison["different_tags"], key=lambda x: x[0].id, reverse=True)
-
-    for timew_int, suggested in sorted_different:
-        # Use the timew interval's ID for retag command
-        # Format: timew retag @<id> tag1 tag2 tag3
-        # First, remove all existing tags, then add the suggested ones
-        # This is done by specifying all new tags - timew retag replaces all tags
-        # Apply recursive tag rules before generating command
-        final_tags = retag_by_rules(suggested.tags, config)
-        tags = " ".join(sorted(final_tags))
-
-        # Format timestamp for comment
-        timestamp_str = timew_int.start.astimezone().strftime("%Y-%m-%d %H:%M")
-
-        # Format old tags for comment
-        old_tags_str = " ".join(sorted(timew_int.tags))
-
-        # Check if this is a manually-entered event (no ~aw tag)
-        is_manual = "~aw" not in timew_int.tags
-
-        # Build the command with comment
-        base_cmd = f"timew retag @{timew_int.id} {tags}"
-        comment = f"  # {timestamp_str} - old tags: {old_tags_str}"
-
-        # Comment out the entire command if it's a manually-entered event
-        if is_manual:
-            commands.append(f"# {base_cmd}{comment}")
-        else:
-            commands.append(f"{base_cmd}{comment}")
 
     # NOTE: "extra" intervals (in TimeWarrior but not in ActivityWatch) are intentionally
     # not deleted to maintain continuous tracking. The :adjust flag on track commands

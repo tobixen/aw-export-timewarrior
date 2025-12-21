@@ -434,8 +434,8 @@ class TestGenerateFixCommands:
         assert "~aw" in commands[0]
         assert ":adjust" in commands[0]
 
-    def test_generate_retag_command_with_comments(self) -> None:
-        """Test that retag commands include timestamp and old tags in comments."""
+    def test_generate_track_adjust_for_different_tags(self) -> None:
+        """Test that intervals with different tags use track :adjust instead of retag."""
         comparison = {
             "matching": [],
             "different_tags": [
@@ -460,18 +460,15 @@ class TestGenerateFixCommands:
         commands = generate_fix_commands(comparison)
 
         assert len(commands) == 1
-        # Should NOT be commented out (has ~aw tag)
-        assert not commands[0].startswith("#")
-        assert "timew retag @42" in commands[0]
+        # Should use track :adjust (not retag)
+        assert "timew track" in commands[0]
+        assert ":adjust" in commands[0]
         assert "4work" in commands[0]
         assert "python" in commands[0]
-        # Should include comment with timestamp and old tags
-        assert "# 2025-12-10" in commands[0]
-        assert "old tags:" in commands[0]
-        assert "java" in commands[0]  # Old tag in comment
+        assert "~aw" in commands[0]
 
-    def test_retag_command_commented_for_manual_entries(self) -> None:
-        """Test that retag commands for manual entries (no ~aw tag) are commented out."""
+    def test_track_adjust_for_manual_entries(self) -> None:
+        """Test that manual entries now also use track :adjust (no special handling)."""
         comparison = {
             "matching": [],
             "different_tags": [
@@ -496,17 +493,15 @@ class TestGenerateFixCommands:
         commands = generate_fix_commands(comparison)
 
         assert len(commands) == 1
-        # Should be commented out (no ~aw tag in original)
-        assert commands[0].startswith("# timew retag")
-        assert "@99" in commands[0]
-        # Should still include the informational comment
-        assert "# 2025-12-10" in commands[0]
-        assert "old tags:" in commands[0]
-        assert "manual" in commands[0]
+        # Should use track :adjust (no longer commenting out manual entries)
+        assert "timew track" in commands[0]
+        assert ":adjust" in commands[0]
+        assert "4work" in commands[0]
         assert "meeting" in commands[0]
+        assert "~aw" in commands[0]
 
     def test_multiple_commands_mixed(self) -> None:
-        """Test generating multiple commands with both auto and manual entries."""
+        """Test generating multiple track commands for different intervals."""
         comparison = {
             "matching": [],
             "different_tags": [
@@ -524,7 +519,7 @@ class TestGenerateFixCommands:
                         tags={"new-tag", "~aw"},
                     ),
                 ),
-                # Manual entry (no ~aw)
+                # Manual entry (no ~aw) - now treated the same as auto
                 (
                     TimewInterval(
                         id=2,
@@ -551,14 +546,12 @@ class TestGenerateFixCommands:
 
         commands = generate_fix_commands(comparison)
 
+        # Now all commands are track :adjust (no retag)
         assert len(commands) == 3
-        # First should be track command (for missing)
-        assert commands[0].startswith("timew track")
-        # Second should be commented retag @2 (no ~aw) - higher ID comes first due to reverse sorting
-        assert commands[1].startswith("# timew retag @2")
-        # Third should be uncommented retag @1 (has ~aw)
-        assert commands[2].startswith("timew retag @1")
-        assert not commands[2].startswith("# timew")
+        # All should be track commands
+        for cmd in commands:
+            assert "timew track" in cmd
+            assert ":adjust" in cmd
 
     def test_generate_delete_command_for_extra_auto(self) -> None:
         """Test that extra auto-generated intervals get delete commands."""

@@ -69,13 +69,9 @@ def test_extra_intervals_not_deleted() -> None:
     print("✓ Previously synced intervals correctly ignored (no commands generated)")
 
 
-def test_retag_commands_ordered_by_reverse_id() -> None:
-    """Test that retag commands are also generated in reverse ID order.
-
-    While retag doesn't delete intervals, sorting in reverse is still
-    safer in case of any edge cases or future changes.
-    """
-    # Create timew intervals that need retagging
+def test_track_adjust_for_different_tags() -> None:
+    """Test that intervals with different tags now use track :adjust instead of retag."""
+    # Create timew intervals with old tags
     timew_intervals = [
         TimewInterval(
             id=120,
@@ -127,43 +123,34 @@ def test_retag_commands_ordered_by_reverse_id() -> None:
     # Generate fix commands
     commands = generate_fix_commands(comparison)
 
-    # Extract retag commands
-    retag_commands = [cmd for cmd in commands if cmd.startswith("timew retag")]
+    # Should generate track :adjust commands (not retag)
+    # Consecutive intervals with same tags get merged into one
+    track_commands = [cmd for cmd in commands if cmd.startswith("timew track")]
 
-    assert len(retag_commands) == 3, f"Expected 3 retag commands, got {len(retag_commands)}"
+    assert (
+        len(track_commands) == 1
+    ), f"Expected 1 track command (consecutive intervals merged), got {len(track_commands)}"
 
-    # Extract IDs from retag commands
-    ids = []
-    for cmd in retag_commands:
-        import re
+    # Should have :adjust flag and cover the full range
+    cmd = track_commands[0]
+    assert ":adjust" in cmd
+    assert "new-tag" in cmd
+    assert "~aw" in cmd
+    # Merged command should cover 11:00-11:15
+    assert "12:00:00" in cmd and "12:15:00" in cmd
 
-        match = re.search(r"@(\d+)", cmd)
-        assert match, f"Could not find @ID in command: {cmd}"
-        ids.append(int(match.group(1)))
-
-    print(f"\nRetag commands generated in order: {ids}")
-
-    # Retag commands should also be in descending order
-    assert ids == [122, 121, 120], (
-        f"Retag commands should be in REVERSE ID order for consistency!\n"
-        f"Got: {ids}\n"
-        f"Expected: [122, 121, 120]"
-    )
-
-    print("✓ Retag commands correctly ordered in reverse ID sequence")
+    print("✓ Track :adjust command generated for different tags (consecutive intervals merged)")
 
 
-def test_mixed_commands_track_then_retag() -> None:
-    """Test that when we have track and retag commands, they're in the right order.
+def test_mixed_commands_all_track_adjust() -> None:
+    """Test that all changes now use track :adjust (no retag).
 
-    The order should be:
-    1. track (creates new intervals)
-    2. retag (modifies existing intervals)
-    3. extra intervals documented in comments (not deleted)
-
-    This ensures we don't have ordering issues.
+    Now everything uses track :adjust:
+    1. Missing intervals (gaps) get track commands
+    2. Intervals with different tags get track commands
+    3. Extra intervals documented in comments (not deleted)
     """
-    # Timew has: @100 (extra), @101 (needs retag)
+    # Timew has: @100 (previously synced), @101 (different tags)
     timew_intervals = [
         TimewInterval(
             id=100,
@@ -179,17 +166,17 @@ def test_mixed_commands_track_then_retag() -> None:
         ),
     ]
 
-    # Suggested: one interval to retag, one new interval to track
+    # Suggested: one interval with different tags, one new interval
     suggested_intervals = [
         SuggestedInterval(
             start=datetime(2025, 12, 15, 12, 5, 0, tzinfo=UTC),
             end=datetime(2025, 12, 15, 12, 10, 0, tzinfo=UTC),
-            tags={"new-tag", "~aw"},  # Retag @101
+            tags={"new-tag", "~aw"},  # Different tags for @101
         ),
         SuggestedInterval(
             start=datetime(2025, 12, 15, 12, 10, 0, tzinfo=UTC),
             end=datetime(2025, 12, 15, 12, 15, 0, tzinfo=UTC),
-            tags={"track-me", "~aw"},  # New interval to track
+            tags={"track-me", "~aw"},  # New interval (missing)
         ),
     ]
 
@@ -202,20 +189,16 @@ def test_mixed_commands_track_then_retag() -> None:
     retag_cmds = [i for i, cmd in enumerate(commands) if cmd.startswith("timew retag")]
     delete_cmds = [i for i, cmd in enumerate(commands) if cmd.startswith("timew delete")]
 
-    # Verify we have track and retag, but NO delete
-    assert len(track_cmds) == 1, "Should have 1 track command"
-    assert len(retag_cmds) == 1, "Should have 1 retag command"
+    # All changes now use track :adjust
+    assert len(track_cmds) == 2, f"Should have 2 track commands, got {len(track_cmds)}"
+    assert (
+        len(retag_cmds) == 0
+    ), f"Should have 0 retag commands (using track :adjust), got {len(retag_cmds)}"
     assert len(delete_cmds) == 0, "Should have 0 delete commands (extra intervals preserved)"
-
-    # Verify order: track < retag
-    assert track_cmds[0] < retag_cmds[0], (
-        "Commands must be ordered: track, then retag. "
-        f"Got indices: track={track_cmds[0]}, retag={retag_cmds[0]}"
-    )
 
     # Verify previously_synced interval (@100 with ~aw tag) doesn't generate commands
     # It's from a previous sync and should be left alone
     assert len(comparison["previously_synced"]) == 1, "Should have 1 previously_synced interval"
     assert comparison["previously_synced"][0].id == 100, "Interval @100 should be previously_synced"
 
-    print("✓ Mixed commands in correct order: track → retag, previously_synced ignored")
+    print("✓ All changes use track :adjust, previously_synced ignored")
