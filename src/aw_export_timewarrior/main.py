@@ -1336,6 +1336,7 @@ class Exporter:
         - Lid open during AFK -> keep AFK state from aw-watcher-afk
         - Lid events are converted to AFK-compatible format for processing
         - Original lid data is preserved for debugging
+        - When lid events overlap with AFK events, lid events take priority
 
         Args:
             afk_events: Events from aw-watcher-afk
@@ -1352,10 +1353,14 @@ class Exporter:
         for event in lid_events:
             data = event["data"]
 
-            # Determine AFK status based on lid/suspend state
-            # Lid closed or suspended -> afk
+            # Determine AFK status based on lid/suspend/boot state
+            # Lid closed, suspended, or boot gap -> afk
             # Lid open or resumed -> not-afk
-            if data.get("lid_state") == "closed" or data.get("suspend_state") == "suspended":
+            if (
+                data.get("lid_state") == "closed"
+                or data.get("suspend_state") == "suspended"
+                or data.get("boot_gap", False)
+            ):
                 status = "afk"
             else:
                 status = "not-afk"
@@ -1371,13 +1376,117 @@ class Exporter:
             }
             converted_lid_events.append(converted_event)
 
-        # For now, simple concatenation - lid events will be processed alongside AFK events
-        # The event processing logic will naturally handle overlaps since events are sorted by timestamp
-        # TODO Phase 4+: Add sophisticated conflict resolution for overlapping periods
-        merged = afk_events + converted_lid_events
-        merged.sort(key=lambda x: x["timestamp"])
+        # Implement priority-based merge: lid events override conflicting AFK events
+        # When a lid event indicates AFK (closed/suspended) and overlaps with a
+        # non-AFK event from aw-watcher-afk, remove the conflicting portion
+        resolved_afk_events = self._resolve_event_conflicts(afk_events, converted_lid_events)
+
+        # Merge resolved AFK events with lid events
+        merged = resolved_afk_events + converted_lid_events
+
+        # Sort by timestamp (handle both string and datetime types)
+        def get_sort_key(event: dict) -> datetime:
+            ts = event["timestamp"]
+            if isinstance(ts, datetime):
+                return ts
+            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+        merged.sort(key=get_sort_key)
 
         return merged
+
+    def _resolve_event_conflicts(self, afk_events: list, priority_events: list) -> list:
+        """
+        Remove or trim AFK events that conflict with higher-priority events.
+
+        When a priority event (lid/suspend) indicates a different state than an AFK event
+        during the same time period, the priority event wins and the AFK event is trimmed
+        or removed.
+
+        Args:
+            afk_events: Events from aw-watcher-afk
+            priority_events: Events from lid watcher (already converted to AFK format)
+
+        Returns:
+            List of AFK events with conflicts resolved
+        """
+        if not priority_events:
+            return afk_events
+
+        def parse_timestamp(ts: str | datetime) -> datetime:
+            """Parse ISO format timestamp."""
+            if isinstance(ts, datetime):
+                return ts
+            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+        def get_event_range(event: dict) -> tuple[datetime, datetime]:
+            """Get start and end time of an event."""
+            start = parse_timestamp(event["timestamp"])
+            duration = event["duration"]
+            if isinstance(duration, timedelta):
+                end = start + duration
+            else:
+                end = start + timedelta(seconds=duration)
+            return start, end
+
+        def events_overlap(
+            e1_start: datetime, e1_end: datetime, e2_start: datetime, e2_end: datetime
+        ) -> bool:
+            """Check if two time ranges overlap."""
+            return e1_start < e2_end and e2_start < e1_end
+
+        def events_conflict(afk_event: dict, priority_event: dict) -> bool:
+            """Check if two events conflict (overlap and have different status)."""
+            afk_status = afk_event["data"]["status"]
+            priority_status = priority_event["data"]["status"]
+            # Only conflicts if they have different status
+            return afk_status != priority_status
+
+        resolved = []
+        for afk_event in afk_events:
+            afk_start, afk_end = get_event_range(afk_event)
+            trimmed_segments = [(afk_start, afk_end)]
+
+            # Check against each priority event
+            for priority_event in priority_events:
+                priority_start, priority_end = get_event_range(priority_event)
+
+                # Check for overlap and conflict
+                new_segments = []
+                for seg_start, seg_end in trimmed_segments:
+                    if events_overlap(seg_start, seg_end, priority_start, priority_end):
+                        if events_conflict(afk_event, priority_event):
+                            # Trim the conflicting portion
+                            # Keep non-overlapping parts
+                            if seg_start < priority_start:
+                                # Keep portion before priority event
+                                new_segments.append((seg_start, priority_start))
+                            if seg_end > priority_end:
+                                # Keep portion after priority event
+                                new_segments.append((priority_end, seg_end))
+                            # The overlapping portion is removed
+                        else:
+                            # Same status, no conflict - keep the segment
+                            new_segments.append((seg_start, seg_end))
+                    else:
+                        # No overlap, keep as is
+                        new_segments.append((seg_start, seg_end))
+
+                trimmed_segments = new_segments
+
+            # Create events from remaining segments
+            for seg_start, seg_end in trimmed_segments:
+                duration_td = seg_end - seg_start
+                if duration_td.total_seconds() > 0:  # Only keep non-zero duration segments
+                    resolved.append(
+                        {
+                            "timestamp": seg_start,  # Keep as datetime object
+                            "duration": duration_td,  # Keep as timedelta object
+                            "data": afk_event["data"].copy(),
+                        }
+                    )
+
+        return resolved
 
     def _fetch_and_prepare_events(self) -> tuple[list, dict | None]:
         """Fetch, filter, merge, and sort events from ActivityWatch.
@@ -1453,7 +1562,15 @@ class Exporter:
             self.event_fetcher.get_events(window_id, start=self.state.last_tick, end=self.end_time)
             + merged_afk_events
         )
-        afk_window_events.sort(key=lambda x: x["timestamp"])
+
+        # Sort by timestamp (handle both string and datetime types)
+        def get_timestamp_for_sort(event: dict) -> datetime:
+            ts = event["timestamp"]
+            if isinstance(ts, datetime):
+                return ts
+            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+        afk_window_events.sort(key=get_timestamp_for_sort)
 
         # Split window events that overlap with AFK periods
         # This ensures window events are properly interrupted by AFK
@@ -1463,10 +1580,20 @@ class Exporter:
         # This can happen when we fetch an event that overlaps with last_tick, split it,
         # and end up with segments that we've already processed
         if self.state.last_tick:
+
+            def get_event_end_time(event: dict) -> datetime:
+                ts = event["timestamp"]
+                dur = event["duration"]
+                if isinstance(ts, datetime):
+                    start = ts
+                else:
+                    start = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                if isinstance(dur, timedelta):
+                    return start + dur
+                return start + timedelta(seconds=dur)
+
             afk_window_events = [
-                e
-                for e in afk_window_events
-                if e["timestamp"] + e["duration"] > self.state.last_tick
+                e for e in afk_window_events if get_event_end_time(e) > self.state.last_tick
             ]
 
         if len(afk_window_events) == 0:
@@ -1502,6 +1629,18 @@ class Exporter:
         if not afk_events:
             return events
 
+        def normalize_timestamp(ts: str | datetime) -> datetime:
+            """Normalize timestamp to datetime object."""
+            if isinstance(ts, datetime):
+                return ts
+            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+        def normalize_duration(dur: float | timedelta) -> timedelta:
+            """Normalize duration to timedelta object."""
+            if isinstance(dur, timedelta):
+                return dur
+            return timedelta(seconds=dur)
+
         # Separate window and AFK events
         window_events = [e for e in events if "status" not in e["data"]]
         status_events = [e for e in events if "status" in e["data"]]
@@ -1509,16 +1648,17 @@ class Exporter:
         result = []
 
         for window_event in window_events:
-            window_start = window_event["timestamp"]
-            window_end = window_event["timestamp"] + window_event["duration"]
+            window_start = normalize_timestamp(window_event["timestamp"])
+            window_end = window_start + normalize_duration(window_event["duration"])
 
             # Find overlapping AFK events
             overlapping_afk = [
                 afk
                 for afk in afk_events
                 if afk["data"].get("status") == "afk"
-                and afk["timestamp"] < window_end
-                and (afk["timestamp"] + afk["duration"]) > window_start
+                and normalize_timestamp(afk["timestamp"]) < window_end
+                and (normalize_timestamp(afk["timestamp"]) + normalize_duration(afk["duration"]))
+                > window_start
             ]
 
             if not overlapping_afk:
@@ -1527,21 +1667,22 @@ class Exporter:
                 continue
 
             # Sort AFK events by timestamp
-            overlapping_afk.sort(key=lambda x: x["timestamp"])
+            overlapping_afk.sort(key=lambda x: normalize_timestamp(x["timestamp"]))
 
             # Split window event at AFK boundaries
             current_time = window_start
             for afk_event in overlapping_afk:
-                afk_start = afk_event["timestamp"]
-                afk_end = afk_event["timestamp"] + afk_event["duration"]
+                afk_start = normalize_timestamp(afk_event["timestamp"])
+                afk_end = afk_start + normalize_duration(afk_event["duration"])
 
                 # Add window portion before AFK (if any)
                 if current_time < afk_start and afk_start < window_end:
+                    duration_td = afk_start - current_time
                     result.append(
                         {
                             **window_event,
-                            "timestamp": current_time,
-                            "duration": afk_start - current_time,
+                            "timestamp": current_time,  # Keep as datetime
+                            "duration": duration_td,  # Keep as timedelta
                         }
                     )
 
@@ -1550,17 +1691,18 @@ class Exporter:
 
             # Add remaining window portion after all AFK periods (if any)
             if current_time < window_end:
+                duration_td = window_end - current_time
                 result.append(
                     {
                         **window_event,
-                        "timestamp": current_time,
-                        "duration": window_end - current_time,
+                        "timestamp": current_time,  # Keep as datetime
+                        "duration": duration_td,  # Keep as timedelta
                     }
                 )
 
         # Add all status events back and re-sort
         result.extend(status_events)
-        result.sort(key=lambda x: x["timestamp"])
+        result.sort(key=lambda x: normalize_timestamp(x["timestamp"]))
 
         return result
 
@@ -1806,7 +1948,21 @@ class Exporter:
             # Only count duration for non-AFK events to avoid double-counting
             # (AFK events overlap with window/browser/editor events)
             if tag_result and "status" not in event["data"]:
-                self.state.stats.known_events_time += event["duration"]
+                duration_to_add = event["duration"]
+                # Avoid double-counting: if this event was partially processed as the
+                # current/ongoing event, only add the remaining (unprocessed) duration.
+                # This happens when an event transitions from current to completed.
+                if self.state.current_event_timestamp == event["timestamp"]:
+                    duration_to_add = (
+                        event["duration"] - self.state.current_event_processed_duration
+                    )
+                    if duration_to_add < timedelta(0):
+                        duration_to_add = timedelta(0)  # Safety check
+                    # Clear the current event tracking since we've now fully processed it
+                    self.state.current_event_timestamp = None
+                    self.state.current_event_processed_duration = timedelta(0)
+                if duration_to_add > timedelta(0):
+                    self.state.stats.known_events_time += duration_to_add
 
             # Handle the tag result and update counters
             num_skipped_events, total_time_skipped_events = self._handle_tag_result(
