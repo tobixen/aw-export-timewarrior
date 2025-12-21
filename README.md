@@ -43,7 +43,9 @@ Those rules are currently supported:
 
 * App rules (`rules.app.${id}`).  Takes two inputs, `app_names` and `title_regexp`.  Both has to pass (AND-logic).
 
-The three latter takes the output parameter `timew_tags` and may start a new Timewarrior entry with the given tags.  For each category, currently the first match will be used, but it should probably be redone so that it uses a union of all tags matching.
+* Tmux rules (`rules.tmux.${id}`).  Requires [aw-watcher-tmux](https://github.com/akohlbecker/aw-watcher-tmux) to be installed and running. Takes up to four optional inputs (all regexp patterns): `session` (tmux session name), `window` (tmux window name), `command` (current command in pane), and `path` (current working directory). All specified inputs must match (AND-logic). If no rules match, a default tag `tmux:$command` is used. Supports variable substitution: `$session`, `$window`, `$title`, `$command`, `$path`, and `$1`, `$2`, `$3`, etc. (capture groups from command or path regexp - command takes priority).
+
+The four latter takes the output parameter `timew_tags` and may start a new Timewarrior entry with the given tags.  For each category, currently the first match will be used, but it should probably be redone so that it uses a union of all tags matching.
 
 I'm planning to support extensions - for instance, you may want to write up some special browser rule logic applying to some specific URL and specific page title, do an external look-up to find the appropriate tags, etc - advanced logic is better done in Python than in a configuration language like toml.
 
@@ -89,6 +91,7 @@ Currently the program is tossing the user into python debugger breakpoints every
   * If you stop the script and then undo all the work it's done through `timew undo`, and start the script again it will go through the timeline again.  Useful if you've changed some configuration.
 * `timew tag` - will add tags to the current activity. Those tags will persist all until a new activity is started.
   * Useful for adding details to some activity.  Particularly the AFK-activity - Activitywatch doesn't know anything on what you've done when you're not at the laptop.  So if I was varnishing the boat while being afk, I can do `timew tag varnishing`.  Or I can proactively do a `timew start afk varnishing` just when leaving the laptop - since it has the afk-tag, it won't be touched when the afk-watcher figures out you're afk.
+  * **Note on split AFK periods**: If using [aw-watcher-ask-away](https://github.com/ErikBjare/aw-watcher-ask-away) with split mode, the watcher can create multiple tagged events for a single AFK period. The export tool automatically detects split events (via their metadata) and creates separate timewarrior entries for each split activity, preserving the chronological order and individual tags.
   * Special tags exists:
     * `override` - the tracking will persist until manually stopped, no matter what the watchers find.
 	* `manual` - unknown activity will be ignored.  (Currently an "unknown" tag is slapped on if no tags are found within two minutes - though I'm considering to change this).
