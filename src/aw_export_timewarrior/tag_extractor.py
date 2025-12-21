@@ -474,16 +474,19 @@ class TagExtractor:
         return tags
 
     def apply_retag_rules(self, source_tags: set[str]) -> set[str]:
-        """Apply retagging rules to expand tags.
+        """Apply retagging rules to transform tags.
 
-        This allows defining rules that add additional tags based on existing tags.
-        For example, adding project-wide tags based on specific tags.
+        This allows defining rules that modify tags based on existing tags.
+        Supports three operations (applied in order):
+        1. remove: Remove specific tags when source_tags match
+        2. replace: Replace matching source_tags with new tags
+        3. add: Add additional tags (original behavior)
 
         Args:
             source_tags: Original set of tags
 
         Returns:
-            Expanded set of tags after applying retag rules
+            Transformed set of tags after applying retag rules
 
         Raises:
             AssertionError: If tags violate exclusive group rules
@@ -494,25 +497,54 @@ class TagExtractor:
 
         for tag_section in self.config.get("tags", {}):
             retags = self.config["tags"][tag_section]
-            intersection = source_tags.intersection(set(retags["source_tags"]))
+            source_tag_set = set(retags.get("source_tags", []))
+            intersection = new_tags.intersection(source_tag_set)
 
-            if intersection:
-                new_tags_ = set()
-                for tag in retags.get("add", []):
+            if not intersection:
+                continue
+
+            # Step 1: Remove tags if 'remove' is specified
+            if "remove" in retags:
+                tags_to_remove = set()
+                for tag in retags["remove"]:
                     if "$source_tag" in tag:
                         for source_tag in intersection:
-                            new_tags_.add(tag.replace("$source_tag", source_tag))
+                            tags_to_remove.add(tag.replace("$source_tag", source_tag))
                     else:
-                        new_tags_.add(tag)
+                        tags_to_remove.add(tag)
+                new_tags = new_tags - tags_to_remove
 
-                new_tags_ = new_tags.union(new_tags_)
+            # Step 2: Replace if 'replace' is specified
+            # This removes the matching source_tags and adds replacement tags
+            if "replace" in retags:
+                # Remove the matched source tags
+                new_tags = new_tags - intersection
+                # Add replacement tags
+                for tag in retags["replace"]:
+                    if "$source_tag" in tag:
+                        for source_tag in intersection:
+                            new_tags.add(tag.replace("$source_tag", source_tag))
+                    else:
+                        new_tags.add(tag)
 
-                if self.check_exclusive_groups(new_tags_):
+            # Step 3: Add tags if 'add' is specified (original behavior)
+            if "add" in retags:
+                tags_to_add = set()
+                for tag in retags["add"]:
+                    if "$source_tag" in tag:
+                        for source_tag in intersection:
+                            tags_to_add.add(tag.replace("$source_tag", source_tag))
+                    else:
+                        tags_to_add.add(tag)
+
+                candidate_tags = new_tags.union(tags_to_add)
+
+                if self.check_exclusive_groups(candidate_tags):
                     logger.warning(
                         f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts"
                     )
                 else:
-                    new_tags = new_tags_
+                    new_tags = candidate_tags
 
         # Recursively apply rules if tags changed
         if new_tags != source_tags:

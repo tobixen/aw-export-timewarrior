@@ -210,6 +210,115 @@ class TestRetagByRules:
         assert "github-work" in result
         assert "programming" in result
 
+    @patch(
+        "aw_export_timewarrior.main.config",
+        {
+            "exclusive": {},
+            "tags": {
+                "remove_unwanted": {
+                    "source_tags": ["work"],
+                    "remove": ["debug", "temp"],
+                }
+            },
+        },
+    )
+    def test_retag_remove_tags(self) -> None:
+        """Test that remove operation removes specified tags."""
+        source_tags = {"work", "debug", "temp", "important"}
+        result = retag_by_rules(source_tags)
+        assert "work" in result
+        assert "important" in result
+        assert "debug" not in result
+        assert "temp" not in result
+
+    @patch(
+        "aw_export_timewarrior.main.config",
+        {
+            "exclusive": {},
+            "tags": {
+                "remove_with_placeholder": {
+                    "source_tags": ["old-tag"],
+                    "remove": ["$source_tag"],
+                }
+            },
+        },
+    )
+    def test_retag_remove_with_source_tag_placeholder(self) -> None:
+        """Test that remove with $source_tag removes the matched source tag."""
+        source_tags = {"old-tag", "keep-this"}
+        result = retag_by_rules(source_tags)
+        assert "old-tag" not in result
+        assert "keep-this" in result
+
+    @patch(
+        "aw_export_timewarrior.main.config",
+        {
+            "exclusive": {},
+            "tags": {
+                "replace_old": {
+                    "source_tags": ["old-project"],
+                    "replace": ["new-project", "migrated"],
+                }
+            },
+        },
+    )
+    def test_retag_replace_tags(self) -> None:
+        """Test that replace operation replaces source tags with new tags."""
+        source_tags = {"old-project", "work"}
+        result = retag_by_rules(source_tags)
+        assert "old-project" not in result
+        assert "new-project" in result
+        assert "migrated" in result
+        assert "work" in result  # Non-source tags are preserved
+
+    @patch(
+        "aw_export_timewarrior.main.config",
+        {
+            "exclusive": {},
+            "tags": {
+                "replace_with_placeholder": {
+                    "source_tags": ["v1", "v2"],
+                    "replace": ["$source_tag-archived"],
+                }
+            },
+        },
+    )
+    def test_retag_replace_with_source_tag_placeholder(self) -> None:
+        """Test that replace with $source_tag expands to matched tags."""
+        source_tags = {"v1", "active"}
+        result = retag_by_rules(source_tags)
+        assert "v1" not in result
+        assert "v1-archived" in result
+        assert "active" in result
+
+    @patch(
+        "aw_export_timewarrior.main.config",
+        {
+            "exclusive": {},
+            "tags": {
+                "combined_ops": {
+                    "source_tags": ["trigger"],
+                    "remove": ["unwanted"],
+                    "replace": ["replaced"],
+                    "add": ["extra"],
+                }
+            },
+        },
+    )
+    def test_retag_combined_operations(self) -> None:
+        """Test that remove, replace, and add can be combined in one rule."""
+        source_tags = {"trigger", "unwanted", "keep"}
+        result = retag_by_rules(source_tags)
+        # remove should remove "unwanted"
+        assert "unwanted" not in result
+        # replace should remove "trigger" and add "replaced"
+        assert "trigger" not in result
+        assert "replaced" in result
+        # add should add "extra"
+        assert "extra" in result
+        # unrelated tags should be preserved
+        assert "keep" in result
+
 
 class TestBucketUpdated:
     """Tests for check_bucket_updated function."""

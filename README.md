@@ -35,7 +35,12 @@ Those rules are currently supported:
 
 * Exlusive rules (`exclusive.${id}`) - some tags should not be combined (like, in my system I do have some main categories, like work and break - and I cannot be working and having a break at the same time - and I cannot be afk and not-afk at the same time, etc).  Takes one input `tags` with a list of tags that are mutually exclusive.
 
-* Tags (`tags.${id}`) - simple retagging rules, i.e. if running `timew start tea`, it may retag it into `break afk tea`.  This does not touch ActivityWatch at all, it's only about Timewarrior entries getting extra tags.  It eases the definition of the other rules as it's not needed to add all the tags to every rule.  Currently it can only add tags, but I'm intending to make it possible rewriting tags as well.  Takes `source_tags` and `add`, both lists of tags.
+* Tags (`tags.${id}`) - retagging rules for transforming tags. This does not touch ActivityWatch at all, it's only about Timewarrior entries getting extra tags. It eases the definition of the other rules as it's not needed to add all the tags to every rule. Takes `source_tags` (list of tags that trigger the rule) and one or more of these operations (applied in order):
+  * `remove` - Remove specific tags when source_tags match. Example: `remove = ["debug", "temp"]`
+  * `replace` - Replace matching source_tags with new tags. Example: `replace = ["new-project"]` removes matched source_tags and adds "new-project"
+  * `add` - Add additional tags (original behavior). Example: `add = ["4work", "programming"]`
+
+  All operations support `$source_tag` placeholder expansion to reference the matched tag. Example: `replace = ["$source_tag-archived"]` with source_tags `["v1"]` produces `"v1-archived"`.
 
 * Browser rules (`rules.browser.${id}`).  Currently it takes only take one input, `url_regexp`.
 
