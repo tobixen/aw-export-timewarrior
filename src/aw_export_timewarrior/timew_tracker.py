@@ -66,8 +66,7 @@ class TimewTracker(TimeTracker):
             self.capture_commands.append(cmd)
 
         if not self.hide_output:
-            # Import here to avoid circular dependency
-            from .main import user_output
+            from .output import user_output
 
             user_output(f"Running: {' '.join(cmd)}")
 
@@ -78,7 +77,7 @@ class TimewTracker(TimeTracker):
         )
 
         if show_undo_message and not self.hide_output:
-            from .main import user_output
+            from .output import user_output
 
             user_output(
                 f"Use timew undo if you don't agree! You have {self.grace_time} seconds to press ctrl^c",

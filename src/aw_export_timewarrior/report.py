@@ -10,10 +10,92 @@ Generates detailed reports showing ActivityWatch events with columns for:
 
 import csv
 import sys
+from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .main import Exporter
+if TYPE_CHECKING:
+    from .main import Exporter
+
+
+def show_unmatched_events_report(unmatched_events: list[dict], limit: int = 10) -> None:
+    """Display a report of events that didn't match any rules.
+
+    Args:
+        unmatched_events: List of event dictionaries that didn't match any rules
+        limit: Maximum number of output lines to show (default: 10)
+    """
+    if not unmatched_events:
+        print("\nNo unmatched events found - all events matched configuration rules.")
+        return
+
+    print("\n" + "=" * 80)
+    print("Events Not Matching Any Rules")
+    print("=" * 80)
+
+    # Calculate total unmatched time
+    total_unmatched_seconds = sum((e["duration"].total_seconds() for e in unmatched_events), 0)
+    print(
+        f"\nFound {len(unmatched_events)} unmatched events, {total_unmatched_seconds/60:.1f} min total:\n"
+    )
+
+    # Group by app and title for easier analysis
+    by_app: dict[str, list] = defaultdict(list)
+
+    for event in unmatched_events:
+        app = event["data"].get("app", "unknown")
+        by_app[app].append(event)
+
+    # Sort apps by total duration (descending)
+    app_durations = [
+        (app, sum(e["duration"].total_seconds() for e in events)) for app, events in by_app.items()
+    ]
+    app_durations.sort(key=lambda x: x[1], reverse=True)
+
+    lines_printed = 5  # Header + summary lines already printed
+    for app, app_total_seconds in app_durations:
+        if lines_printed >= limit:
+            remaining_apps = len(app_durations) - app_durations.index((app, app_total_seconds))
+            print(f"\n... and {remaining_apps} more apps (use --limit to show more)")
+            break
+
+        events = by_app[app]
+        print(f"\n{app} ({len(events)} events, {app_total_seconds/60:.1f} min total):")
+        lines_printed += 2  # App header + blank line
+
+        # Group by title and sum durations
+        title_durations: dict[str, float] = defaultdict(float)
+        title_count: dict[str, int] = defaultdict(int)
+        for event in events:
+            title = event["data"].get("title", "(no title)")
+            title_durations[title] += event["duration"].total_seconds()
+            title_count[title] += 1
+
+        # Sort titles by duration (descending) and show top titles
+        sorted_titles = sorted(title_durations.items(), key=lambda x: x[1], reverse=True)
+
+        # Calculate how many titles we can show
+        remaining_lines = limit - lines_printed
+        # Reserve 1 line for potential long tail summary, but show all titles if space allows
+        max_titles = max(0, remaining_lines - 1) if remaining_lines > 1 else 0
+
+        for title, duration_seconds in sorted_titles[:max_titles]:
+            count = title_count[title]
+            title_display = title[:60] + "..." if len(title) > 60 else title
+            print(f"  {duration_seconds/60:5.1f}min ({count:2d}x) - {title_display}")
+            lines_printed += 1
+
+        # Show "long tail" summary
+        if len(sorted_titles) > max_titles:
+            remaining_count = len(sorted_titles) - max_titles
+            remaining_time = sum(duration for _, duration in sorted_titles[max_titles:])
+            remaining_events = sum(title_count[title] for title, _ in sorted_titles[max_titles:])
+            print(
+                f"  {remaining_time/60:5.1f}min ({remaining_events:2d}x) - ... and {remaining_count} other titles"
+            )
+            lines_printed += 1
+
+    print("\n" + "=" * 80 + "\n")
 
 
 def truncate_string(s: str, max_length: int = 50) -> str:
@@ -32,7 +114,7 @@ def format_duration(duration: timedelta) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
-def extract_specialized_data(exporter: Exporter, window_event: dict) -> dict[str, Any]:
+def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[str, Any]:
     """Extract specialized watcher data (file path for editors, URL for browsers).
 
     Uses the exporter's existing get_corresponding_event() method which already
@@ -103,7 +185,7 @@ def extract_specialized_data(exporter: Exporter, window_event: dict) -> dict[str
 
 
 def collect_report_data(
-    exporter: Exporter, start_time: datetime, end_time: datetime
+    exporter: "Exporter", start_time: datetime, end_time: datetime
 ) -> list[dict[str, Any]]:
     """Collect activity data for the report.
 
@@ -329,7 +411,7 @@ def format_as_csv(
 
 
 def generate_activity_report(
-    exporter: Exporter,
+    exporter: "Exporter",
     all_columns: bool = False,
     format: str = "table",
     truncate: bool = True,

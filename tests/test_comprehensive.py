@@ -12,10 +12,9 @@ from aw_export_timewarrior.main import (
     check_bucket_updated,
     exclusive_overlapping,
     retag_by_rules,
-    ts2str,
-    ts2strtime,
 )
 from aw_export_timewarrior.state import AfkState
+from aw_export_timewarrior.utils import ts2str, ts2strtime
 
 
 def create_aw_event(timestamp, duration, data):
@@ -80,7 +79,7 @@ class TestTimestampFormatting:
     def test_ts2strtime_with_none(self) -> None:
         """Test ts2strtime with None input."""
         result = ts2strtime(None)
-        assert result == "XX:XX:XX:"
+        assert result == "XX:XX:XX"
 
 
 class TestExclusiveOverlapping:

@@ -2,7 +2,8 @@
 
 import logging
 
-from aw_export_timewarrior.main import Exporter, setup_logging
+from aw_export_timewarrior.main import Exporter
+from aw_export_timewarrior.output import setup_logging
 from tests.conftest import FixtureDataBuilder
 
 

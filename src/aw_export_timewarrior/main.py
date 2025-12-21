@@ -2,20 +2,18 @@ import json
 import logging
 import os
 import subprocess
-import sys
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import Enum, auto
 from time import sleep, time
 
-from termcolor import cprint
-
 from .aw_client import EventFetcher
 from .config import config
+from .output import user_output
 from .state import AfkState, StateManager
 from .tag_extractor import TagExtractor
 from .timew_tracker import TimewTracker
+from .utils import get_event_range, normalize_duration, normalize_timestamp, ts2strtime
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
@@ -58,172 +56,6 @@ class TagResult:
         return self.result == EventMatchResult.MATCHED
 
 
-class StructuredFormatter(logging.Formatter):
-    """
-    Formatter that outputs structured logs with all relevant context.
-    Can output in JSON format for analysis/export to OpenSearch.
-    """
-
-    def __init__(self, use_json: bool = False, run_mode: dict = None) -> None:
-        super().__init__()
-        self.use_json = use_json
-        self.run_mode = run_mode or {}
-
-    def format(self, record: logging.LogRecord) -> str:
-        # Build structured log data
-        log_data = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
-            "level": record.levelname,
-            "message": record.getMessage(),
-            "module": record.module,
-            "function": record.funcName,
-            "line": record.lineno,
-        }
-
-        # Add run mode information (for filtering in log analysis)
-        if self.run_mode:
-            log_data["run_mode"] = self.run_mode
-
-        # Add custom fields if present
-        for key in ["event_ts", "event_duration", "last_tick", "tags", "event_data"]:
-            if hasattr(record, key):
-                val = getattr(record, key)
-                # Convert datetime and timedelta to strings
-                if isinstance(val, datetime):
-                    log_data[key] = val.isoformat()
-                elif isinstance(val, timedelta):
-                    log_data[key] = f"{val.total_seconds():.1f}s"
-                elif isinstance(val, set):
-                    log_data[key] = list(val)
-                else:
-                    log_data[key] = str(val)
-
-        if self.use_json:
-            return json.dumps(log_data)
-        else:
-            # Human-readable format with colors
-            return self._format_human(log_data, record.levelno)
-
-    def _format_human(self, log_data: dict, level: int) -> str:
-        """Format log data in a human-readable way with optional colors."""
-        now = datetime.now().strftime("%H:%M:%S")
-        last_tick = log_data.get("last_tick", "XX:XX:XX")
-        event_ts = log_data.get("event_ts", "")
-
-        # Build timestamp prefix
-        ts_prefix = f"{now} / {last_tick} / {event_ts}" if event_ts else f"{now} / {last_tick}"
-
-        # Add duration if present
-        if "event_duration" in log_data:
-            ts_prefix += log_data["event_duration"]
-
-        # Build message with context
-        msg = log_data["message"]
-        if "tags" in log_data:
-            msg = f"{msg} (tags: {log_data['tags']})"
-        if "event_data" in log_data:
-            msg = f"{msg} (data: {log_data['event_data']})"
-
-        full_msg = f"{ts_prefix}: {msg}"
-
-        # No color formatting here - that's handled by the handler
-        return full_msg
-
-
-class ColoredConsoleHandler(logging.StreamHandler):
-    """
-    Console handler that adds colors based on log level.
-    Warnings are bold, errors/criticals are bold and red.
-    """
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            msg = self.format(record)
-            attrs = []
-            color = None
-
-            # Map log levels to visual attributes
-            if record.levelno > logging.ERROR:
-                attrs = ["bold", "blink"]
-                color = "red"
-            elif record.levelno > logging.WARNING:
-                attrs = ["bold"]
-                color = "red"
-            elif record.levelno > logging.INFO:
-                # User-facing output - keep it clean
-                attrs = ["bold"]
-                color = "red"
-            elif record.levelno == logging.INFO:
-                color = "yellow"
-            # DEBUG level gets no special formatting
-
-            if color or attrs:
-                cprint(msg, color=color, attrs=attrs, file=self.stream)
-            else:
-                self.stream.write(msg + self.terminator)
-            self.flush()
-        except Exception:
-            self.handleError(record)
-
-
-def setup_logging(
-    json_format: bool = False,
-    log_level: int = logging.DEBUG,
-    console_log_level: int = logging.ERROR,
-    log_file: str = None,
-    run_mode: dict = None,
-) -> None:
-    """
-    Set up the logging system.
-
-    Args:
-        json_format: If True, output logs in JSON format
-        level: Logging level (default: INFO)
-        log_file: Optional file path to write logs to. If None, logs to console.
-        run_mode: Optional dict with run mode info (dry_run, export_data, test_data, etc.) for filtering logs
-    """
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
-
-    # Clear any existing handlers
-    root_logger.handlers.clear()
-
-    # If logging to file, use file handler; otherwise use console
-    if log_file and log_level:
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(logging.DEBUG)  # Always log everything to file
-        file_handler.setFormatter(StructuredFormatter(use_json=json_format, run_mode=run_mode))
-        root_logger.addHandler(file_handler)
-    if console_log_level:
-        # Console handler with colors
-        console_handler = ColoredConsoleHandler(sys.stdout)
-        console_handler.setLevel(console_log_level)
-        console_handler.setFormatter(StructuredFormatter(run_mode=run_mode))
-        root_logger.addHandler(console_handler)
-
-
-# Initialize logging with defaults
-# This will be reconfigured by CLI with appropriate parameters
-# For direct imports/testing, use basic console logging
-setup_logging(log_file=None)  # Console logging by default until CLI configures it
-
-
-def user_output(msg: str, color: str = None, attrs: list = None) -> None:
-    """
-    Output message to the user (program output, not debug logging).
-    This is separate from logging and is for user-facing program output.
-
-    Args:
-        msg: Message to display to the user
-        color: Optional color (e.g., 'yellow', 'red', 'white')
-        attrs: Optional attributes (e.g., ['bold'], ['bold', 'blink'])
-    """
-    if color or attrs:
-        cprint(msg, color=color, attrs=attrs)
-    else:
-        print(msg)
-
-
 def get_tuning_param(config: dict, param_name: str, env_var: str, default: float) -> float:
     """Get a tuning parameter from config or environment variable.
 
@@ -259,16 +91,6 @@ def get_tuning_param(config: dict, param_name: str, env_var: str, default: float
 
 # Special tags that have specific meanings
 SPECIAL_TAGS = {"manual", "override", "not-afk"}
-
-
-def ts2str(ts, format="%FT%H:%M:%S"):
-    return ts.astimezone().strftime(format)
-
-
-def ts2strtime(ts):
-    if not ts:
-        return "XX:XX:XX:"
-    return ts2str(ts, "%H:%M:%S")
 
 
 def load_config(config_path):
@@ -613,82 +435,9 @@ class Exporter:
         Args:
             limit: Maximum number of output lines to show (default: 10)
         """
-        if not self.unmatched_events:
-            print("\nNo unmatched events found - all events matched configuration rules.")
-            return
+        from .report import show_unmatched_events_report as _show_report
 
-        print("\n" + "=" * 80)
-        print("Events Not Matching Any Rules")
-        print("=" * 80)
-
-        # Calculate total unmatched time
-        total_unmatched_seconds = sum(
-            (e["duration"].total_seconds() for e in self.unmatched_events), 0
-        )
-        print(
-            f"\nFound {len(self.unmatched_events)} unmatched events, {total_unmatched_seconds/60:.1f} min total:\n"
-        )
-
-        # Group by app and title for easier analysis
-        by_app = defaultdict(list)
-
-        for event in self.unmatched_events:
-            app = event["data"].get("app", "unknown")
-            by_app[app].append(event)
-
-        # Sort apps by total duration (descending)
-        app_durations = [
-            (app, sum(e["duration"].total_seconds() for e in events))
-            for app, events in by_app.items()
-        ]
-        app_durations.sort(key=lambda x: x[1], reverse=True)
-
-        lines_printed = 5  # Header + summary lines already printed
-        for app, app_total_seconds in app_durations:
-            if lines_printed >= limit:
-                remaining_apps = len(app_durations) - app_durations.index((app, app_total_seconds))
-                print(f"\n... and {remaining_apps} more apps (use --limit to show more)")
-                break
-
-            events = by_app[app]
-            print(f"\n{app} ({len(events)} events, {app_total_seconds/60:.1f} min total):")
-            lines_printed += 2  # App header + blank line
-
-            # Group by title and sum durations
-            title_durations = defaultdict(float)
-            title_count = defaultdict(int)
-            for event in events:
-                title = event["data"].get("title", "(no title)")
-                title_durations[title] += event["duration"].total_seconds()
-                title_count[title] += 1
-
-            # Sort titles by duration (descending) and show top titles
-            sorted_titles = sorted(title_durations.items(), key=lambda x: x[1], reverse=True)
-
-            # Calculate how many titles we can show
-            remaining_lines = limit - lines_printed
-            # Reserve 1 line for potential long tail summary, but show all titles if space allows
-            max_titles = max(0, remaining_lines - 1) if remaining_lines > 1 else 0
-
-            for title, duration_seconds in sorted_titles[:max_titles]:
-                count = title_count[title]
-                title_display = title[:60] + "..." if len(title) > 60 else title
-                print(f"  {duration_seconds/60:5.1f}min ({count:2d}x) - {title_display}")
-                lines_printed += 1
-
-            # Show "long tail" summary
-            if len(sorted_titles) > max_titles:
-                remaining_count = len(sorted_titles) - max_titles
-                remaining_time = sum(duration for _, duration in sorted_titles[max_titles:])
-                remaining_events = sum(
-                    title_count[title] for title, _ in sorted_titles[max_titles:]
-                )
-                print(
-                    f"  {remaining_time/60:5.1f}min ({remaining_events:2d}x) - ... and {remaining_count} other titles"
-                )
-                lines_printed += 1
-
-        print("\n" + "=" * 80 + "\n")
+        _show_report(self.unmatched_events, limit=limit)
 
     def set_known_tick_stats(
         self,
@@ -841,8 +590,8 @@ class Exporter:
                 return
             if set(tags).issubset(self.timew_info["tags"]):
                 return
-        tags = retag_by_rules(tags, self.config)
-        assert not exclusive_overlapping(tags, self.config)
+        tags = self.tag_extractor.apply_retag_rules(tags)
+        assert not self.tag_extractor.check_exclusive_groups(tags)
 
         # Check if tags are exactly the same as current tags (after rule application)
         # This prevents redundant timew start commands when tags haven't changed
@@ -1231,7 +980,7 @@ class Exporter:
                     self.state.stats.known_events_time += new_duration
 
                 # Apply retagging rules
-                tags = retag_by_rules(tag_result.tags, self.config)
+                tags = self.tag_extractor.apply_retag_rules(tag_result.tags)
 
                 # Accumulate tags from the incremental duration
                 for tag in tags:
@@ -1264,7 +1013,7 @@ class Exporter:
                     self.state.stats.known_events_time += current_duration
 
                 # Apply retagging rules
-                tags = retag_by_rules(tag_result.tags, self.config)
+                tags = self.tag_extractor.apply_retag_rules(tag_result.tags)
 
                 for tag in tags:
                     self.state.stats.tags_accumulated_time[tag] += current_duration
@@ -1384,14 +1133,8 @@ class Exporter:
         # Merge resolved AFK events with lid events
         merged = resolved_afk_events + converted_lid_events
 
-        # Sort by timestamp (handle both string and datetime types)
-        def get_sort_key(event: dict) -> datetime:
-            ts = event["timestamp"]
-            if isinstance(ts, datetime):
-                return ts
-            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-
-        merged.sort(key=get_sort_key)
+        # Sort by timestamp
+        merged.sort(key=lambda e: normalize_timestamp(e["timestamp"]))
 
         return merged
 
@@ -1412,22 +1155,6 @@ class Exporter:
         """
         if not priority_events:
             return afk_events
-
-        def parse_timestamp(ts: str | datetime) -> datetime:
-            """Parse ISO format timestamp."""
-            if isinstance(ts, datetime):
-                return ts
-            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-
-        def get_event_range(event: dict) -> tuple[datetime, datetime]:
-            """Get start and end time of an event."""
-            start = parse_timestamp(event["timestamp"])
-            duration = event["duration"]
-            if isinstance(duration, timedelta):
-                end = start + duration
-            else:
-                end = start + timedelta(seconds=duration)
-            return start, end
 
         def events_overlap(
             e1_start: datetime, e1_end: datetime, e2_start: datetime, e2_end: datetime
@@ -1563,14 +1290,8 @@ class Exporter:
             + merged_afk_events
         )
 
-        # Sort by timestamp (handle both string and datetime types)
-        def get_timestamp_for_sort(event: dict) -> datetime:
-            ts = event["timestamp"]
-            if isinstance(ts, datetime):
-                return ts
-            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-
-        afk_window_events.sort(key=get_timestamp_for_sort)
+        # Sort by timestamp
+        afk_window_events.sort(key=lambda e: normalize_timestamp(e["timestamp"]))
 
         # Split window events that overlap with AFK periods
         # This ensures window events are properly interrupted by AFK
@@ -1580,20 +1301,8 @@ class Exporter:
         # This can happen when we fetch an event that overlaps with last_tick, split it,
         # and end up with segments that we've already processed
         if self.state.last_tick:
-
-            def get_event_end_time(event: dict) -> datetime:
-                ts = event["timestamp"]
-                dur = event["duration"]
-                if isinstance(ts, datetime):
-                    start = ts
-                else:
-                    start = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                if isinstance(dur, timedelta):
-                    return start + dur
-                return start + timedelta(seconds=dur)
-
             afk_window_events = [
-                e for e in afk_window_events if get_event_end_time(e) > self.state.last_tick
+                e for e in afk_window_events if get_event_range(e)[1] > self.state.last_tick
             ]
 
         if len(afk_window_events) == 0:
@@ -1628,18 +1337,6 @@ class Exporter:
         """
         if not afk_events:
             return events
-
-        def normalize_timestamp(ts: str | datetime) -> datetime:
-            """Normalize timestamp to datetime object."""
-            if isinstance(ts, datetime):
-                return ts
-            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-
-        def normalize_duration(dur: float | timedelta) -> timedelta:
-            """Normalize duration to timedelta object."""
-            if isinstance(dur, timedelta):
-                return dur
-            return timedelta(seconds=dur)
 
         # Separate window and AFK events
         window_events = [e for e in events if "status" not in e["data"]]
@@ -1784,18 +1481,17 @@ class Exporter:
         tags = set()
 
         # TODO: This looks like a bug - we reset tags, and then assert that they are not overlapping?
-        assert not exclusive_overlapping(tags, self.config)
+        assert not self.tag_extractor.check_exclusive_groups(tags)
 
         # Find minimum threshold that avoids exclusive tag conflicts
         min_tag_recording_interval = self.min_tag_recording_interval
-        while exclusive_overlapping(
+        while self.tag_extractor.check_exclusive_groups(
             {
                 tag
                 for tag in self.state.stats.tags_accumulated_time
                 if self.state.stats.tags_accumulated_time[tag].total_seconds()
                 > min_tag_recording_interval
-            },
-            self.config,
+            }
         ):
             min_tag_recording_interval += 1
 
@@ -1879,7 +1575,7 @@ class Exporter:
             event: The event being processed
         """
         if tag_result:
-            tags = retag_by_rules(tag_result.tags, self.config)
+            tags = self.tag_extractor.apply_retag_rules(tag_result.tags)
             for tag in tags:
                 self.state.stats.tags_accumulated_time[tag] += event["duration"]
 
@@ -1890,11 +1586,6 @@ class Exporter:
         ## The counter is nulled out when some non-skipped event comes in.
         ## Used only for debug logging.
         num_skipped_events = 0
-
-        ## Unknown events are events lasting for some time, but without any
-        ## rules identifying any tags.
-        ## Nulled out only at the beginning of the function
-        num_unknown_events = 0
 
         total_time_skipped_events = timedelta(0)
 
@@ -1977,10 +1668,6 @@ class Exporter:
                     else max(self.state.last_tick, event_end)
                 )
                 continue
-
-            # Track unknown events count
-            if tag_result.result == EventMatchResult.NO_MATCH:
-                num_unknown_events += 1
 
             ## Ref README, if self.max_mixed_interval is met, ignore accumulated minor activity
             ## (the mixed time will be attributed to the previous work task)
@@ -2315,17 +2002,3 @@ def timew_retag(timew_info, dry_run=False, capture_to=None):
                 assert set(timew_info["tags"]) == new_tags
         return timew_info
     return timew_info
-
-
-def main():
-    exporter = Exporter()
-    while True:
-        should_continue = exporter.tick()
-        if not should_continue:
-            break
-        # Always sleep briefly to prevent busy-waiting and reduce CPU usage
-        sleep(0.1)  # Small delay to prevent 100% CPU when processing events
-
-
-if __name__ == "__main__":
-    main()

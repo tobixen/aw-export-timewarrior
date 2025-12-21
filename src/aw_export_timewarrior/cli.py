@@ -14,7 +14,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .export import load_test_data
-from .main import Exporter, load_config, setup_logging
+from .main import Exporter, load_config
+from .output import setup_logging
 from .utils import parse_datetime
 
 
