@@ -269,6 +269,49 @@ class FixtureDataBuilder:
 
         return self
 
+    def add_split_ask_away_events(
+        self,
+        activities: list[tuple[str, int | timedelta]],
+        timestamp: datetime | None = None,
+    ) -> "FixtureDataBuilder":
+        """
+        Add multiple ask-away events from split mode with split metadata.
+
+        Args:
+            activities: List of (message, duration) tuples for each activity
+            timestamp: Start timestamp for first activity (uses current_time if not specified)
+
+        Returns:
+            Self for chaining
+        """
+        event_time = timestamp or self.current_time
+        split_id = str(event_time.timestamp())
+        split_count = len(activities)
+
+        current_start = event_time
+        for i, (message, duration) in enumerate(activities):
+            if isinstance(duration, int):
+                duration = timedelta(seconds=duration)
+
+            event = {
+                "id": len(self.events["aw-watcher-ask-away_test"]) + 1,
+                "timestamp": current_start.isoformat(),
+                "duration": duration.total_seconds(),
+                "data": {
+                    "message": message,
+                    "split": True,
+                    "split_count": split_count,
+                    "split_index": i,
+                    "split_id": split_id,
+                },
+            }
+
+            self.events["aw-watcher-ask-away_test"].append(event)
+            current_start += duration
+
+        self.current_time = current_start
+        return self
+
     def add_suspend_event(
         self, suspend_state: str, duration: int | timedelta, timestamp: datetime | None = None
     ) -> "FixtureDataBuilder":
