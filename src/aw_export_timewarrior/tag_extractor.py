@@ -66,6 +66,7 @@ class TagExtractor:
         # Try each extraction method in order
         for method in [
             self.get_afk_tags,
+            self.get_tmux_tags,
             self.get_app_tags,
             self.get_browser_tags,
             self.get_editor_tags,
@@ -89,6 +90,102 @@ class TagExtractor:
             return {event["data"]["status"]}
         else:
             return False
+
+    def get_tmux_tags(self, window_event: dict) -> set[str] | list | bool:
+        """Extract tags from tmux events when in a terminal window.
+
+        Args:
+            window_event: The window event
+
+        Returns:
+            Set of tags, empty list if no match, or False if wrong app type
+        """
+        # Check if this is a terminal window
+        # Common terminal apps that might run tmux
+        terminal_apps = self.terminal_apps or {
+            "foot",
+            "kitty",
+            "alacritty",
+            "terminator",
+            "gnome-terminal",
+            "konsole",
+            "xterm",
+            "urxvt",
+            "st",
+        }
+
+        app = window_event["data"].get("app", "").lower()
+        if app not in terminal_apps:
+            return False
+
+        # Get tmux bucket - there's only one tmux bucket (not per-app like browser/editor)
+        tmux_bucket = self.event_fetcher.get_tmux_bucket()
+        if not tmux_bucket:
+            return False
+
+        # Get corresponding tmux event (handles picking the longest if multiple)
+        tmux_event = self.event_fetcher.get_corresponding_event(
+            window_event, tmux_bucket, ignorable=True
+        )
+
+        if not tmux_event:
+            return []  # Terminal window but no tmux activity
+
+        # Extract tmux data
+        session_name = tmux_event["data"].get("session_name", "")
+        window_name = tmux_event["data"].get("window_name", "")
+        pane_title = tmux_event["data"].get("pane_title", "")
+        pane_command = tmux_event["data"].get("pane_current_command", "")
+        pane_path = tmux_event["data"].get("pane_current_path", "")
+
+        # Check against configured tmux rules
+        for rule_name in self.config.get("rules", {}).get("tmux", {}):
+            rule = self.config["rules"]["tmux"][rule_name]
+
+            # Check if session matches (if specified)
+            if "session" in rule and not re.search(rule["session"], session_name):
+                continue
+
+            # Check if window matches (if specified)
+            if "window" in rule and not re.search(rule["window"], window_name):
+                continue
+
+            # Check if command matches (if specified)
+            command_match = None
+            if "command" in rule:
+                command_match = re.search(rule["command"], pane_command)
+                if not command_match:
+                    continue
+
+            # Check if path matches (if specified)
+            path_match = None
+            if "path" in rule:
+                path_match = re.search(rule["path"], pane_path)
+                if not path_match:
+                    continue
+
+            # Build tags with variable substitution
+            substitutions = {
+                "$session": session_name,
+                "$window": window_name,
+                "$title": pane_title,
+                "$command": pane_command,
+                "$path": pane_path,
+            }
+
+            # Add capture groups from command or path matches
+            # Prioritize command match over path match for capture groups
+            active_match = command_match or path_match
+            substitutions.update(self._extract_capture_groups(active_match))
+
+            return self._build_tags(rule["timew_tags"], substitutions)
+
+        # No rules matched - use default tag extraction
+        # Create a simple tag from the command name
+        if pane_command:
+            return {f"tmux:{pane_command}"}
+
+        return []  # Terminal with tmux but no matching rules
 
     def get_app_tags(self, event: dict) -> set[str] | bool:
         """Extract tags from app/title matching.
@@ -299,6 +396,20 @@ class TagExtractor:
             rule=rule, text=sub_event["data"].get("url", ""), rule_key=rule_key
         )
 
+    def _extract_capture_groups(self, match: re.Match | None) -> dict[str, str]:
+        """Extract capture groups from a regex match into substitution dict.
+
+        Args:
+            match: The regex match object
+
+        Returns:
+            Dict with $1, $2, $3, etc. keys for each capture group
+        """
+        if not match or not match.groups():
+            return {}
+
+        return {f"${i}": group for i, group in enumerate(match.groups(), start=1)}
+
     def _match_regexp(self, rule: dict, text: str, rule_key: str) -> set[str] | None:
         """Generic regexp matcher with group substitution.
 
@@ -318,9 +429,7 @@ class TagExtractor:
             return None
 
         # Build substitutions from match groups
-        substitutions = {}
-        for i, group in enumerate(match.groups(), start=1):
-            substitutions[f"${i}"] = group
+        substitutions = self._extract_capture_groups(match)
 
         return self._build_tags(rule["timew_tags"], substitutions)
 

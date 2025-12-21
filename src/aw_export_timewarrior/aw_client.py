@@ -300,6 +300,16 @@ class EventFetcher:
             return self.bucket_by_client["aw-watcher-ask-away"][0]
         return None
 
+    def get_tmux_bucket(self) -> str | None:
+        """Get tmux watcher bucket ID.
+
+        Returns:
+            Bucket ID for aw-watcher-tmux, or None if not available
+        """
+        if self.has_bucket_client("aw-watcher-tmux"):
+            return self.bucket_by_client["aw-watcher-tmux"][0]
+        return None
+
     def has_bucket_client(self, client_type: str) -> bool:
         """Check if a bucket client type exists.
 

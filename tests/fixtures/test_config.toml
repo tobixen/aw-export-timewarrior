@@ -40,5 +40,20 @@ timew_tags = ["coding", "browsing"]
 app_names = ["foot"]
 timew_tags = ["terminal", "4work"]
 
+# Tmux rules - editing code
+[rules.tmux.editing]
+command = "(vim|emacs|nano)"
+timew_tags = ["coding", "editing", "$command"]
+
+# Tmux rules - work session
+[rules.tmux.work-session]
+session = "work"
+timew_tags = ["4work", "tmux", "$session"]
+
+# Tmux rules - project-specific with multiple capture groups
+[rules.tmux.activitywatch]
+path = "/home/[^/]+/([^/]+)/([^/]+)"
+timew_tags = ["coding", "org:$1", "project:$2", "4work"]
+
 [exclusive.main_category]
 tags = ["4work", "4break", "4chores"]
