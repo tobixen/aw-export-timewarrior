@@ -17,21 +17,21 @@ Dry-run mode shows you what the exporter would do without actually running timew
 ### Basic Usage
 
 ```bash
-# See what would be tracked with your current config
-aw-export-timewarrior --dry-run --once
+# See what would be tracked with your current config (process once)
+aw-export-timewarrior sync --dry-run --once
 
 # Continuous dry-run (Ctrl+C to stop)
-aw-export-timewarrior --dry-run
+aw-export-timewarrior sync --dry-run
 ```
 
 ### With Test Data
 
 ```bash
 # Test a specific scenario
-aw-export-timewarrior --dry-run --test-data tests/fixtures/simple_work_session.json --once
+aw-export-timewarrior sync --dry-run --test-data tests/fixtures/simple_work_session.json --once
 
 # Test with a different config
-aw-export-timewarrior --dry-run --config my_test_config.toml --test-data tests/fixtures/afk_transition.json --once
+aw-export-timewarrior sync --dry-run --config my_test_config.toml --test-data tests/fixtures/afk_transition.json --once
 ```
 
 ### Output Example
@@ -52,43 +52,45 @@ Export real ActivityWatch data for analysis or creating test fixtures.
 
 ```bash
 # Export data for a time range
-aw-export-timewarrior --export-data my_data.json \
-    --start "2025-01-01 09:00" \
-    --end "2025-01-01 17:00"
+aw-export-timewarrior export \
+    --from "2025-01-01 09:00" \
+    --to "2025-01-01 17:00" \
+    -o my_data.json
 ```
 
 ### Date/Time Formats Supported
 
 ```bash
 # ISO format
---start "2025-01-01T09:00:00Z"
+--from "2025-01-01T09:00:00Z"
 
 # Simple format
---start "2025-01-01 09:00"
+--from "2025-01-01 09:00"
 
 # Relative (requires dateutil)
---start "2 hours ago"
---start "yesterday 9am"
+--from "2 hours ago"
+--from "yesterday 9am"
 ```
 
 ### Anonymize Sensitive Data
 
 ```bash
 # Replace URLs, titles, and file paths with placeholders
-aw-export-timewarrior --export-data anon_data.json \
-    --start "today 9am" \
-    --end "now" \
-    --anonymize
+aw-export-timewarrior export \
+    --from "today 9am" \
+    --to "now" \
+    --anonymize \
+    -o anon_data.json
 ```
 
 ### Export Formats
 
 ```bash
 # JSON (default)
-aw-export-timewarrior --export-data data.json --start "..." --end "..."
+aw-export-timewarrior export --from "..." --to "..." -o data.json
 
 # YAML (requires PyYAML)
-aw-export-timewarrior --export-data data.yaml --start "..." --end "..."
+aw-export-timewarrior export --from "..." --to "..." -o data.yaml
 ```
 
 ## Test Fixtures
@@ -99,10 +101,10 @@ Test fixtures are JSON/YAML files containing ActivityWatch data.
 
 ```bash
 # Test how your config handles a specific scenario
-aw-export-timewarrior --dry-run --test-data tests/fixtures/simple_work_session.json --once
+aw-export-timewarrior sync --dry-run --test-data tests/fixtures/simple_work_session.json --once
 
 # See verbose reasoning
-aw-export-timewarrior --dry-run --test-data tests/fixtures/afk_transition.json --verbose --once
+aw-export-timewarrior sync --dry-run --test-data tests/fixtures/afk_transition.json --verbose --once
 ```
 
 ### Creating Fixtures
@@ -111,7 +113,7 @@ aw-export-timewarrior --dry-run --test-data tests/fixtures/afk_transition.json -
 
 1. Export real data:
    ```bash
-   aw-export-timewarrior --export-data raw.json --start "..." --end "..."
+   aw-export-timewarrior export --from "..." --to "..." -o raw.json
    ```
 
 2. Edit the file:
@@ -185,55 +187,75 @@ def test_with_fixture():
 
 ## CLI Reference
 
-### Main Command Options
+### Subcommands
 
 ```
-aw-export-timewarrior [OPTIONS]
+aw-export-timewarrior <subcommand> [OPTIONS]
 
-Operational Modes:
-  --dry-run                 Show what would be done without modifying timewarrior
-  --validate-config         Validate configuration and exit
-  --export-data FILE        Export ActivityWatch data to file
+Subcommands:
+  sync        Synchronize ActivityWatch to TimeWarrior (default)
+  diff        Compare TimeWarrior with ActivityWatch and optionally fix
+  analyze     Analyze events and show unmatched activities
+  export      Export ActivityWatch data to file
+  validate    Validate configuration file
+```
 
-Data Source:
-  --test-data FILE          Use test data from file instead of ActivityWatch
+### Common Options
 
-Configuration:
-  --config FILE             Use custom configuration file
+```
+--config FILE             Use custom configuration file
+--verbose, -v             Show detailed reasoning and decisions
+```
 
-Export Options (with --export-data):
-  --start DATETIME          Start time for export
-  --end DATETIME            End time for export
-  --anonymize               Replace sensitive data with placeholders
+### Sync Options
 
-Output Options:
-  --verbose, -v             Show detailed reasoning and decisions
-  --diff                    Show diffs in dry-run mode
+```
+aw-export-timewarrior sync [OPTIONS]
 
-Run Mode:
-  --once                    Process once and exit (default: continuous)
+--dry-run                 Show what would be done without modifying timewarrior
+--once                    Process once and exit (default: continuous)
+--test-data FILE          Use test data from file instead of ActivityWatch
+--from/--to DATETIME      Time range to process
+```
+
+### Export Options
+
+```
+aw-export-timewarrior export [OPTIONS]
+
+--from DATETIME           Start time for export
+--to DATETIME             End time for export
+-o/--output FILE          Output file path (required)
+--anonymize               Replace sensitive data with placeholders
 ```
 
 ### Examples
 
 ```bash
-# Normal operation
+# Normal operation (continuous sync)
 aw-export-timewarrior
+aw-export-timewarrior sync
 
 # Dry run with current live data
-aw-export-timewarrior --dry-run --once
+aw-export-timewarrior sync --dry-run --once
 
 # Test a config change
-aw-export-timewarrior --dry-run --config new_config.toml --once
+aw-export-timewarrior sync --dry-run --config new_config.toml --once
 
 # Test with recorded data
-aw-export-timewarrior --dry-run --test-data yesterday.json --once
+aw-export-timewarrior sync --dry-run --test-data yesterday.json --once
 
 # Export data for debugging
-aw-export-timewarrior --export-data debug.json --start "1 hour ago" --end "now"
+aw-export-timewarrior export --from "1 hour ago" --to "now" -o debug.json
 
 # Validate configuration
-aw-export-timewarrior --validate-config
+aw-export-timewarrior validate
+
+# Compare with TimeWarrior
+aw-export-timewarrior diff --from yesterday
+
+# Analyze unmatched events
+aw-export-timewarrior analyze --from yesterday
 ```
 
 ## Common Workflows
@@ -243,22 +265,22 @@ aw-export-timewarrior --validate-config
 1. Create or modify your config
 2. Test with existing fixture:
    ```bash
-   aw-export-timewarrior --dry-run --config my_config.toml --test-data tests/fixtures/simple_work_session.json --once
+   aw-export-timewarrior sync --dry-run --config my_config.toml --test-data tests/fixtures/simple_work_session.json --once
    ```
 3. If it looks good, test with real data:
    ```bash
-   aw-export-timewarrior --dry-run --config my_config.toml --once
+   aw-export-timewarrior sync --dry-run --config my_config.toml --once
    ```
 4. When confident, enable for real:
    ```bash
-   aw-export-timewarrior --config my_config.toml
+   aw-export-timewarrior sync --config my_config.toml
    ```
 
 ### Debugging a Tracking Issue
 
 1. Export the problematic time period:
    ```bash
-   aw-export-timewarrior --export-data issue.json --start "when it failed" --end "now"
+   aw-export-timewarrior export --from "when it failed" --to "now" -o issue.json
    ```
 
 2. Examine the data:
@@ -270,14 +292,14 @@ aw-export-timewarrior --validate-config
 
 4. Test fixes with the fixture:
    ```bash
-   aw-export-timewarrior --dry-run --test-data issue_minimal.json --verbose --once
+   aw-export-timewarrior sync --dry-run --test-data issue_minimal.json --verbose --once
    ```
 
 ### Creating Regression Tests
 
 1. Export data from when bug occurred:
    ```bash
-   aw-export-timewarrior --export-data regression_case.json --start "..." --end "..."
+   aw-export-timewarrior export --from "..." --to "..." -o regression_case.json
    ```
 
 2. Simplify to minimal reproducer

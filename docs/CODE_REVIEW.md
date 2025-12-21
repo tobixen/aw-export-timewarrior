@@ -1,8 +1,8 @@
 # Code Review: aw-export-timewarrior
 
-**Review Date:** 2025-12-18
+**Review Date:** 2025-12-18 (updated 2025-12-21)
 **Reviewer:** Claude (AI Code Review)
-**Commit Range:** Recent changes including lid event integration (commits up to 586f53f)
+**Commit Range:** Recent changes including lid event integration and main.py refactoring
 
 ## Executive Summary
 
@@ -14,39 +14,21 @@ The aw-export-timewarrior project is a sophisticated time tracking bridge betwee
 
 ## Critical Issues 🔴
 
-### 1. Unused Variable in `_resolve_event_conflicts`
+### 1. ~~Unused Variable in `_resolve_event_conflicts`~~ ✅ FIXED
 
-**Location:** `src/aw_export_timewarrior/main.py:1445`
+Fixed in commit b220c65 (2025-12-21).
 
-```python
-def _resolve_event_conflicts(self, afk_events: list, priority_events: list) -> list:
-    for afk_event in afk_events:
-        afk_start, afk_end = get_event_range(afk_event)
-        event_kept = True  # ⚠️ Assigned but never used
-        trimmed_segments = [(afk_start, afk_end)]
-```
+### 2. ~~Main.py is Excessively Large~~ ✅ IMPROVED
 
-**Impact:** Dead code that suggests incomplete implementation or debugging leftover.
+**Update (2025-12-21):** Reduced from 2331 to 2004 lines (-14%) by:
+- Moving logging infrastructure to `output.py`
+- Moving utility functions (`ts2str`, `ts2strtime`, `normalize_timestamp`, etc.) to `utils.py`
+- Moving `show_unmatched_events_report()` to `report.py`
+- Removing dead code (`num_unknown_events`, unused `main()`)
 
-**Recommendation:** Remove the unused variable. This was likely intended for debugging or a feature that was refactored away.
-
-### 2. Main.py is Excessively Large (97KB, 2200+ lines)
-
-**Location:** `src/aw_export_timewarrior/main.py`
-
-**Issue:** The main module violates the Single Responsibility Principle and makes the codebase difficult to maintain, test, and understand.
-
-**Impact:**
-- High cognitive load for new contributors
-- Difficult to test individual components in isolation
-- Risk of merge conflicts in team development
-- Poor code organization obscures business logic
-
-**Recommendation:** Continue the refactoring efforts documented in `docs/REFACTORING_PRIORITIES.md`. Prioritize:
-1. Extract the event processing pipeline into a separate module
-2. Move utility functions (like `ts2str`, `ts2strtime`) to `utils.py`
-3. Create an `events.py` module for event-related classes and functions
-4. Move backward compatibility functions (`retag_by_rules`, `exclusive_overlapping`) to a dedicated `compat.py` module
+Further reduction could be achieved by:
+1. Extracting event processing pipeline
+2. Moving backward compatibility functions to a dedicated module
 
 ### 3. Potential Infinite Recursion in Tag Rule Application
 
@@ -115,15 +97,11 @@ assert not exclusive_overlapping(tags, self.config)
 
 **Locations:** Multiple functions throughout the codebase
 
-Per the user's `.claude/CLAUDE.md` instructions, all functions should have return type annotations, including test functions. Several functions are missing these:
+Per the user's `.claude/CLAUDE.md` instructions, all functions should have return type annotations, including test functions. Several functions are missing these.
 
-**Examples:**
-- `cli.py:401` - `configure_logging(args: argparse.Namespace, subcommand: str)` → missing `-> None`
-- `cli.py:446` - `validate_sync_args(args: argparse.Namespace)` → has return type
-- `main.py:263` - `ts2str(ts, format="%FT%H:%M:%S")` → missing `-> str`
-- `main.py:267` - `ts2strtime(ts)` → missing `-> str`
+**Update (2025-12-21):** `ts2str` and `ts2strtime` now have proper type annotations in `utils.py`.
 
-**Recommendation:** Add return type annotations to all functions. This improves IDE support, catches type errors early, and serves as inline documentation.
+**Recommendation:** Add return type annotations to remaining functions. This improves IDE support, catches type errors early, and serves as inline documentation.
 
 ---
 
@@ -142,16 +120,10 @@ Per the user's `.claude/CLAUDE.md` instructions, all functions should have retur
 - Configurable via `enable_lid_events` and `min_lid_duration`
 - Proper handling of edge cases (boot gaps, short cycles)
 
-**Minor Issue:** The nested helper functions in `_resolve_event_conflicts` could be extracted to module level for reusability:
-```python
-def parse_event_timestamp(ts: str | datetime) -> datetime:
-    """Parse ISO format timestamp or pass through datetime."""
-    # ... implementation ...
-
-def get_event_time_range(event: dict) -> tuple[datetime, datetime]:
-    """Get start and end time of an event."""
-    # ... implementation ...
-```
+**Update (2025-12-21):** The nested helper functions have been extracted to `utils.py`:
+- `normalize_timestamp()` - Parse ISO format timestamp or pass through datetime
+- `normalize_duration()` - Convert float seconds or timedelta to timedelta
+- `get_event_range()` - Get start and end time of an event
 
 ### 7. State Management Refactoring - Good Progress ✅
 
@@ -425,7 +397,7 @@ def test_full_day_workflow():
 - ✅ Comprehensive CLI with subcommands
 
 ### Areas for Improvement
-- ⚠️ Module size (main.py: 97KB, 2200+ lines)
+- ⚠️ Module size (main.py: ~2000 lines - improved from 2300+)
 - ⚠️ Function complexity (some functions >50 lines)
 - ⚠️ Global state in config module
 - ⚠️ Incomplete type annotations
@@ -505,13 +477,14 @@ def validate_config_structure(config: dict) -> None:
 
 ## Refactoring Priorities (Recommended Order)
 
-Based on the existing `docs/REFACTORING_PRIORITIES.md` and this review:
+**Update (2025-12-21):** Several high-priority items have been addressed.
 
 1. **High Priority (Next Sprint)**
-   - Fix critical issues (#1-5)
+   - ✅ ~~Remove unused `event_kept` variable~~ - Fixed
+   - ✅ ~~Extract utility functions to utils.py~~ - Done
    - Add recursion safety to `apply_retag_rules`
-   - Remove unused `event_kept` variable
    - Add missing return type annotations
+   - Fix confusing empty tags assertion
 
 2. **Medium Priority (Next Month)**
    - Extract event processing pipeline from main.py
@@ -569,8 +542,14 @@ The `TimeTracker` ABC with `DryRunTracker` and `TimewTracker` implementations is
 
 The aw-export-timewarrior project demonstrates solid engineering practices with clear evidence of thoughtful refactoring and continuous improvement. The lid event integration is well-implemented, and the architectural direction (extracting concerns from main.py) is sound.
 
+**Update (2025-12-21):** Several items have been addressed:
+- ✅ Unused variable removed
+- ✅ Utility functions extracted to `utils.py`
+- ✅ Logging infrastructure extracted to `output.py`
+- ✅ main.py reduced from 2331 to 2004 lines
+
 ### Critical Action Items (Do First)
-1. Fix the unused `event_kept` variable
+1. ~~Fix the unused `event_kept` variable~~ ✅
 2. Add recursion safety to tag rule application
 3. Add return type annotations per user instructions
 4. Document or fix the empty tags assertion
@@ -587,4 +566,4 @@ The aw-export-timewarrior project demonstrates solid engineering practices with 
 11. Type hint coverage with mypy strict mode
 12. Terminal width auto-detection for output
 
-**Overall Rating:** 8/10 - A well-architected project with clear roadmap for improvement. The recent refactoring work shows strong software engineering practices. Main concerns are module size and incomplete refactoring, both of which are acknowledged in project documentation.
+**Overall Rating:** 8.5/10 - A well-architected project with clear roadmap for improvement. The recent refactoring work shows strong software engineering practices. Main concerns are module size (improved) and incomplete refactoring, both of which are acknowledged in project documentation.

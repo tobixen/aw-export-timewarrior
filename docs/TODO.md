@@ -1,42 +1,65 @@
-# TODO-tasks for the exporter
+# TODO - aw-export-timewarrior
 
-## Refactoring Priorities
+## High Priority
 
-* Look through the REFACTORING_PRIORITES.md again.  So much work has been done now that it's probably about time to write a new document from scratch.
+### Recursion safety in tag rules
+Add recursion depth limit to `apply_retag_rules()` to prevent infinite loops with circular tag rules.
 
-## More watchers
+### Return type annotations
+Add missing return type annotations throughout codebase per coding standards.
 
-### tmux watcher
+### Empty tags assertion
+Fix or document the confusing assertion on empty tags in `_should_export_accumulator()`.
 
-Claude claims that this is ...
+## Medium Priority
 
-✅ **COMPLETED** - https://github.com/akohlbecker/aw-watcher-tmux
+### Further main.py reduction
+Continue extracting modules from main.py:
+- Event processing pipeline
+- Backward compatibility functions to dedicated module
 
-... however, it hasn't been tested!
+### Configuration validation
+Add validation for configuration values (currently no validation of loaded TOML).
 
-Support has been added:
+### Error handling consistency
+Improve error handling:
+- Add logging for caught exceptions
+- Use specific exception types
+- Document expected vs. exceptional failure cases
+
+## Low Priority
+
+### Performance optimizations
+- Event caching in `get_corresponding_event`
+- Batch processing for historical sync
+
+### Documentation
+- Architecture diagrams
+- Performance tuning guide
+
+## Future Directions
+
+### More watchers
+
+#### tmux watcher
+Support added for [aw-watcher-tmux](https://github.com/akohlbecker/aw-watcher-tmux):
 - Automatic detection of tmux bucket
 - Tag extraction with configurable rules (`rules.tmux.*`)
-- Supports matching on session, window, command, and path
-- Variable substitution: `$session`, `$window`, `$command`, `$path`, `$1`, `$2`, `$3`, etc.
-- Multiple regex capture groups supported (command takes priority over path)
+- Variable substitution: `$session`, `$window`, `$command`, `$path`, `$1`, `$2`, etc.
 - Default tag `tmux:$command` when no rules match
-- Full test coverage (11 tests added)
-- Documentation in README.md with examples
+- Documentation in README.md
 
+#### terminal watcher
+Not yet investigated.
 
-### terminal watcher
+### Project split
+Consider splitting into three projects:
+- `aw-export-tags` - Core functionality without Timewarrior dependency
+- `aw-export-timewarrior` - Timewarrior integration (backward-compatible)
+- `timewarrior-check-tags` - Standalone tag management for Timewarrior
 
-I haven't looked into this one yet.
+All three should share the same config file format.
 
-## Split the project into three projects:
+---
 
-* aw-export-tags - make a cli that can do everything aw-export-timewarrior can do, except interacting with timewarrior.
-* aw-export-timewarrior - should be 100% backward-compatible, but should only contain the logic for interacting with timewarrior and leave all the work to aw-export-tags.
-* timewarrior-check-tags (?) - should read config sections `[tags.*]` and `[exclusive.*]` and interact with the timewarrior database:
-  * add more tags automatically if needed (we should eventually also support removing, changing and retagging)
-  * deal with exclusive-rules (report/warn, fix, ask, ...?)
-
-All three projects should be able to read the same config file.
-
-Two config file locations should be valid - because `timewarrior-check-tags` has nothing to do with activitywatch.
+*See also: `docs/CODE_REVIEW.md` for detailed code review and improvement suggestions.*

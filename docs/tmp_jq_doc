@@ -1,7 +1,0 @@
-  # See only normal (non-dry-run) operations
-  jq 'select(.run_mode.dry_run == false and .run_mode.export_data == false)' aw-export.log
-
-  # See only errors from production runs
-  jq 'select(.level == "ERROR" and .run_mode.dry_run == false)' aw-export.log
-
-  All changes maintain backward compatibility and the logging system is fully functional!
