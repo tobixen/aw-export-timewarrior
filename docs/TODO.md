@@ -54,10 +54,12 @@ Not yet investigated.
 ### Project split
 Consider splitting into three projects:
 - `aw-export-tags` - Core functionality without Timewarrior dependency
-- `aw-export-timewarrior` - Timewarrior integration (backward-compatible)
+- `aw-export-timewarrior` - Timewarrior integration
 - `timewarrior-check-tags` - Standalone tag management for Timewarrior
 
 All three should share the same config file format.
+
+See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementation plan.
 
 ---
 
