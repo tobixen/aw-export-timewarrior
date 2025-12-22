@@ -9,7 +9,6 @@ from aw_export_timewarrior.main import (
     EventMatchResult,
     Exporter,
     TagResult,
-    check_bucket_updated,
     retag_by_rules,
 )
 from aw_export_timewarrior.state import AfkState
@@ -313,36 +312,6 @@ class TestRetagByRules:
         assert "extra" in result
         # unrelated tags should be preserved
         assert "keep" in result
-
-
-class TestBucketUpdated:
-    """Tests for check_bucket_updated function."""
-
-    @patch("aw_export_timewarrior.main.time")
-    @patch("aw_export_timewarrior.main.logger")
-    def test_recent_bucket_no_warning(self, mock_logger: Mock, mock_time: Mock) -> None:
-        """Test that recent buckets don't trigger warnings."""
-        mock_time.return_value = 1000.0
-        bucket = {"id": "test-bucket", "last_updated_dt": datetime.fromtimestamp(950.0, tz=UTC)}
-        check_bucket_updated(bucket)
-        mock_logger.warning.assert_not_called()
-
-    @patch("aw_export_timewarrior.main.time")
-    @patch("aw_export_timewarrior.main.logger")
-    @patch.dict("os.environ", {"AW2TW_AW_WARN_THRESHOLD": "300"})
-    def test_stale_bucket_triggers_warning(self, mock_logger: Mock, mock_time: Mock) -> None:
-        """Test that stale buckets trigger warnings."""
-        mock_time.return_value = 1000.0
-        bucket = {"id": "test-bucket", "last_updated_dt": datetime.fromtimestamp(500.0, tz=UTC)}
-        check_bucket_updated(bucket)
-        mock_logger.warning.assert_called_once()
-
-    @patch("aw_export_timewarrior.main.logger")
-    def test_null_last_updated_triggers_warning(self, mock_logger: Mock) -> None:
-        """Test that buckets with no last_updated trigger warnings."""
-        bucket = {"id": "test-bucket", "last_updated_dt": None}
-        check_bucket_updated(bucket)
-        mock_logger.warning.assert_called_once()
 
 
 class TestExporterInitialization:

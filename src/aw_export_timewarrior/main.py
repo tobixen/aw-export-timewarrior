@@ -5,7 +5,7 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import Enum, auto
-from time import sleep, time
+from time import sleep
 
 from .aw_client import EventFetcher
 from .config import config
@@ -1870,15 +1870,6 @@ class Exporter:
                     sleep(self.sleep_interval)
 
             return True
-
-
-def check_bucket_updated(bucket: dict) -> None:
-    aw_warn_threshold = float(os.environ.get("AW2TW_AW_WARN_THRESHOLD", 300))
-    if (
-        not bucket["last_updated_dt"]
-        or time() - bucket["last_updated_dt"].timestamp() > aw_warn_threshold
-    ):
-        logger.warning(f"Bucket {bucket['id']} seems not to have recent data!")
 
 
 ## TODO: none of this has anything to do with ActivityWatch and can be moved to a separate module
