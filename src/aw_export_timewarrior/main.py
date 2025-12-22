@@ -189,13 +189,6 @@ class Exporter:
             test_data=self.test_data, client_name=client_name, log_callback=self.log
         )
 
-        ## TODO: we don't need to consider backward compatibility
-        # Maintain backward compatibility - expose EventFetcher properties
-        self.aw = self.event_fetcher.aw
-        self.buckets = self.event_fetcher.buckets
-        self.bucket_by_client = self.event_fetcher.bucket_by_client
-        self.bucket_short = self.event_fetcher.bucket_short
-
         # Initialize TagExtractor for all tag matching logic
         # Pass lambda to support tests that change config after initialization
         self.tag_extractor = TagExtractor(
@@ -259,7 +252,7 @@ class Exporter:
         # Only check bucket freshness when using real ActivityWatch data
         if not self.test_data:
             for bucketclient in ("aw-watcher-window", "aw-watcher-afk"):
-                assert bucketclient in self.bucket_by_client
+                assert bucketclient in self.event_fetcher.bucket_by_client
             self.event_fetcher.check_bucket_freshness()
 
     ## TODO: perhaps better to have an _assert method
@@ -1288,8 +1281,8 @@ class Exporter:
             - completed_events: List of finished events to process
             - current_event: The ongoing event (or None)
         """
-        afk_id = self.bucket_by_client["aw-watcher-afk"][0]
-        window_id = self.bucket_by_client["aw-watcher-window"][0]
+        afk_id = self.event_fetcher.bucket_by_client["aw-watcher-afk"][0]
+        window_id = self.event_fetcher.bucket_by_client["aw-watcher-window"][0]
 
         # Fetch AFK events
         afk_events = self.event_fetcher.get_events(

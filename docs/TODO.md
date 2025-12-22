@@ -16,7 +16,6 @@ Fix or document the confusing assertion on empty tags in `_should_export_accumul
 ### Further main.py reduction
 Continue extracting modules from main.py:
 - Event processing pipeline
-- Backward compatibility functions to dedicated module
 
 ### Configuration validation
 Add validation for configuration values (currently no validation of loaded TOML).

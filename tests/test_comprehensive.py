@@ -321,15 +321,15 @@ class TestExporterInitialization:
         """Test that Exporter initializes ActivityWatch client."""
         exporter = Exporter()
 
-        assert exporter.aw is mock_aw_client
+        assert exporter.event_fetcher.aw is mock_aw_client
 
     def test_exporter_init_processes_buckets(self, mock_aw_client: Mock) -> None:
         """Test that Exporter processes buckets correctly."""
         exporter = Exporter()
 
-        assert "aw-watcher-window" in exporter.bucket_by_client
-        assert "aw-watcher-afk" in exporter.bucket_by_client
-        assert "aw-watcher-window" in exporter.bucket_short
+        assert "aw-watcher-window" in exporter.event_fetcher.bucket_by_client
+        assert "aw-watcher-afk" in exporter.event_fetcher.bucket_by_client
+        assert "aw-watcher-window" in exporter.event_fetcher.bucket_short
 
 
 class TestExporterSetKnownTickStats:

@@ -142,8 +142,8 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
         try:
             # Use same bucket pattern as get_editor_tags()
             bucket_key = f"aw-watcher-{app}"
-            if bucket_key in exporter.bucket_short:
-                bucket_id = exporter.bucket_short[bucket_key]["id"]
+            if bucket_key in exporter.event_fetcher.bucket_short:
+                bucket_id = exporter.event_fetcher.bucket_short[bucket_key]["id"]
                 ignorable = exporter._is_ignorable_event(app, window_event)
                 # Use the public get_corresponding_event() method
                 sub_event = exporter.event_fetcher.get_corresponding_event(
@@ -168,8 +168,8 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
             app_normalized = "chrome" if app == "chromium" else app
             bucket_key = f"aw-watcher-web-{app_normalized}"
 
-            if bucket_key in exporter.bucket_short:
-                bucket_id = exporter.bucket_short[bucket_key]["id"]
+            if bucket_key in exporter.event_fetcher.bucket_short:
+                bucket_id = exporter.event_fetcher.bucket_short[bucket_key]["id"]
                 # Use the public get_corresponding_event() method
                 sub_event = exporter.event_fetcher.get_corresponding_event(window_event, bucket_id)
 
@@ -200,8 +200,8 @@ def collect_report_data(
     - tags: Set of determined tags
     """
     # Get window and AFK buckets
-    window_id = exporter.bucket_by_client["aw-watcher-window"][0]
-    afk_id = exporter.bucket_by_client["aw-watcher-afk"][0]
+    window_id = exporter.event_fetcher.bucket_by_client["aw-watcher-window"][0]
+    afk_id = exporter.event_fetcher.bucket_by_client["aw-watcher-afk"][0]
 
     # Fetch window events
     window_events = exporter.event_fetcher.get_events(window_id, start=start_time, end=end_time)
