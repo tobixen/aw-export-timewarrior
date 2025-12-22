@@ -7,9 +7,38 @@ making it easy to test and maintain. Part of the Exporter refactoring plan.
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ExclusiveGroupViolation:
+    """Details about an exclusive group violation."""
+
+    group_name: str
+    group_tags: set[str]
+    conflicting_tags: set[str]
+
+    def __str__(self) -> str:
+        return (
+            f"Group '{self.group_name}': "
+            f"tags {sorted(self.conflicting_tags)} conflict "
+            f"(exclusive group allows only one of {sorted(self.group_tags)})"
+        )
+
+
+class ExclusiveGroupError(Exception):
+    """Exception raised when tags violate exclusive group rules."""
+
+    def __init__(self, source_tags: set[str], violations: list[ExclusiveGroupViolation]):
+        self.source_tags = source_tags
+        self.violations = violations
+        violation_details = "; ".join(str(v) for v in violations)
+        super().__init__(
+            f"Tags {sorted(source_tags)} violate exclusive group rules: {violation_details}"
+        )
 
 
 class TagExtractor:
@@ -489,9 +518,11 @@ class TagExtractor:
             Transformed set of tags after applying retag rules
 
         Raises:
-            AssertionError: If tags violate exclusive group rules
+            ExclusiveGroupError: If tags violate exclusive group rules
         """
-        assert not self.check_exclusive_groups(source_tags), "Tags violate exclusive group rules"
+        violations = self.get_exclusive_violations(source_tags)
+        if violations:
+            raise ExclusiveGroupError(source_tags, violations)
 
         new_tags = source_tags.copy()
 
@@ -553,6 +584,29 @@ class TagExtractor:
 
         return new_tags
 
+    def get_exclusive_violations(self, tags: set[str]) -> list[ExclusiveGroupViolation]:
+        """Get detailed information about exclusive group violations.
+
+        Args:
+            tags: Set of tags to check
+
+        Returns:
+            List of ExclusiveGroupViolation objects describing each conflict
+        """
+        violations = []
+        for gid in self.config.get("exclusive", {}):
+            group = set(self.config["exclusive"][gid]["tags"])
+            conflicting = group.intersection(tags)
+            if len(conflicting) > 1:
+                violations.append(
+                    ExclusiveGroupViolation(
+                        group_name=gid,
+                        group_tags=group,
+                        conflicting_tags=conflicting,
+                    )
+                )
+        return violations
+
     def check_exclusive_groups(self, tags: set[str]) -> bool:
         """Check if tags violate exclusive group rules.
 
@@ -566,8 +620,4 @@ class TagExtractor:
             True if tags violate exclusivity (conflict detected)
             False if tags are valid (no conflicts)
         """
-        for gid in self.config.get("exclusive", {}):
-            group = set(self.config["exclusive"][gid]["tags"])
-            if len(group.intersection(tags)) > 1:
-                return True
-        return False
+        return len(self.get_exclusive_violations(tags)) > 0

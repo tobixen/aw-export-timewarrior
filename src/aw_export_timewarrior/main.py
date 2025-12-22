@@ -11,7 +11,7 @@ from .aw_client import EventFetcher
 from .config import config
 from .output import user_output
 from .state import AfkState, StateManager
-from .tag_extractor import TagExtractor
+from .tag_extractor import ExclusiveGroupError, TagExtractor
 from .timew_tracker import TimewTracker
 from .utils import get_event_range, normalize_duration, normalize_timestamp, ts2strtime
 
@@ -242,6 +242,34 @@ class Exporter:
             breakpoint()
         elif self.enable_assert:
             raise AssertionError(reason)
+
+    def apply_retag_rules(self, source_tags: set[str]) -> set[str]:
+        """Apply retag rules with proper error handling for exclusive group violations.
+
+        Wraps TagExtractor.apply_retag_rules to handle ExclusiveGroupError
+        and respect enable_pdb/enable_assert settings.
+
+        Args:
+            source_tags: Set of tags to transform
+
+        Returns:
+            Transformed set of tags, or original tags if violation occurs and pdb is enabled
+        """
+        try:
+            return self.tag_extractor.apply_retag_rules(source_tags)
+        except ExclusiveGroupError as e:
+            self.log(str(e), level=logging.ERROR)
+            if self.enable_pdb:
+                # Make exception info available for debugging
+                exc = e  # noqa: F841 - available in debugger
+                breakpoint()
+                # After debugging, return original tags to continue
+                return source_tags
+            elif self.enable_assert:
+                raise
+            else:
+                # In normal mode, re-raise to stop execution
+                raise
 
     @property
     def state(self) -> StateManager:
@@ -590,7 +618,7 @@ class Exporter:
                 return
             if set(tags).issubset(self.timew_info["tags"]):
                 return
-        tags = self.tag_extractor.apply_retag_rules(tags)
+        tags = self.apply_retag_rules(tags)
         assert not self.tag_extractor.check_exclusive_groups(tags)
 
         # Check if tags are exactly the same as current tags (after rule application)
@@ -616,89 +644,100 @@ class Exporter:
 
             # Check if these are split events (have split metadata)
             if overlapping_events:
-                # Check if first event has split metadata
-                first_event = overlapping_events[0]
-                is_split = first_event["data"].get("split", False)
-
-                if is_split:
-                    # This AFK period was split by the user
-                    # Sort split events by split_index to ensure correct order
-                    split_events = sorted(
-                        overlapping_events, key=lambda e: e["data"].get("split_index", 0)
+                # Ask-away events should only overlap with AFK events
+                # If we find ask-away overlapping with not-afk, something is wrong
+                if "afk" not in tags:
+                    self.breakpoint(
+                        f"Ask-away event overlaps with non-AFK event: "
+                        f"ask-away={overlapping_events[0]['data']}, "
+                        f"event_tags={tags}, event_data={event.get('data', {})}"
                     )
-
-                    logger.info(f"Found {len(split_events)} split activities for AFK period")
-
-                    # For each split event, create a separate tracking entry
-                    for i, split_event in enumerate(split_events):
-                        message = split_event["data"].get("message", "")
-                        if not message:
-                            continue
-
-                        # Extract tags for this specific split activity
-                        synthetic_event = {
-                            "timestamp": split_event["timestamp"],
-                            "duration": split_event["duration"],
-                            "data": {"app": "ask-away", "title": message},
-                        }
-                        message_tags = self.tag_extractor.get_app_tags(synthetic_event)
-
-                        # If no rules matched, use the message text directly as tags
-                        if not message_tags or message_tags is False:
-                            words = message.strip().split()
-                            message_tags = {word.lower() for word in words if word}
-
-                        # Combine with base tags
-                        split_tags = tags | {"~aw"}
-                        if message_tags:
-                            if isinstance(message_tags, set):
-                                split_tags = split_tags | message_tags
-                            else:
-                                split_tags = split_tags | set(message_tags)
-
-                        # Start tracking for this split activity with its specific timestamp
-                        split_since = split_event["timestamp"]
-                        logger.info(
-                            f"  Split {i+1}/{len(split_events)}: '{message}' at {split_since} ({split_event['duration']})"
-                        )
-                        self.tracker.start_tracking(split_tags, split_since)
-
-                        # Update state after each split (simulate sequential tracking)
-                        if not self.dry_run:
-                            self.set_timew_info(self.retag_current_interval())
-                        else:
-                            self.set_timew_info(
-                                {
-                                    "start": split_since.strftime("%Y%m%dT%H%M%SZ"),
-                                    "start_dt": split_since,
-                                    "tags": split_tags,
-                                }
-                            )
-
-                    # Split events handled - return early, don't call start_tracking again
-                    return
-
+                    # Skip ask-away tag merging for non-AFK events
                 else:
-                    # Not split events - use the first overlapping event (old behavior)
-                    ask_event = overlapping_events[0]
-                    message = ask_event["data"].get("message", "")
-                    if message:
-                        synthetic_event = {
-                            "timestamp": event["timestamp"],
-                            "duration": event["duration"],
-                            "data": {"app": "ask-away", "title": message},
-                        }
-                        message_tags = self.tag_extractor.get_app_tags(synthetic_event)
+                    # Check if first event has split metadata
+                    first_event = overlapping_events[0]
+                    is_split = first_event["data"].get("split", False)
 
-                        if not message_tags or message_tags is False:
-                            words = message.strip().split()
-                            message_tags = {word.lower() for word in words if word}
+                    if is_split:
+                        # This AFK period was split by the user
+                        # Sort split events by split_index to ensure correct order
+                        split_events = sorted(
+                            overlapping_events, key=lambda e: e["data"].get("split_index", 0)
+                        )
 
-                        if message_tags:
-                            if isinstance(message_tags, set):
-                                final_tags = final_tags | message_tags
+                        logger.info(f"Found {len(split_events)} split activities for AFK period")
+
+                        # For each split event, create a separate tracking entry
+                        for i, split_event in enumerate(split_events):
+                            message = split_event["data"].get("message", "")
+                            if not message:
+                                continue
+
+                            # Extract tags for this specific split activity
+                            synthetic_event = {
+                                "timestamp": split_event["timestamp"],
+                                "duration": split_event["duration"],
+                                "data": {"app": "ask-away", "title": message},
+                            }
+                            message_tags = self.tag_extractor.get_app_tags(synthetic_event)
+
+                            # If no rules matched, use the message text directly as tags
+                            if not message_tags or message_tags is False:
+                                words = message.strip().split()
+                                message_tags = {word.lower() for word in words if word}
+
+                            # Combine with base tags
+                            split_tags = tags | {"~aw"}
+                            if message_tags:
+                                if isinstance(message_tags, set):
+                                    split_tags = split_tags | message_tags
+                                else:
+                                    split_tags = split_tags | set(message_tags)
+
+                            # Start tracking for this split activity with its specific timestamp
+                            split_since = split_event["timestamp"]
+                            logger.info(
+                                f"  Split {i+1}/{len(split_events)}: '{message}' "
+                                f"at {split_since} ({split_event['duration']})"
+                            )
+                            self.tracker.start_tracking(split_tags, split_since)
+
+                            # Update state after each split (simulate sequential tracking)
+                            if not self.dry_run:
+                                self.set_timew_info(self.retag_current_interval())
                             else:
-                                final_tags = final_tags | set(message_tags)
+                                self.set_timew_info(
+                                    {
+                                        "start": split_since.strftime("%Y%m%dT%H%M%SZ"),
+                                        "start_dt": split_since,
+                                        "tags": split_tags,
+                                    }
+                                )
+
+                        # Split events handled - return early, don't call start_tracking again
+                        return
+
+                    else:
+                        # Not split events - use the first overlapping event (old behavior)
+                        ask_event = overlapping_events[0]
+                        message = ask_event["data"].get("message", "")
+                        if message:
+                            synthetic_event = {
+                                "timestamp": event["timestamp"],
+                                "duration": event["duration"],
+                                "data": {"app": "ask-away", "title": message},
+                            }
+                            message_tags = self.tag_extractor.get_app_tags(synthetic_event)
+
+                            if not message_tags or message_tags is False:
+                                words = message.strip().split()
+                                message_tags = {word.lower() for word in words if word}
+
+                            if message_tags:
+                                if isinstance(message_tags, set):
+                                    final_tags = final_tags | message_tags
+                                else:
+                                    final_tags = final_tags | set(message_tags)
 
         # Start tracking with the final tags
         self.tracker.start_tracking(final_tags, since)
@@ -773,7 +812,7 @@ class Exporter:
 
         # Apply retag rules
         source_tags = set(timew_info["tags"])
-        new_tags = self.tag_extractor.apply_retag_rules(source_tags)
+        new_tags = self.apply_retag_rules(source_tags)
 
         # Retag if tags changed
         if new_tags != source_tags:
@@ -980,7 +1019,7 @@ class Exporter:
                     self.state.stats.known_events_time += new_duration
 
                 # Apply retagging rules
-                tags = self.tag_extractor.apply_retag_rules(tag_result.tags)
+                tags = self.apply_retag_rules(tag_result.tags)
 
                 # Accumulate tags from the incremental duration
                 for tag in tags:
@@ -1013,7 +1052,7 @@ class Exporter:
                     self.state.stats.known_events_time += current_duration
 
                 # Apply retagging rules
-                tags = self.tag_extractor.apply_retag_rules(tag_result.tags)
+                tags = self.apply_retag_rules(tag_result.tags)
 
                 for tag in tags:
                     self.state.stats.tags_accumulated_time[tag] += current_duration
@@ -1575,7 +1614,7 @@ class Exporter:
             event: The event being processed
         """
         if tag_result:
-            tags = self.tag_extractor.apply_retag_rules(tag_result.tags)
+            tags = self.apply_retag_rules(tag_result.tags)
             for tag in tags:
                 self.state.stats.tags_accumulated_time[tag] += event["duration"]
 
