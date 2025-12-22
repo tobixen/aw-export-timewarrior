@@ -1934,27 +1934,6 @@ def timew_run(commands, dry_run=False, capture_to=None, hide_output=False):
     sleep(grace_time)
 
 
-## TODO: do we need this?
-def exclusive_overlapping(tags, cfg=None):
-    """Check if tags violate exclusive group rules.
-
-    This is a module-level function for backward compatibility.
-    Delegates to TagExtractor for the actual logic.
-
-    Args:
-        tags: Set of tags to check
-        cfg: Configuration dict (uses global config if None)
-
-    Returns:
-        True if tags violate exclusivity (conflict detected)
-    """
-    if cfg is None:
-        cfg = config
-    # Create a temporary TagExtractor to use the logic
-    temp_extractor = TagExtractor(config=cfg, event_fetcher=None)
-    return temp_extractor.check_exclusive_groups(tags)
-
-
 ## TODO: do we need this backward compatibility function?
 ## not really retag, more like expand tags?  But it's my plan to allow replacement and not only addings
 def retag_by_rules(source_tags, cfg=None):

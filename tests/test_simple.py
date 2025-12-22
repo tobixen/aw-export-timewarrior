@@ -1,18 +1,15 @@
-from unittest.mock import patch
-
-from aw_export_timewarrior.main import exclusive_overlapping
+from aw_export_timewarrior.tag_extractor import TagExtractor
 
 
-@patch(
-    "aw_export_timewarrior.main.config",
-    {
+def test_exclusive_overlapping():
+    config = {
         "exclusive": {
             "fruit": {"tags": ["pears", "apples", "cherries"]},
             "flavor": {"tags": ["sweet", "sour", "salty"]},
         }
-    },
-)
-def test_exclusive_overlapping():
-    assert not exclusive_overlapping({"sweet", "cherries", "berry", "round"})
-    assert exclusive_overlapping({"sweet", "sour", "cherries", "berry", "round"})
-    assert exclusive_overlapping({"sweet", "cherries", "pears", "round"})
+    }
+    extractor = TagExtractor(config=config, event_fetcher=None)
+
+    assert not extractor.check_exclusive_groups({"sweet", "cherries", "berry", "round"})
+    assert extractor.check_exclusive_groups({"sweet", "sour", "cherries", "berry", "round"})
+    assert extractor.check_exclusive_groups({"sweet", "cherries", "pears", "round"})

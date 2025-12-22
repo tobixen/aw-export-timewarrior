@@ -10,10 +10,10 @@ from aw_export_timewarrior.main import (
     Exporter,
     TagResult,
     check_bucket_updated,
-    exclusive_overlapping,
     retag_by_rules,
 )
 from aw_export_timewarrior.state import AfkState
+from aw_export_timewarrior.tag_extractor import TagExtractor
 from aw_export_timewarrior.utils import ts2str, ts2strtime
 
 
@@ -85,42 +85,38 @@ class TestTimestampFormatting:
 class TestExclusiveOverlapping:
     """Tests for exclusive tag checking."""
 
-    @patch(
-        "aw_export_timewarrior.main.config",
-        {
+    def test_no_overlap(self) -> None:
+        """Test tags with no exclusive overlap."""
+        config = {
             "exclusive": {
                 "main_category": {"tags": ["4work", "4break", "4chores"]},
                 "customer": {"tags": ["acme", "emca", "initech"]},
             }
-        },
-    )
-    def test_no_overlap(self) -> None:
-        """Test tags with no exclusive overlap."""
+        }
+        extractor = TagExtractor(config=config, event_fetcher=None)
         tags = {"4work", "programming", "python"}
-        assert not exclusive_overlapping(tags)
+        assert not extractor.check_exclusive_groups(tags)
 
-    @patch(
-        "aw_export_timewarrior.main.config",
-        {"exclusive": {"main_category": {"tags": ["4work", "4break", "4chores"]}}},
-    )
     def test_overlap_in_main_category(self) -> None:
         """Test tags that overlap in exclusive main category."""
+        config = {"exclusive": {"main_category": {"tags": ["4work", "4break", "4chores"]}}}
+        extractor = TagExtractor(config=config, event_fetcher=None)
         tags = {"4work", "4break", "programming"}
-        assert exclusive_overlapping(tags)
+        assert extractor.check_exclusive_groups(tags)
 
-    @patch(
-        "aw_export_timewarrior.main.config", {"exclusive": {"customer": {"tags": ["acme", "emca"]}}}
-    )
     def test_overlap_in_customer(self) -> None:
         """Test tags that overlap in exclusive customer category."""
+        config = {"exclusive": {"customer": {"tags": ["acme", "emca"]}}}
+        extractor = TagExtractor(config=config, event_fetcher=None)
         tags = {"acme", "emca", "programming"}
-        assert exclusive_overlapping(tags)
+        assert extractor.check_exclusive_groups(tags)
 
-    @patch("aw_export_timewarrior.main.config", {"exclusive": {}})
     def test_no_exclusive_groups(self) -> None:
         """Test with no exclusive groups configured."""
+        config = {"exclusive": {}}
+        extractor = TagExtractor(config=config, event_fetcher=None)
         tags = {"any", "tags", "should", "work"}
-        assert not exclusive_overlapping(tags)
+        assert not extractor.check_exclusive_groups(tags)
 
 
 class TestRetagByRules:
