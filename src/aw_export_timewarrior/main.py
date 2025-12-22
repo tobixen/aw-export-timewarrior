@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shlex
 import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -27,6 +28,32 @@ MIN_KNOWN_ACTIVITY_RATIO = 0.3
 # Debug threshold: trigger breakpoint if skipping an event longer than this duration.
 # This helps catch unexpected behavior where significant events are being skipped.
 DEBUG_SKIP_THRESHOLD_SECONDS = 30
+
+
+def parse_message_tags(message: str) -> set[str]:
+    """Parse a message string into tags, respecting quoted strings.
+
+    Space-delimited words become separate tags, but quoted strings
+    are treated as single tags. Preserves original casing.
+
+    Examples:
+        "food 4FAMILY" -> {"food", "4FAMILY"}
+        '"my project" coding' -> {"my project", "coding"}
+        "4BREAK 'long tag'" -> {"4BREAK", "long tag"}
+
+    Args:
+        message: The message string to parse
+
+    Returns:
+        Set of tags extracted from the message
+    """
+    try:
+        # shlex.split handles both single and double quotes
+        words = shlex.split(message.strip())
+        return {word for word in words if word}
+    except ValueError:
+        # If shlex fails (unmatched quotes), fall back to simple split
+        return {word for word in message.strip().split() if word}
 
 
 class EventMatchResult(Enum):
@@ -683,8 +710,7 @@ class Exporter:
 
                             # If no rules matched, use the message text directly as tags
                             if not message_tags or message_tags is False:
-                                words = message.strip().split()
-                                message_tags = {word.lower() for word in words if word}
+                                message_tags = parse_message_tags(message)
 
                             # Combine with base tags
                             split_tags = tags | {"~aw"}
@@ -729,9 +755,9 @@ class Exporter:
                             }
                             message_tags = self.tag_extractor.get_app_tags(synthetic_event)
 
+                            # If no rules matched, use the message text directly as tags
                             if not message_tags or message_tags is False:
-                                words = message.strip().split()
-                                message_tags = {word.lower() for word in words if word}
+                                message_tags = parse_message_tags(message)
 
                             if message_tags:
                                 if isinstance(message_tags, set):
