@@ -1,191 +1,198 @@
-# Project Split Plan
+# Project Restructuring Plan: aw-tagger
 
-## Overview
+## Vision
 
-Split aw-export-timewarrior into three projects that share the same config file format:
+**Problem:** ActivityWatch collects great data, but it's hard to get useful insights from it.
 
-1. **aw-export-tags** - Core ActivityWatch → tags functionality (no Timewarrior dependency)
-2. **aw-export-timewarrior** - Timewarrior integration (depends on aw-export-tags)
-3. **timewarrior-check-tags** - Standalone Timewarrior tag management (no ActivityWatch dependency)
+**Solution:** Rule-based categorization that transforms raw ActivityWatch events into meaningful tags with multiple output options.
 
-## Current Module Analysis
+## New Name: `aw-tagger`
 
-### Modules by Dependency
+Rename from `aw-export-timewarrior` to `aw-tagger` to reflect the core value proposition.
 
-| Module | ActivityWatch | Timewarrior | Purpose |
-|--------|---------------|-------------|---------|
-| config.py | aw-core | - | Config loading |
-| tag_extractor.py | - | - | Tag rules, exclusive groups |
-| state.py | - | - | State management |
-| aw_client.py | aw-client | - | Event fetching |
-| utils.py | - | - | Utilities |
-| output.py | - | - | Logging/output |
-| main.py | Yes | Yes | Core Exporter |
-| cli.py | Yes | Yes | CLI commands |
-| timew_tracker.py | - | Yes | Timewarrior tracking |
-| time_tracker.py | - | - | Abstract tracker |
-| compare.py | - | Yes | Interval comparison |
-| retag.py | - | Yes | Retag command |
-| report.py | Yes | - | Activity reports |
-| export.py | Yes | - | Data export |
+## Architecture
 
-## Project 1: aw-export-tags
-
-**Purpose:** Extract tags from ActivityWatch events using configurable rules.
-
-### Modules to Include
-- `config.py` - Shared config loading
-- `tag_extractor.py` - Tag rules, exclusive groups, retag rules
-- `state.py` - Core state management (AfkState, ExportStats)
-- `aw_client.py` - ActivityWatch event fetching
-- `utils.py` - Shared utilities
-- `output.py` - Logging infrastructure
-
-### Dependencies
-- aw-client
-- aw-core (for config path discovery)
-- dateparser
-- toml
-- termcolor
-
-### CLI Commands
-```bash
-aw-export-tags analyze          # Show what tags would be extracted
-aw-export-tags validate-config  # Validate config file
-aw-export-tags export           # Export tagged events (JSON/CSV)
+```
+┌─────────────────────────────────────────────────────┐
+│                    aw-tagger                        │
+│  (Rule-based categorization for ActivityWatch)     │
+├─────────────────────────────────────────────────────┤
+│  Input: ActivityWatch events                        │
+│  ├── Window events (app, title)                    │
+│  ├── AFK events                                    │
+│  ├── Browser events (URL)                          │
+│  ├── Editor events (file, project)                 │
+│  └── Optional: tmux, lid, ask-away                 │
+│                                                     │
+│  Core Engine:                                       │
+│  ├── Tag extraction rules                          │
+│  ├── Retag/expansion rules                         │
+│  ├── Exclusive group validation                    │
+│  └── TOML config format                            │
+│                                                     │
+│  Outputs:                                           │
+│  ├── aw-watcher-tags bucket (meta watcher)         │
+│  ├── Timewarrior (optional)                        │
+│  ├── Statistics/reports                            │
+│  └── JSON/CSV export                               │
+└─────────────────────────────────────────────────────┘
 ```
 
-### Config Sections Used
-- `[rules.*]` - Tag extraction rules
-- `[tags.*]` - Retag rules
-- `[exclusive.*]` - Exclusive group definitions
+## CLI Commands
 
----
-
-## Project 2: aw-export-timewarrior
-
-**Purpose:** Sync ActivityWatch data to Timewarrior, compare and fix intervals.
-
-### Modules to Include
-- `main.py` - Exporter class (imports from aw-export-tags)
-- `cli.py` - Full CLI
-- `timew_tracker.py` - Timewarrior backend
-- `time_tracker.py` - Abstract tracker interface
-- `compare.py` - Interval comparison
-- `retag.py` - Retag command
-- `report.py` - Activity reports
-
-### Dependencies
-- aw-export-tags (the core library)
-- timewarrior (external command)
-
-### CLI Commands (existing)
 ```bash
-aw-export-timewarrior sync      # Real-time sync
-aw-export-timewarrior diff      # Compare and optionally fix
-aw-export-timewarrior analyze   # Show unmatched events
-aw-export-timewarrior export    # Export data
-aw-export-timewarrior report    # Activity report
-aw-export-timewarrior validate  # Validate config
-aw-export-timewarrior retag     # Apply retag rules
+# Core commands (always available)
+aw-tagger sync              # Tag events and write to aw-watcher-tags bucket
+aw-tagger analyze           # Show what tags would be extracted
+aw-tagger report            # Activity statistics
+aw-tagger export            # Export tagged events (JSON/CSV)
+aw-tagger validate          # Validate config
+
+# Timewarrior commands (when timewarrior installed)
+aw-tagger timew sync        # Sync to Timewarrior
+aw-tagger timew diff        # Compare AW vs Timewarrior
+aw-tagger timew retag       # Apply retag rules to current interval
 ```
 
-### Config Sections Used
-All sections (full config)
+## Meta Watcher Output
 
----
+Create an `aw-watcher-tags` bucket with tagged events:
 
-## Project 3: timewarrior-check-tags
-
-**Purpose:** Validate and manage Timewarrior tags against rules (no AW dependency).
-
-### New Modules
-- `timew_client.py` - Read Timewarrior intervals
-- `validator.py` - Tag validation against rules
-- `fixer.py` - Apply fixes to intervals
-
-### Dependencies
-- toml (for config)
-- timewarrior (external command)
-
-### CLI Commands
-```bash
-timewarrior-check-tags check     # Check for exclusive group violations
-timewarrior-check-tags fix       # Apply retag rules to existing intervals
-timewarrior-check-tags report    # Show tag statistics
-timewarrior-check-tags validate  # Validate config
+```python
+# Event structure
+{
+    "timestamp": "2025-12-22T10:00:00Z",
+    "duration": 300,
+    "data": {
+        "tags": ["coding", "python", "4work"],
+        "category": "4work",  # Primary exclusive group match
+        "source": {
+            "app": "Emacs",
+            "title": "main.py - aw-tagger"
+        }
+    }
+}
 ```
 
-### Config Sections Used
-- `[tags.*]` - Retag rules
-- `[exclusive.*]` - Exclusive group definitions
+**Benefits:**
+- Tags visible in ActivityWatch web UI timeline
+- Works with existing AW visualizations and queries
+- Other tools can consume the tagged bucket
+- Could integrate with aw-webui's category system
 
----
+## Installation
 
-## Shared Config File
+```bash
+# Core functionality
+pip install aw-tagger
 
-All three projects read the same config file (`~/.config/activitywatch/aw-export-timewarrior/aw-export-timewarrior.toml`):
+# With Timewarrior support
+pip install aw-tagger[timewarrior]
+```
+
+## Module Restructuring
+
+### Current → New Structure
+
+```
+src/aw_export_timewarrior/     →    src/aw_tagger/
+├── __init__.py                     ├── __init__.py
+├── cli.py                          ├── cli.py
+├── config.py                       ├── config.py
+├── main.py                         ├── tagger.py (renamed from main.py)
+├── tag_extractor.py                ├── tag_extractor.py
+├── state.py                        ├── state.py
+├── aw_client.py                    ├── aw_client.py
+├── utils.py                        ├── utils.py
+├── output.py                       ├── output.py
+├── report.py                       ├── report.py
+├── export.py                       ├── export.py
+│                                   │
+│                                   ├── outputs/
+│                                   │   ├── __init__.py
+│                                   │   ├── aw_bucket.py (NEW - meta watcher)
+│                                   │   └── timewarrior.py (from timew_tracker.py)
+│                                   │
+├── timew_tracker.py                │   (moved to outputs/)
+├── time_tracker.py                 ├── time_tracker.py (base class)
+├── compare.py                      ├── timew/
+├── retag.py                        │   ├── compare.py
+                                    │   └── retag.py
+```
+
+## Config File
+
+Keep same location and format, but rename default:
+- Old: `~/.config/activitywatch/aw-export-timewarrior/aw-export-timewarrior.toml`
+- New: `~/.config/activitywatch/aw-tagger/config.toml`
+- Support old location for backward compatibility during transition
 
 ```toml
-# Sections used by aw-export-tags
+# Output configuration (NEW section)
+[output]
+# Which outputs to enable
+aw_bucket = true          # Write to aw-watcher-tags bucket
+timewarrior = true        # Sync to Timewarrior (if installed)
+
+[output.aw_bucket]
+bucket_name = "aw-watcher-tags"
+
+[output.timewarrior]
+# Timewarrior-specific settings
+grace_time = 30
+
+# Existing config sections remain the same
 [rules.browser.github]
 url_regexp = "github\\.com"
 timew_tags = ["coding", "github"]
 
-[rules.app.terminal]
-app_names = ["foot", "alacritty"]
-timew_tags = ["terminal"]
-
-# Sections used by all three projects
 [tags.work]
-source_tags = ["coding", "terminal"]
+source_tags = ["coding"]
 add = ["4work"]
 
 [exclusive.category]
 tags = ["4work", "4break", "4chores"]
-
-# Sections used by aw-export-timewarrior only
-[tuning]
-min_event_duration = 3.0
-stickyness_factor = 0.1
 ```
 
----
+## Implementation Phases
 
-## Implementation Order
+### Phase 1: Meta Watcher Output
+1. Create `outputs/aw_bucket.py` to write to ActivityWatch bucket
+2. Add `aw-tagger sync` command that writes to `aw-watcher-tags`
+3. Test with AW web UI
 
-### Phase 1: Extract Core Library
-1. Create `aw-export-tags` package
-2. Move core modules (tag_extractor, config, state, aw_client, utils, output)
-3. Update aw-export-timewarrior to depend on aw-export-tags
-4. Ensure all tests still pass
+### Phase 2: Restructure Timewarrior as Output
+1. Move timew code to `outputs/timewarrior.py` and `timew/` directory
+2. Make timewarrior import optional
+3. Update CLI to use `aw-tagger timew sync` etc.
 
-### Phase 2: Create Timewarrior Tool
-1. Create `timewarrior-check-tags` package
-2. Implement timew_client.py to read Timewarrior data
-3. Reuse TagExtractor from aw-export-tags for validation
-4. Add CLI commands for check/fix/report
+### Phase 3: Rename Package
+1. Rename `aw_export_timewarrior` → `aw_tagger`
+2. Update all imports
+3. Update pyproject.toml, README, docs
+4. Keep backward compatibility alias during transition
 
-### Phase 3: Clean Up
-1. Move retag.py logic into timewarrior-check-tags
-2. Share config validation code
-3. Update documentation
+### Phase 4: Publish
+1. Publish to PyPI as `aw-tagger`
+2. Update documentation for public audience
+3. Archive/redirect old package name
 
----
+## Backward Compatibility
 
-## Benefits
+During transition:
+- `aw-export-timewarrior` command still works (alias to `aw-tagger timew sync`)
+- Old config location still supported
+- Old package name installs new package with deprecation warning
 
-1. **Lighter dependencies:** Users who only need tag validation don't need ActivityWatch
-2. **Reusability:** The core tag logic can be used by other projects
-3. **Testability:** Smaller, focused modules are easier to test
-4. **Maintenance:** Clear separation of concerns
+## Benefits of This Approach
 
-## Risks
-
-1. **Breaking changes:** Need to maintain backward compatibility during transition
-2. **Config path:** All three tools need to find the same config file
-3. **Version sync:** Need to keep versions coordinated
+1. **Clear value proposition:** "Tag your ActivityWatch data"
+2. **Useful without Timewarrior:** Meta watcher works standalone
+3. **Single package:** Easier to maintain and install
+4. **Extensible:** Easy to add more outputs (Toggl, CSV, etc.)
+5. **Better discoverability:** Name reflects what it does
 
 ---
 
 *Created: 2025-12-22*
+*Updated: 2025-12-22 - Changed from 3-project split to single aw-tagger package*

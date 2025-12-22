@@ -51,13 +51,20 @@ Support added for [aw-watcher-tmux](https://github.com/akohlbecker/aw-watcher-tm
 #### terminal watcher
 Not yet investigated.
 
-### Project split
-Consider splitting into three projects:
-- `aw-export-tags` - Core functionality without Timewarrior dependency
-- `aw-export-timewarrior` - Timewarrior integration
-- `timewarrior-check-tags` - Standalone tag management for Timewarrior
+### Interactive rule configuration
+Add an interactive way to create/edit rules in the configuration file:
+- Show unmatched events and prompt for tags
+- Suggest rules based on patterns (URL, app name, file path)
+- Write rules directly to config file
+- Could be CLI wizard or TUI interface
 
-All three should share the same config file format.
+### Rename to aw-tagger
+Rename project from `aw-export-timewarrior` to `aw-tagger` to reflect the core value proposition: rule-based categorization for ActivityWatch.
+
+Key changes:
+- Add meta watcher output (write tags to `aw-watcher-tags` bucket)
+- Make Timewarrior an optional output
+- Restructure CLI: `aw-tagger sync`, `aw-tagger timew sync`, etc.
 
 See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementation plan.
 
