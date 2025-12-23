@@ -1,5 +1,11 @@
 # Better Categorizer and Timewarrior Companion
 
+**Problem:** ActivityWatch collects great data, but it's hard to get useful insights from it.
+
+**Solution:** Rule-based categorization that transforms raw ActivityWatch events into meaningful tags with multiple output options.
+
+Currently the focus is on adding the data into Timewarrior - but in the near future, the project will be renamed  aw-tagger, and should also be able to operate in a "meta-watcher"-mode using ActivityWatch both as the source and the target.
+
 Be aware, this is not a mature project, there will be dragons, there are quite some debugger breakpoints and asserts in the code.  If you know some Python, like Activitywatch and use Timewarrior, then I'd encourage you to look into it and contribute.  I'm available by email tobias@redpill-linpro.com as well as by the GitHub issues if you should have any questions or suggestions.
 
 Be aware, that this README may not reflect the latest version of the code (TODO: look through things!)

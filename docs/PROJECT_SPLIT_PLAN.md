@@ -40,6 +40,11 @@ Rename from `aw-export-timewarrior` to `aw-tagger` to reflect the core value pro
 
 ## CLI Commands
 
+Comments:
+
+* I think we should go for a symmetric design where timew is one "backend" while aw is another "backend".  So while `aw-tagger timew sync` (or `ad-tagger sync timew`?) takes data from activitywatch and stores tags into timew, `aw-tagger aw sync` could take data from aw and store tags into an aw bucket.  Except, "aw" is not a good name for this, as it's aw both on the input side and output side.  Better suggestions?
+* We will need an `aw-tagger aw diff` also.
+
 ```bash
 # Core commands (always available)
 aw-tagger sync              # Tag events and write to aw-watcher-tags bucket
