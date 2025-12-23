@@ -1,5 +1,7 @@
 """Integration tests for lid event handling and AFK integration."""
 
+from datetime import UTC
+
 import pytest
 
 from aw_export_timewarrior.main import Exporter
@@ -185,6 +187,82 @@ def test_multiple_lid_cycles() -> None:
 
     # Should handle multiple lid cycles without crashing
     assert len(commands) > 0, "Should have tracking commands"
+
+
+def test_lid_open_does_not_remove_afk_events() -> None:
+    """Test that lid open (not-afk) does NOT remove AFK events from aw-watcher-afk.
+
+    This is a regression test for a bug where:
+    - User suspends laptop (lid closed/suspended) -> correctly marked as AFK
+    - User resumes (lid open) -> creates lid "not-afk" event with long duration
+    - User goes idle after a few minutes -> aw-watcher-afk says "afk"
+    - BUG: The AFK event was being incorrectly removed because it "conflicted"
+           with the lid open (not-afk) event
+
+    The correct behavior is: "Lid open during AFK -> keep AFK state from aw-watcher-afk"
+    """
+    from datetime import datetime
+
+    # Create a scenario mimicking the Dec 20 bug:
+    # Timeline:
+    # 09:00-09:05: Initial activity
+    # 09:05-11:05: Suspend (2 hours)
+    # 11:05-12:05: Lid open (1 hour) - during this time, user has brief activity then goes AFK
+    # 11:05-11:10: Brief activity after resume
+    # 11:10-12:05: User goes AFK while lid is still open
+
+    start = datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+    data = (
+        FixtureDataBuilder(start_time=start)
+        # Initial activity (09:00-09:05)
+        .add_window_event("vscode", "main.py", 300)
+        .add_afk_event("not-afk", 300)
+        # Suspend for 2 hours (09:05-11:05)
+        .add_suspend_event("suspended", 7200)
+        # Resume - lid open for 1 hour (11:05-12:05)
+        # This lid event spans past when the user goes AFK
+        .add_lid_event("open", 3600)
+        # Brief activity after resume (11:05-11:10)
+        .add_window_event("chrome", "news.com", 300)
+        # Add AFK events with explicit timestamps to match the scenario
+        # Not-AFK during brief activity (11:05-11:10)
+        .add_afk_event("not-afk", 300, timestamp=datetime(2025, 1, 1, 11, 5, 0, tzinfo=UTC))
+        # User goes AFK (11:10-12:05) - overlaps with lid open (not-afk)!
+        # Before fix: this event was incorrectly REMOVED
+        # After fix: this event should be PRESERVED
+        .add_afk_event("afk", 3300, timestamp=datetime(2025, 1, 1, 11, 10, 0, tzinfo=UTC))
+        .build()
+    )
+
+    exporter = Exporter(test_data=data, dry_run=True, enable_assert=False)
+
+    # Test at the merge level - check that merged events preserve the AFK event
+    completed_events, _ = exporter._fetch_and_prepare_events()
+
+    # Find AFK events (status = "afk") in the merged events
+    afk_events = [e for e in completed_events if e.get("data", {}).get("status") == "afk"]
+
+    # We should have at least 2 AFK events:
+    # 1. During suspend (11:05 region, from suspend event)
+    # 2. After brief activity when user went idle (11:10 region, from aw-watcher-afk)
+    assert len(afk_events) >= 2, (
+        f"Expected at least 2 AFK events (suspend + idle-while-lid-open), "
+        f"got {len(afk_events)}. This indicates the bug where lid open "
+        f"incorrectly removes AFK events from aw-watcher-afk.\n"
+        f"AFK events: {afk_events}"
+    )
+
+    # Additionally verify that there's an AFK event starting around 11:10
+    # (this is the one that was being incorrectly removed before the fix)
+    afk_after_resume = [
+        e for e in afk_events if e["timestamp"].hour >= 11 and e["timestamp"].minute >= 10
+    ]
+    assert len(afk_after_resume) >= 1, (
+        f"Expected an AFK event starting after 11:10 (user went idle while lid open), "
+        f"but none found. This indicates the bug where lid open "
+        f"incorrectly removes AFK events from aw-watcher-afk.\n"
+        f"All AFK events: {afk_events}"
+    )
 
 
 def test_lid_event_source_preservation() -> None:

@@ -51,12 +51,13 @@ Support added for [aw-watcher-tmux](https://github.com/akohlbecker/aw-watcher-tm
 #### terminal watcher
 Not yet investigated.
 
-### Interactive rule configuration
-Add an interactive way to create/edit rules in the configuration file:
-- Show unmatched events and prompt for tags
-- Suggest rules based on patterns (URL, app name, file path)
-- Write rules directly to config file
-- Could be CLI wizard or TUI interface
+### Interactivity
+
+* Add an interactive way to create/edit rules in the configuration file:
+ - Show unmatched events and prompt for tags
+ - Suggest rules based on patterns (URL, app name, file path)
+ - Write rules directly to config file
+ - Could be CLI wizard or TUI interface
 
 ### Rename to aw-tagger
 Rename project from `aw-export-timewarrior` to `aw-tagger` to reflect the core value proposition: rule-based categorization for ActivityWatch.
@@ -67,6 +68,22 @@ Key changes:
 - Restructure CLI: `aw-tagger sync`, `aw-tagger timew sync`, etc.
 
 See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementation plan.
+
+---
+
+## Completed
+
+### Fixed: Transport block ignoring active window usage (Dec 20, 2025)
+
+**Problem:** TimeWarrior showed one continuous "transport" block from 11:04:54 to 18:14:36 UTC, completely ignoring ~5-6 minutes of active window usage when the laptop was resumed.
+
+**Root cause:** In `_resolve_event_conflicts()`, the merge logic was removing AFK events whenever they conflicted with lid events, regardless of which state the lid indicated. When the lid was "open" (not-afk) and overlapped with a user AFK event (afk), the AFK event was incorrectly removed.
+
+**Fix:** Modified `events_conflict()` to only consider it a conflict when the lid event indicates AFK (closed/suspended). When lid is open (not-afk), user AFK events from aw-watcher-afk are now preserved.
+
+**Affected file:** `src/aw_export_timewarrior/main.py`
+
+**Test:** Added `test_lid_open_does_not_remove_afk_events()` regression test in `tests/test_lid_afk.py`
 
 ---
 

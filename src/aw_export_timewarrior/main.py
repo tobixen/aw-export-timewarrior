@@ -1207,11 +1207,12 @@ class Exporter:
 
     def _resolve_event_conflicts(self, afk_events: list, priority_events: list) -> list:
         """
-        Remove or trim AFK events that conflict with higher-priority events.
+        Remove or trim AFK events that conflict with higher-priority lid events.
 
-        When a priority event (lid/suspend) indicates a different state than an AFK event
-        during the same time period, the priority event wins and the AFK event is trimmed
-        or removed.
+        Only removes/trims AFK events when the lid event indicates AFK (closed/suspended)
+        and the AFK event indicates activity (not-afk). This implements the strategy:
+        - Lid closed -> ALWAYS system-afk (overrides user activity detection)
+        - Lid open during AFK -> keep AFK state from aw-watcher-afk
 
         Args:
             afk_events: Events from aw-watcher-afk
@@ -1230,11 +1231,23 @@ class Exporter:
             return e1_start < e2_end and e2_start < e1_end
 
         def events_conflict(afk_event: dict, priority_event: dict) -> bool:
-            """Check if two events conflict (overlap and have different status)."""
+            """Check if two events conflict (overlap and have different status).
+
+            Only consider it a conflict when:
+            1. They have different status, AND
+            2. The priority event indicates AFK (lid closed/suspended)
+
+            When lid is open (not-afk), we keep the user's AFK state from aw-watcher-afk,
+            per the strategy: "Lid open during AFK -> keep AFK state from aw-watcher-afk"
+            """
             afk_status = afk_event["data"]["status"]
             priority_status = priority_event["data"]["status"]
-            # Only conflicts if they have different status
-            return afk_status != priority_status
+
+            # Only conflict if they have different status AND the priority event says afk
+            # This means:
+            # - Lid closed (afk) overrides user not-afk -> conflict, remove user event
+            # - Lid open (not-afk) does NOT override user afk -> no conflict, keep user event
+            return afk_status != priority_status and priority_status == "afk"
 
         resolved = []
         for afk_event in afk_events:
