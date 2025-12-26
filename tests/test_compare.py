@@ -468,7 +468,7 @@ class TestGenerateFixCommands:
         assert "~aw" in commands[0]
 
     def test_track_adjust_for_manual_entries(self) -> None:
-        """Test that manual entries now also use track :adjust (no special handling)."""
+        """Test that manual entries (without ~aw) generate commented commands."""
         comparison = {
             "matching": [],
             "different_tags": [
@@ -492,20 +492,24 @@ class TestGenerateFixCommands:
 
         commands = generate_fix_commands(comparison)
 
-        assert len(commands) == 1
-        # Should use track :adjust (no longer commenting out manual entries)
-        assert "timew track" in commands[0]
-        assert ":adjust" in commands[0]
-        assert "4work" in commands[0]
-        assert "meeting" in commands[0]
-        assert "~aw" in commands[0]
+        # Manual entries should generate COMMENTED commands (not executable)
+        # Format: empty line, header, commented track command, commented current tags
+        assert len(commands) == 4
+        assert commands[0] == ""
+        assert "Manually edited" in commands[1]
+        # The track command should be commented out
+        assert commands[2].startswith("# timew track")
+        assert "4work" in commands[2]
+        assert "meeting" in commands[2]
+        # Should show current tags
+        assert "(current:" in commands[3]
 
     def test_multiple_commands_mixed(self) -> None:
         """Test generating multiple track commands for different intervals."""
         comparison = {
             "matching": [],
             "different_tags": [
-                # Auto-generated (has ~aw)
+                # Auto-generated (has ~aw) - should generate executable command
                 (
                     TimewInterval(
                         id=1,
@@ -519,7 +523,7 @@ class TestGenerateFixCommands:
                         tags={"new-tag", "~aw"},
                     ),
                 ),
-                # Manual entry (no ~aw) - now treated the same as auto
+                # Manual entry (no ~aw) - should generate COMMENTED command
                 (
                     TimewInterval(
                         id=2,
@@ -546,10 +550,19 @@ class TestGenerateFixCommands:
 
         commands = generate_fix_commands(comparison)
 
-        # Now all commands are track :adjust (no retag)
-        assert len(commands) == 3
-        # All should be track commands
-        for cmd in commands:
+        # Should have:
+        # - 2 executable track commands (for ~aw interval and missing interval)
+        # - 4 lines for manual entry (empty, header, commented command, current tags)
+        executable_commands = [c for c in commands if c.strip() and not c.startswith("#")]
+        commented_commands = [c for c in commands if c.startswith("#")]
+
+        assert (
+            len(executable_commands) == 2
+        ), f"Expected 2 executable commands, got {executable_commands}"
+        assert len(commented_commands) >= 2, "Expected commented section for manual entry"
+
+        # Executable commands should be track :adjust
+        for cmd in executable_commands:
             assert "timew track" in cmd
             assert ":adjust" in cmd
 
@@ -667,3 +680,94 @@ class TestGenerateFixCommands:
         # Should NOT have any executable commands (non-empty, non-comment lines)
         executable_commands = [cmd for cmd in commands if cmd.strip() and not cmd.startswith("#")]
         assert len(executable_commands) == 0
+
+    def test_manual_entries_without_aw_tag_are_commented(self) -> None:
+        """Test that intervals without ~aw tag generate commented commands.
+
+        When a TimeWarrior interval doesn't have the ~aw tag, it means it was
+        manually edited/created. The diff command should show these intervals
+        but generate COMMENTED commands (prefixed with #) so they are not
+        automatically applied.
+
+        This is a regression test for the behavior where manually edited entries
+        should be shown but not overwritten.
+        """
+        # TimeWarrior has an interval WITHOUT ~aw (manually edited)
+        timew_intervals = [
+            TimewInterval(
+                id=1,
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                tags={"4OSS", "epoxy-calc", "not-afk"},  # No ~aw tag = manually edited
+            )
+        ]
+        # ActivityWatch suggests different tags
+        suggested_intervals = [
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                tags={"4RL", "båtvedlikehold", "epoxy", "not-afk", "~aw"},
+            )
+        ]
+
+        # Compare should detect the difference
+        result = compare_intervals(timew_intervals, suggested_intervals)
+        assert len(result["different_tags"]) == 1, "Should detect different tags"
+
+        # Generate fix commands
+        commands = generate_fix_commands(result)
+
+        # The command for the manual entry should be COMMENTED
+        # (prefixed with #) because the original interval doesn't have ~aw
+        executable_commands = [cmd for cmd in commands if cmd.strip() and not cmd.startswith("#")]
+        commented_commands = [cmd for cmd in commands if cmd.startswith("#")]
+
+        assert len(executable_commands) == 0, (
+            f"Manual entries (without ~aw) should NOT generate executable commands. "
+            f"Found: {executable_commands}"
+        )
+        assert any("timew track" in cmd or "10:00" in cmd for cmd in commented_commands), (
+            f"Should have a commented command showing what would be done. " f"Commands: {commands}"
+        )
+
+    def test_aw_tagged_entries_generate_executable_commands(self) -> None:
+        """Test that intervals WITH ~aw tag generate executable commands.
+
+        Intervals with ~aw tag were created by aw-export-timewarrior and can
+        be safely retagged when the suggested tags differ.
+        """
+        # TimeWarrior has an interval WITH ~aw (previously synced)
+        timew_intervals = [
+            TimewInterval(
+                id=1,
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                tags={"4OSS", "epoxy-calc", "not-afk", "~aw"},  # Has ~aw tag
+            )
+        ]
+        # ActivityWatch suggests different tags
+        suggested_intervals = [
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                tags={"4RL", "båtvedlikehold", "epoxy", "not-afk", "~aw"},
+            )
+        ]
+
+        # Compare should detect the difference
+        result = compare_intervals(timew_intervals, suggested_intervals)
+        assert len(result["different_tags"]) == 1, "Should detect different tags"
+
+        # Generate fix commands
+        commands = generate_fix_commands(result)
+
+        # The command should be EXECUTABLE (not commented)
+        # because the original interval has ~aw tag
+        executable_commands = [cmd for cmd in commands if cmd.strip() and not cmd.startswith("#")]
+
+        assert len(executable_commands) >= 1, (
+            f"Entries with ~aw should generate executable commands. " f"Commands: {commands}"
+        )
+        assert any(
+            "timew track" in cmd for cmd in executable_commands
+        ), f"Should have a timew track command. Commands: {commands}"

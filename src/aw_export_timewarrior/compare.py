@@ -434,16 +434,22 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
 
     # Collect all suggested intervals that need to be tracked:
     # 1. Missing intervals (gaps in TimeWarrior)
-    # 2. Intervals with different tags (extract the suggested portion)
+    # 2. Intervals with different tags WHERE the original has ~aw tag
     all_suggested = []
+    manual_entries = []  # Intervals without ~aw tag (manually edited)
 
     # Add missing intervals
     all_suggested.extend(comparison["missing"])
 
     # Add suggested portions from intervals with different tags
     # These are tuples of (timew_int, suggested_interval)
-    for _timew_int, suggested in comparison["different_tags"]:
-        all_suggested.append(suggested)
+    for timew_int, suggested in comparison["different_tags"]:
+        if "~aw" in timew_int.tags:
+            # Original was created by aw-export-timewarrior, safe to retag
+            all_suggested.append(suggested)
+        else:
+            # Original was manually edited (no ~aw tag), don't overwrite
+            manual_entries.append((timew_int, suggested))
 
     # Merge consecutive intervals with the same tags before generating commands
     merged_suggested = merge_consecutive_intervals(all_suggested)
@@ -458,6 +464,20 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         final_tags = retag_by_rules(suggested.tags, config)
         tags = " ".join(sorted(final_tags))
         commands.append(f"timew track {start_str} - {end_str} {tags} :adjust")
+
+    # Generate COMMENTED commands for manually edited entries (no ~aw tag)
+    # These are shown for reference but not executed automatically
+    if manual_entries:
+        commands.append("")
+        commands.append("# Manually edited intervals (no ~aw tag, not overwriting):")
+        for timew_int, suggested in sorted(manual_entries, key=lambda x: x[1].start):
+            start_str = suggested.start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+            end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+            final_tags = retag_by_rules(suggested.tags, config)
+            tags = " ".join(sorted(final_tags))
+            old_tags = " ".join(sorted(timew_int.tags))
+            commands.append(f"# timew track {start_str} - {end_str} {tags} :adjust")
+            commands.append(f"#   (current: {old_tags})")
 
     # NOTE: "extra" intervals (in TimeWarrior but not in ActivityWatch) are intentionally
     # not deleted to maintain continuous tracking. The :adjust flag on track commands
