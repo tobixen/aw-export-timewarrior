@@ -590,7 +590,12 @@ class Exporter:
 
             ## If the tracked time is less than the known events time we've counted
             ## then something is a little bit wrong.
-            if tags != {"afk"} and tracked_gap < self.state.stats.known_events_time:
+            ## Use small tolerance (10ms) for floating point/timestamp rounding errors
+            rounding_tolerance = timedelta(milliseconds=10)
+            if (
+                tags != {"afk"}
+                and tracked_gap + rounding_tolerance < self.state.stats.known_events_time
+            ):
                 self.breakpoint(
                     f"tracked_gap ({tracked_gap.total_seconds()}s) < known_events_time ({self.state.stats.known_events_time.total_seconds()}s) for event {event['data']}, last_known_tick={self.state.last_known_tick}, event_start={event['timestamp']}, event_end={event['timestamp'] + event['duration']}"
                 )
