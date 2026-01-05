@@ -2,6 +2,22 @@
 
 ## High Priority
 
+### Wonkyness in analyze
+
+`aw-export-timewarrior report --start '2025-12-24 00:20:26' --end '2025-12-24 00:47:30'` shows that I've spent a lot of time watching pictures, and this is UNMATCHED.  `aw-export-timewarrior analyze --start '2025-12-24 00:20:26' --end '2025-12-24 00:47:30'` shows very little, it's expected to reflect that I've been using feh
+
+### Wonkyness in the diff
+
+The output from diff, with and without `--timeline`, looks a bit wonky and should be investigated further
+
+### Report should tell what rules have been applied
+
+... and it should also give some info from the tmux watcher
+
+### Diff should apply (re)tagging rules
+
+if "bedtime" is added to the afk in the timew database, then 4BREAK should also be applied
+
 ### Recursion safety in tag rules
 Add recursion depth limit to `apply_retag_rules()` to prevent infinite loops with circular tag rules.
 

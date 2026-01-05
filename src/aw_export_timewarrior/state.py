@@ -157,7 +157,7 @@ class StateManager:
         """
         if new_state == AfkState.UNKNOWN:
             raise ValueError(
-                "Cannot transition to UNKNOWN state. " "UNKNOWN is only valid as an initial state."
+                "Cannot transition to UNKNOWN state. UNKNOWN is only valid as an initial state."
             )
 
     def update_time_bounds(

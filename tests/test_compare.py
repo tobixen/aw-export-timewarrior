@@ -556,9 +556,9 @@ class TestGenerateFixCommands:
         executable_commands = [c for c in commands if c.strip() and not c.startswith("#")]
         commented_commands = [c for c in commands if c.startswith("#")]
 
-        assert (
-            len(executable_commands) == 2
-        ), f"Expected 2 executable commands, got {executable_commands}"
+        assert len(executable_commands) == 2, (
+            f"Expected 2 executable commands, got {executable_commands}"
+        )
         assert len(commented_commands) >= 2, "Expected commented section for manual entry"
 
         # Executable commands should be track :adjust
@@ -727,7 +727,7 @@ class TestGenerateFixCommands:
             f"Found: {executable_commands}"
         )
         assert any("timew track" in cmd or "10:00" in cmd for cmd in commented_commands), (
-            f"Should have a commented command showing what would be done. " f"Commands: {commands}"
+            f"Should have a commented command showing what would be done. Commands: {commands}"
         )
 
     def test_aw_tagged_entries_generate_executable_commands(self) -> None:
@@ -766,8 +766,8 @@ class TestGenerateFixCommands:
         executable_commands = [cmd for cmd in commands if cmd.strip() and not cmd.startswith("#")]
 
         assert len(executable_commands) >= 1, (
-            f"Entries with ~aw should generate executable commands. " f"Commands: {commands}"
+            f"Entries with ~aw should generate executable commands. Commands: {commands}"
         )
-        assert any(
-            "timew track" in cmd for cmd in executable_commands
-        ), f"Should have a timew track command. Commands: {commands}"
+        assert any("timew track" in cmd for cmd in executable_commands), (
+            f"Should have a timew track command. Commands: {commands}"
+        )

@@ -425,9 +425,9 @@ class TestSyncWithRealData:
         # Should have no differences - all intervals should match
         assert len(comparison["missing"]) == 0, f"Missing intervals: {comparison['missing']}"
         assert len(comparison["extra"]) == 0, f"Extra intervals: {comparison['extra']}"
-        assert (
-            len(comparison["different_tags"]) == 0
-        ), f"Different tags: {comparison['different_tags']}"
-        assert len(comparison["matching"]) == len(
-            suggested
-        ), f"Expected {len(suggested)} matching intervals, got {len(comparison['matching'])}"
+        assert len(comparison["different_tags"]) == 0, (
+            f"Different tags: {comparison['different_tags']}"
+        )
+        assert len(comparison["matching"]) == len(suggested), (
+            f"Expected {len(suggested)} matching intervals, got {len(comparison['matching'])}"
+        )

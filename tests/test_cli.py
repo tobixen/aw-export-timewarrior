@@ -489,9 +489,9 @@ class TestDiffModeReadOnly:
         # Check that NO timew start commands were captured
         start_commands = [cmd for cmd in commands if "start" in cmd]
 
-        assert (
-            len(start_commands) == 0
-        ), f"diff mode should not execute 'timew start' commands, but got: {start_commands}"
+        assert len(start_commands) == 0, (
+            f"diff mode should not execute 'timew start' commands, but got: {start_commands}"
+        )
 
     def test_diff_with_apply_allows_execution(self) -> None:
         """Test that diff mode with --apply has apply_fix=True.
@@ -570,9 +570,9 @@ class TestContinuousModeSleep:
                 run_sync(args)
 
                 # Verify sleep was called at least once during the continuous loop
-                assert (
-                    mock_sleep.call_count >= 1
-                ), "time.sleep() should be called in continuous mode to prevent busy-waiting"
+                assert mock_sleep.call_count >= 1, (
+                    "time.sleep() should be called in continuous mode to prevent busy-waiting"
+                )
                 # Verify it's a reasonable sleep duration (0.1s)
                 mock_sleep.assert_called_with(0.1)
 

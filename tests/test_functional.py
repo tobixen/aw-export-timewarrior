@@ -119,9 +119,9 @@ class TestSyncWithRealDataHS:
 
         # The key assertion: sync should have created at least one interval
         # It will show as "previously_synced" (has ~aw tag from the sync)
-        assert (
-            len(comparison.get("previously_synced", [])) > 0
-        ), "Expected at least one synced interval in TimeWarrior (shown as 'previously_synced')"
+        assert len(comparison.get("previously_synced", [])) > 0, (
+            "Expected at least one synced interval in TimeWarrior (shown as 'previously_synced')"
+        )
 
         # Success: The test demonstrates that:
         # 1. Sync successfully processed the sample data

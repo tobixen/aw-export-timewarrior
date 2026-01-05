@@ -36,7 +36,7 @@ def show_unmatched_events_report(unmatched_events: list[dict], limit: int = 10) 
     # Calculate total unmatched time
     total_unmatched_seconds = sum((e["duration"].total_seconds() for e in unmatched_events), 0)
     print(
-        f"\nFound {len(unmatched_events)} unmatched events, {total_unmatched_seconds/60:.1f} min total:\n"
+        f"\nFound {len(unmatched_events)} unmatched events, {total_unmatched_seconds / 60:.1f} min total:\n"
     )
 
     # Group by app and title for easier analysis
@@ -60,7 +60,7 @@ def show_unmatched_events_report(unmatched_events: list[dict], limit: int = 10) 
             break
 
         events = by_app[app]
-        print(f"\n{app} ({len(events)} events, {app_total_seconds/60:.1f} min total):")
+        print(f"\n{app} ({len(events)} events, {app_total_seconds / 60:.1f} min total):")
         lines_printed += 2  # App header + blank line
 
         # Group by title and sum durations
@@ -82,7 +82,7 @@ def show_unmatched_events_report(unmatched_events: list[dict], limit: int = 10) 
         for title, duration_seconds in sorted_titles[:max_titles]:
             count = title_count[title]
             title_display = title[:60] + "..." if len(title) > 60 else title
-            print(f"  {duration_seconds/60:5.1f}min ({count:2d}x) - {title_display}")
+            print(f"  {duration_seconds / 60:5.1f}min ({count:2d}x) - {title_display}")
             lines_printed += 1
 
         # Show "long tail" summary
@@ -91,7 +91,7 @@ def show_unmatched_events_report(unmatched_events: list[dict], limit: int = 10) 
             remaining_time = sum(duration for _, duration in sorted_titles[max_titles:])
             remaining_events = sum(title_count[title] for title, _ in sorted_titles[max_titles:])
             print(
-                f"  {remaining_time/60:5.1f}min ({remaining_events:2d}x) - ... and {remaining_count} other titles"
+                f"  {remaining_time / 60:5.1f}min ({remaining_events:2d}x) - ... and {remaining_count} other titles"
             )
             lines_printed += 1
 

@@ -257,7 +257,7 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
             end_local = suggested.end.astimezone().strftime("%H:%M:%S")
             lines.append(
                 colored(
-                    f"  - {start_local} - {end_local} " f"({duration.total_seconds()/60:.1f}min)",
+                    f"  - {start_local} - {end_local} ({duration.total_seconds() / 60:.1f}min)",
                     "red",
                 )
             )
@@ -277,7 +277,7 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
             )
             lines.append(
                 colored(
-                    f"  + {start_local} - {end_local} " f"({duration.total_seconds()/60:.1f}min)",
+                    f"  + {start_local} - {end_local} ({duration.total_seconds() / 60:.1f}min)",
                     "yellow",
                 )
             )
@@ -308,7 +308,7 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
             )
             lines.append(
                 colored(
-                    f"  • {start_local} - {end_local} " f"({duration.total_seconds()/60:.1f}min)",
+                    f"  • {start_local} - {end_local} ({duration.total_seconds() / 60:.1f}min)",
                     "blue",
                 )
             )
@@ -360,7 +360,7 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
             )
             lines.append(
                 colored(
-                    f"  ✓ {start_local} - {end_local} " f"({duration.total_seconds()/60:.1f}min)",
+                    f"  ✓ {start_local} - {end_local} ({duration.total_seconds() / 60:.1f}min)",
                     "green",
                 )
             )

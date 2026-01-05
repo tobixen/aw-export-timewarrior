@@ -578,14 +578,14 @@ class Exporter:
                 if self.start_time and self.end_time:
                     # Batch/diff mode - log and continue
                     self.log(
-                        f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < min_recording_interval-3 ({self.min_recording_interval-3}s) - normal in batch/diff mode",
+                        f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < min_recording_interval-3 ({self.min_recording_interval - 3}s) - normal in batch/diff mode",
                         event=event,
                         level=logging.DEBUG,
                     )
                 else:
                     # Sync mode - this indicates a real problem
                     self.breakpoint(
-                        f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < self.min_recording_interval-3 ({self.min_recording_interval-3}s), last_start_time={self.state.last_start_time}, since={since}"
+                        f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < self.min_recording_interval-3 ({self.min_recording_interval - 3}s), last_start_time={self.state.last_start_time}, since={since}"
                     )
 
             ## If the tracked time is less than the known events time we've counted
@@ -609,7 +609,7 @@ class Exporter:
                 and not self.state.manual_tracking
             ):
                 self.log(
-                    f"Large gap ({tracked_gap.total_seconds()}s) with low known activity ({(self.state.stats.known_events_time/tracked_gap):.1%}), tagging as UNKNOWN",
+                    f"Large gap ({tracked_gap.total_seconds()}s) with low known activity ({(self.state.stats.known_events_time / tracked_gap):.1%}), tagging as UNKNOWN",
                     event=event,
                     level=logging.WARNING,
                 )
@@ -751,7 +751,7 @@ class Exporter:
                         # Start tracking for this split activity with its specific timestamp
                         split_since = split_event["timestamp"]
                         logger.info(
-                            f"  Split {i+1}/{len(split_events)}: '{message}' "
+                            f"  Split {i + 1}/{len(split_events)}: '{message}' "
                             f"at {split_since} ({split_event['duration']})"
                         )
                         self.tracker.start_tracking(split_tags, split_since)
@@ -854,9 +854,9 @@ class Exporter:
             if not self.dry_run:
                 timew_info = self.tracker.get_current_tracking()
                 if timew_info:  # Check if still active
-                    assert (
-                        set(timew_info["tags"]) == new_tags
-                    ), f"Expected {new_tags}, got {timew_info['tags']}"
+                    assert set(timew_info["tags"]) == new_tags, (
+                        f"Expected {new_tags}, got {timew_info['tags']}"
+                    )
 
         return timew_info
 
@@ -939,7 +939,7 @@ class Exporter:
             if "not-afk" in tags:
                 self._afk_change_stats("not-afk", tags, event)
                 self.log(
-                    f"You have returned to the keyboard after {(event['timestamp']-self.state.last_start_time).total_seconds()}s absence",
+                    f"You have returned to the keyboard after {(event['timestamp'] - self.state.last_start_time).total_seconds()}s absence",
                     event=event,
                 )
                 ## Some possibilities when tags != {'not-afk'}:

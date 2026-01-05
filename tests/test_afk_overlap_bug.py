@@ -108,9 +108,9 @@ def test_long_window_event_split_by_afk() -> None:
     # With the fix, we should have at least 1 non-AFK period before the AFK
     # The second git log period after AFK may or may not be tracked depending on duration
     # The key is that we should NOT have a single continuous period spanning the entire time
-    assert (
-        len(non_afk_tracking) >= 1
-    ), f"Expected at least some non-AFK tracking, got {len(non_afk_tracking)}"
+    assert len(non_afk_tracking) >= 1, (
+        f"Expected at least some non-AFK tracking, got {len(non_afk_tracking)}"
+    )
 
     # Verify that the AFK period was tracked
     assert len(afk_tracking) >= 1, f"Expected AFK tracking, got {len(afk_tracking)}"

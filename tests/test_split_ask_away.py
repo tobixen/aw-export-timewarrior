@@ -217,9 +217,9 @@ def test_split_events_with_same_split_id() -> None:
     activity1_found = any("activity1" in cmd for cmd in start_commands)
     activity2_found = any("activity2" in cmd for cmd in start_commands)
 
-    assert (
-        activity1_found and activity2_found
-    ), f"Both activities should be exported: {start_commands}"
+    assert activity1_found and activity2_found, (
+        f"Both activities should be exported: {start_commands}"
+    )
 
 
 def test_regular_and_split_events_mixed() -> None:

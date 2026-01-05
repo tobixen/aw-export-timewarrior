@@ -366,9 +366,9 @@ class TestExporterTick:
         exporter.tick()
 
         # Verify sleep was called (counter increased)
-        assert (
-            tests.conftest.sleep_counter == initial_sleep_count + 1
-        ), "tick() should call sleep when no events are found"
+        assert tests.conftest.sleep_counter == initial_sleep_count + 1, (
+            "tick() should call sleep when no events are found"
+        )
 
 
 class TestExporterLog:

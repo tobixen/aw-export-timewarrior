@@ -45,9 +45,9 @@ def test_extra_intervals_not_deleted() -> None:
     # Compare - all timew intervals should be marked as "previously_synced" (they have ~aw tag)
     comparison = compare_intervals(timew_intervals, suggested_intervals)
 
-    assert (
-        len(comparison["previously_synced"]) == 3
-    ), "All 3 intervals should be marked as previously_synced"
+    assert len(comparison["previously_synced"]) == 3, (
+        "All 3 intervals should be marked as previously_synced"
+    )
     assert len(comparison["extra"]) == 0
     assert len(comparison["matching"]) == 0
     assert len(comparison["missing"]) == 0
@@ -58,9 +58,9 @@ def test_extra_intervals_not_deleted() -> None:
 
     # Verify NO delete commands are generated
     delete_commands = [cmd for cmd in commands if cmd.startswith("timew delete")]
-    assert (
-        len(delete_commands) == 0
-    ), f"Expected 0 delete commands (previously synced intervals are ignored), got {len(delete_commands)}"
+    assert len(delete_commands) == 0, (
+        f"Expected 0 delete commands (previously synced intervals are ignored), got {len(delete_commands)}"
+    )
 
     # Verify no commands are generated for previously_synced intervals (they're already synced)
     # Previously synced intervals with ~aw tag are from previous runs and should be left alone
@@ -127,9 +127,9 @@ def test_track_adjust_for_different_tags() -> None:
     # Consecutive intervals with same tags get merged into one
     track_commands = [cmd for cmd in commands if cmd.startswith("timew track")]
 
-    assert (
-        len(track_commands) == 1
-    ), f"Expected 1 track command (consecutive intervals merged), got {len(track_commands)}"
+    assert len(track_commands) == 1, (
+        f"Expected 1 track command (consecutive intervals merged), got {len(track_commands)}"
+    )
 
     # Should have :adjust flag and cover the full range
     cmd = track_commands[0]
@@ -191,9 +191,9 @@ def test_mixed_commands_all_track_adjust() -> None:
 
     # All changes now use track :adjust
     assert len(track_cmds) == 2, f"Should have 2 track commands, got {len(track_cmds)}"
-    assert (
-        len(retag_cmds) == 0
-    ), f"Should have 0 retag commands (using track :adjust), got {len(retag_cmds)}"
+    assert len(retag_cmds) == 0, (
+        f"Should have 0 retag commands (using track :adjust), got {len(retag_cmds)}"
+    )
     assert len(delete_cmds) == 0, "Should have 0 delete commands (extra intervals preserved)"
 
     # Verify previously_synced interval (@100 with ~aw tag) doesn't generate commands

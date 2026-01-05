@@ -155,9 +155,9 @@ class TestCurrentEventDoubleCountingFix:
 
             # Full 48s should be added since timestamps don't match
             # Total should be 30s + 48s = 78s
-            assert exporter.state.stats.known_events_time == timedelta(
-                seconds=78
-            ), f"Expected 78s total, got {exporter.state.stats.known_events_time.total_seconds()}s"
+            assert exporter.state.stats.known_events_time == timedelta(seconds=78), (
+                f"Expected 78s total, got {exporter.state.stats.known_events_time.total_seconds()}s"
+            )
 
             # Current event tracking should NOT be cleared (different event)
             assert exporter.state.current_event_timestamp == other_timestamp
@@ -223,9 +223,9 @@ class TestCurrentEventDoubleCountingFix:
 
             # Nothing should be added (duration_to_add was negative, clamped to 0)
             # Total remains 50s
-            assert (
-                exporter.state.stats.known_events_time == timedelta(seconds=50)
-            ), f"Expected 50s (no change), got {exporter.state.stats.known_events_time.total_seconds()}s"
+            assert exporter.state.stats.known_events_time == timedelta(seconds=50), (
+                f"Expected 50s (no change), got {exporter.state.stats.known_events_time.total_seconds()}s"
+            )
 
             # Current event tracking should still be cleared
             assert exporter.state.current_event_timestamp is None

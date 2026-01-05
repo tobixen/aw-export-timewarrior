@@ -347,9 +347,9 @@ class TestOutputVisibility:
             # Verify subprocess.run was called with capture_output=False
             mock_run.assert_called_once()
             call_kwargs = mock_run.call_args[1]
-            assert (
-                call_kwargs["capture_output"] is False
-            ), "Output should not be captured in normal mode (capture_commands=None)"
+            assert call_kwargs["capture_output"] is False, (
+                "Output should not be captured in normal mode (capture_commands=None)"
+            )
 
     def test_output_captured_when_capture_commands_is_list(self) -> None:
         """Test that timew output is captured when capture_commands is a list."""
@@ -363,9 +363,9 @@ class TestOutputVisibility:
             # Verify subprocess.run was called with capture_output=True
             mock_run.assert_called_once()
             call_kwargs = mock_run.call_args[1]
-            assert (
-                call_kwargs["capture_output"] is True
-            ), "Output should be captured when capture_commands is a list (test mode)"
+            assert call_kwargs["capture_output"] is True, (
+                "Output should be captured when capture_commands is a list (test mode)"
+            )
             # Verify command was captured
             assert captured == [["timew", "test", "arg"]]
 

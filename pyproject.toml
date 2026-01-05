@@ -8,17 +8,17 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.13,<4.0"
 dependencies = [
-    "termcolor (>=3.1.0,<4.0.0)",
+    "termcolor>=3.1.0,<4.0.0",
     "aw-client",
     "dateparser>=1.0.0",
-    "toml>=0.10.0"
+    "toml>=0.10.0",
 ]
+
+[project.scripts]
+aw-export-timewarrior = "aw_export_timewarrior.cli:main"
 
 [tool.poetry]
 packages = [{include = "aw_export_timewarrior", from = "src"}]
-
-[tool.poetry.scripts]
-aw-export-timewarrior = "aw_export_timewarrior.cli:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
