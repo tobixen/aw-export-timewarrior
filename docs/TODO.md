@@ -2,45 +2,6 @@
 
 ## High Priority
 
-### Wonkyness in the diff
-
-The output from diff, with and without `--timeline`, looks a bit wonky and should be investigated further.
-
-Here are some examples:
-
-```
-$ aw-export-timewarrior  diff --day 2025-12-30  --timeline
-(...)
-01:17:27             4RL, 4oss-contrib, activitywatch, n...    4RL, 4oss-contrib, activitywatch, n...
-01:26:29             4BREAK, 4entertainment, digi, enter...    4BREAK, 4entertainment, digi, enter...
-01:26:50             4BREAK, 4entertainment, digi, enter...
-01:36:22             4RL, 4oss-contrib, activitywatch, n...    4RL, 4oss-contrib, activitywatch, n...
-(...)
-```
-
-What's going on between 01:26:29 and 01:36:22?
-
-```
-$ aw-export-timewarrior  diff --day 2026-01-01
-(...)
-
-  00:26:05 - 00:44:11
-    - In timew:  4RL, 4oss-contrib, not-afk, oss-contrib
-    + Suggested: 4ME, afk, social
-```
-
-I find it hard to believe that activitywatch firs considered I was working with open source software in this period and that I later have been afk and social.  A bug in the ask-away watcher perhaps?
-
-```
-  00:26:05 - 00:44:11
-    + Suggested: activitywatch
-  00:26:05 - 00:44:11
-    - In timew:  4RL, 4oss-contrib, not-afk, oss-contrib
-    + Suggested: 4ME, afk, social
-```
-
-What's this?
-
 ### Report should tell what rules have been applied
 
 ... and it should also give some info from the tmux watcher
@@ -119,6 +80,42 @@ See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementati
 ---
 
 ## Completed
+
+### Fixed: oss-contrib over-tagging (Jan 5, 2026)
+
+**Problem:** Almost everything was being tagged with `oss-contrib` and `activitywatch` even when working on unrelated projects.
+
+**Root cause:** Config bug in `[rules.app.claude-activitywatch]` - the `title_regexp` ended with a trailing `|` creating an empty alternative that matched ANY string:
+```
+title_regexp = "...Timewarrior diff command|"
+                                          ^ trailing pipe!
+```
+
+**Fix:** Removed the trailing `|` from the regex in the user's config file.
+
+**Lesson:** The "Report should tell what rules have been applied" TODO item would have made this much easier to debug.
+
+---
+
+### Fixed: Wonkyness in the diff output (Jan 5, 2026)
+
+**Problems:**
+1. Timeline showed empty AW column when AW activity was continuing from a previous row
+2. Diff showed duplicate entries when a timew interval overlapped with multiple AW suggestions
+3. Diff combined all suggested tags when timew interval spanned multiple AW intervals with different tags, making it look like contradictory tags (e.g., both `not-afk` and `afk`)
+4. Diff wasn't showing the current timew tags, only the difference
+
+**Fixes:**
+1. Added "(continuing)" indicator in timeline when AW activity continues but has no boundary
+2. Grouped diff output by timew interval to avoid duplicates
+3. When a timew interval spans multiple AW suggestions with different tags, now shows each sub-interval separately with its time range
+4. Always show current timew tags in diff output (excluding internal `~aw` tags)
+
+**Investigation:** The 00:26:05 - 00:44:11 discrepancy was correct data - AFK watcher showed `not-afk` until 23:44:11 UTC, while ask-away watcher recorded "4ME social" at 23:42:10 UTC. The old diff combined both, making it look contradictory.
+
+**Affected file:** `src/aw_export_timewarrior/compare.py`
+
+---
 
 ### Fixed: Analyze not showing rapid activity in same app (Jan 5, 2026)
 
