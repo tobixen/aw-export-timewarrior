@@ -1006,16 +1006,8 @@ class Exporter:
         """
         # First, always determine what tags the event would have
         # (we need this before deciding whether to ignore)
-        tags = False
-        for method in (
-            self.tag_extractor.get_afk_tags,
-            self.tag_extractor.get_app_tags,
-            self.tag_extractor.get_browser_tags,
-            self.tag_extractor.get_editor_tags,
-        ):
-            tags = method(event)
-            if tags is not False:
-                break
+        # Use tag_extractor.get_tags() to ensure single source of truth for tag extraction
+        tags = self.tag_extractor.get_tags(event)
 
         is_short = event["duration"].total_seconds() < self.ignore_interval
 
