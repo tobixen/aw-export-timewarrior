@@ -153,8 +153,9 @@ class TagExtractor:
             return False
 
         # Get corresponding tmux event (handles picking the longest if multiple)
+        # Use fallback_to_recent since tmux state persists between recorded events
         tmux_event = self.event_fetcher.get_corresponding_event(
-            window_event, tmux_bucket, ignorable=True
+            window_event, tmux_bucket, ignorable=True, fallback_to_recent=True
         )
 
         if not tmux_event:
@@ -566,7 +567,9 @@ class TagExtractor:
         if not tmux_bucket:
             return None
 
-        return self.event_fetcher.get_corresponding_event(window_event, tmux_bucket, ignorable=True)
+        return self.event_fetcher.get_corresponding_event(
+            window_event, tmux_bucket, ignorable=True, fallback_to_recent=True
+        )
 
     def get_specialized_context(self, window_event: dict) -> dict[str, str | None]:
         """Get specialized context data for a window event (URL, path, tmux info).

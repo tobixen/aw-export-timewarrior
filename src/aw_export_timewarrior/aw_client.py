@@ -169,18 +169,25 @@ class EventFetcher:
         return event_objs
 
     def get_corresponding_event(
-        self, window_event: dict, bucket_id: str, ignorable: bool = False, retry: int = 6
+        self,
+        window_event: dict,
+        bucket_id: str,
+        ignorable: bool = False,
+        retry: int = 6,
+        fallback_to_recent: bool = False,
     ) -> dict | None:
-        """Find corresponding sub-event (browser URL, editor file).
+        """Find corresponding sub-event (browser URL, editor file, tmux).
 
-        This matches specialized watcher events (browser, editor) to window events.
+        This matches specialized watcher events (browser, editor, tmux) to window events.
         Includes retry logic for events that may not have propagated to AW yet.
 
         Args:
             window_event: Main window event
-            bucket_id: Sub-event bucket (browser/editor)
+            bucket_id: Sub-event bucket (browser/editor/tmux)
             ignorable: Whether to ignore timing mismatches and missing events
             retry: Number of retry attempts if event not found
+            fallback_to_recent: If True and no overlapping event found, use the most
+                recent event before the window event. Useful for tmux where state persists.
 
         Returns:
             Corresponding event or None
@@ -217,6 +224,22 @@ class EventFetcher:
                 + window_event["duration"]
                 + timedelta(seconds=EVENT_MATCHING_BUFFER_SECONDS),
             )
+
+        # Fallback: use most recent event before the window event
+        # Useful for tmux where state persists between recorded events
+        if not ret and fallback_to_recent:
+            # Look for events in a reasonable window before the window event
+            # Use 10 minutes as the max lookback - state older than that is likely stale
+            lookback = timedelta(minutes=10)
+            recent_events = self.get_events(
+                bucket_id,
+                start=window_event["timestamp"] - lookback,
+                end=window_event["timestamp"],
+            )
+            if recent_events:
+                # Sort by timestamp (most recent first) and return the most recent
+                recent_events.sort(key=lambda x: x["timestamp"], reverse=True)
+                ret = [recent_events[0]]
 
         # Log if nothing found (unless ignorable or very short event)
         if not ret:
