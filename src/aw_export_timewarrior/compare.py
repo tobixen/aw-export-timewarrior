@@ -320,10 +320,20 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
                 )
             )
 
-    # Different tags
+    # Different tags - group by timew interval to avoid duplicates
     if comparison["different_tags"]:
         lines.append(f"\n{colored('Intervals with different tags:', 'cyan', attrs=['bold'])}")
+
+        # Group by timew interval (same start/end)
+        from collections import defaultdict
+
+        grouped: dict[tuple, list] = defaultdict(list)
         for timew_int, suggested in comparison["different_tags"]:
+            key = (timew_int.start, timew_int.end, frozenset(timew_int.tags))
+            grouped[key].append((timew_int, suggested))
+
+        for _key, entries in grouped.items():
+            timew_int = entries[0][0]  # All have same timew_int
             # Convert to local time for display
             start_local = timew_int.start.astimezone().strftime("%H:%M:%S")
             end_local = (
@@ -331,13 +341,16 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
             )
             lines.append(f"  {start_local} - {end_local}")
 
+            # Collect all suggested tags from overlapping intervals
+            all_suggested_tags: set = set()
+            for _, suggested in entries:
+                all_suggested_tags.update(suggested.tags)
+
             # Show tag differences
             timew_tags = timew_int.tags
-            suggested_tags = suggested.tags
-
-            only_in_timew = timew_tags - suggested_tags
-            only_in_suggested = suggested_tags - timew_tags
-            common = timew_tags & suggested_tags
+            only_in_timew = timew_tags - all_suggested_tags
+            only_in_suggested = all_suggested_tags - timew_tags
+            common = timew_tags & all_suggested_tags
 
             if common and verbose:
                 lines.append(colored(f"    Common:    {', '.join(sorted(common))}", "white"))
