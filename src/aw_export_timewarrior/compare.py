@@ -523,9 +523,12 @@ def format_timeline(
     start_local = start_time.astimezone()
     end_local = end_time.astimezone()
 
-    lines.append(
-        f"Time range: {start_local.strftime('%Y-%m-%d %H:%M:%S')} - {end_local.strftime('%H:%M:%S')}"
-    )
+    # Show full date for end time if it's a different day
+    if start_local.date() == end_local.date():
+        end_str = end_local.strftime("%H:%M:%S")
+    else:
+        end_str = end_local.strftime("%Y-%m-%d %H:%M:%S")
+    lines.append(f"Time range: {start_local.strftime('%Y-%m-%d %H:%M:%S')} - {end_str}")
     lines.append("")
 
     # Collect all time points from timew intervals (include those starting before start_time)

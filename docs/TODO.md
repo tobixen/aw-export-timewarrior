@@ -4,7 +4,21 @@
 
 ### Wonkyness in the diff
 
-The output from diff, with and without `--timeline`, looks a bit wonky and should be investigated further
+The output from diff, with and without `--timeline`, looks a bit wonky and should be investigated further.
+
+Here are some examples:
+
+```
+$ aw-export-timewarrior  diff --day 2025-12-30  --timeline
+(...)
+01:17:27             4RL, 4oss-contrib, activitywatch, n...    4RL, 4oss-contrib, activitywatch, n...
+01:26:29             4BREAK, 4entertainment, digi, enter...    4BREAK, 4entertainment, digi, enter...
+01:26:50             4BREAK, 4entertainment, digi, enter...
+01:36:22             4RL, 4oss-contrib, activitywatch, n...    4RL, 4oss-contrib, activitywatch, n...
+(...)
+```
+
+What's going on between 01:26:29 and 01:36:22?
 
 ### Report should tell what rules have been applied
 
