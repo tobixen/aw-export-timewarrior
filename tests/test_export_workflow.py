@@ -177,7 +177,8 @@ class TestTimewRetag:
         assert "4work" in call_args
         assert "programming" in call_args
 
-        return result
+        # Verify result matches expected retagged info
+        assert result == retagged_info
 
     @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
     @patch("aw_export_timewarrior.main.timew_run")
