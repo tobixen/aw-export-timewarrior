@@ -2,10 +2,6 @@
 
 ## High Priority
 
-### Wonkyness in analyze
-
-`aw-export-timewarrior report --start '2025-12-24 00:20:26' --end '2025-12-24 00:47:30'` shows that I've spent a lot of time watching pictures, and this is UNMATCHED.  `aw-export-timewarrior analyze --start '2025-12-24 00:20:26' --end '2025-12-24 00:47:30'` shows very little, it's expected to reflect that I've been using feh
-
 ### Wonkyness in the diff
 
 The output from diff, with and without `--timeline`, looks a bit wonky and should be investigated further
@@ -88,6 +84,25 @@ See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementati
 ---
 
 ## Completed
+
+### Fixed: Analyze not showing rapid activity in same app (Jan 5, 2026)
+
+**Problem:** `analyze` command showed very little when `report` showed significant feh (image viewer) activity. Rapidly flipping through photos created many <3s events that were all ignored.
+
+**Root cause:** The `ignore_interval` (3s) filter was applied before checking rules. Short events were discarded as "window-switching noise" even when they represented legitimate activity (same app, rapid title changes).
+
+**Fix:** Modified `find_tags_from_event()` to:
+1. First determine tags before checking duration
+2. Track consecutive short events by (app, tags) context
+3. Only ignore if wall-clock time in same context < `ignore_interval`
+
+This preserves the original intent (filter brief window switches) while recognizing sustained activity with rapid updates.
+
+**Affected file:** `src/aw_export_timewarrior/main.py`
+
+**Test:** Added `tests/test_short_event_accumulation.py` with 5 regression tests
+
+---
 
 ### Fixed: Transport block ignoring active window usage (Dec 20, 2025)
 

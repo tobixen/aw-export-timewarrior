@@ -167,6 +167,18 @@ class Exporter:
         default_factory=dict, init=False, repr=False
     )  # Maps (timestamp, duration) to ask-away messages
 
+    # Short event accumulation tracking - prevents ignoring rapid activity in same app/rule
+    # Example: flipping through photos in feh creates many <3s events, but total time is significant
+    _short_event_context: tuple | None = field(
+        default=None, init=False, repr=False
+    )  # (app, frozenset(tags) or None)
+    _short_event_first_time: datetime | None = field(
+        default=None, init=False, repr=False
+    )  # Timestamp of first short event in current sequence
+    _short_event_accumulated: timedelta = field(
+        default_factory=timedelta, init=False, repr=False
+    )  # Accumulated duration of short events in current sequence
+
     def __post_init__(self):
         if not self.config:
             self.config = load_config(self.config_path)
@@ -979,16 +991,21 @@ class Exporter:
 
         Returns:
             TagResult with:
-            - IGNORED if event too short
+            - IGNORED if event too short (unless accumulated time in same context is significant)
             - NO_MATCH if event processed but no tags found
             - MATCHED if tags were extracted
-        """
-        if event["duration"].total_seconds() < self.ignore_interval:
-            return TagResult(
-                result=EventMatchResult.IGNORED, reason="Event duration below ignore_interval"
-            )
 
-        # Delegate to TagExtractor for all tag matching logic
+        Short event handling:
+            Brief window switches while searching for the right window are ignored.
+            However, staying in one app with rapid title changes (e.g., flipping through
+            photos in feh) should NOT be ignored - that's legitimate activity.
+
+            We track consecutive short events by (app, tags) context. If the wall-clock
+            time span of these events exceeds ignore_interval, we treat them as significant.
+        """
+        # First, always determine what tags the event would have
+        # (we need this before deciding whether to ignore)
+        tags = False
         for method in (
             self.tag_extractor.get_afk_tags,
             self.tag_extractor.get_app_tags,
@@ -999,6 +1016,46 @@ class Exporter:
             if tags is not False:
                 break
 
+        is_short = event["duration"].total_seconds() < self.ignore_interval
+
+        if is_short:
+            # Build context key: (app, frozenset of tags or None if unmatched)
+            app = event["data"].get("app", "unknown")
+            tags_key = frozenset(tags) if tags and tags is not False else None
+            current_context = (app, tags_key)
+            event_time = event["timestamp"]
+            event_end = event_time + event["duration"]
+
+            if current_context == self._short_event_context:
+                # Continue in same context - accumulate
+                self._short_event_accumulated += event["duration"]
+            else:
+                # New context - reset tracking
+                self._short_event_context = current_context
+                self._short_event_first_time = event_time
+                self._short_event_accumulated = event["duration"]
+
+            # Check wall-clock time: from first short event to this event's end
+            wall_clock_elapsed = (event_end - self._short_event_first_time).total_seconds()
+
+            if wall_clock_elapsed >= self.ignore_interval:
+                # Significant wall-clock time in same context - don't ignore
+                # Reset tracking after recognizing significant activity
+                self._short_event_context = None
+                self._short_event_first_time = None
+                self._short_event_accumulated = timedelta(0)
+                # Fall through to normal tag handling below
+            else:
+                return TagResult(
+                    result=EventMatchResult.IGNORED, reason="Event duration below ignore_interval"
+                )
+        else:
+            # Non-short event resets tracking
+            self._short_event_context = None
+            self._short_event_first_time = None
+            self._short_event_accumulated = timedelta(0)
+
+        # Normal tag result handling
         if tags is False:
             return TagResult(result=EventMatchResult.NO_MATCH, reason="No tag rules matched")
 
