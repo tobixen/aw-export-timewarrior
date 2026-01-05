@@ -203,10 +203,17 @@ class TagExtractor:
                 "$path": pane_path,
             }
 
-            # Add capture groups from command or path matches
-            # Prioritize command match over path match for capture groups
-            active_match = command_match or path_match
-            substitutions.update(self._extract_capture_groups(active_match))
+            # Add capture groups from both command and path matches
+            # Command groups get $1, $2, etc. first, then path groups continue the numbering
+            # This allows rules like: command="git (push|pull)", path="/projects/([^/]+)"
+            # with timew_tags=["$1", "$2"] where $1=push, $2=project_name
+            cmd_groups = command_match.groups() if command_match else ()
+            path_groups = path_match.groups() if path_match else ()
+
+            for i, group in enumerate(cmd_groups, start=1):
+                substitutions[f"${i}"] = group
+            for i, group in enumerate(path_groups, start=len(cmd_groups) + 1):
+                substitutions[f"${i}"] = group
 
             return self._build_tags(rule["timew_tags"], substitutions)
 
