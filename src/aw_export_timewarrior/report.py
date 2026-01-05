@@ -18,12 +18,19 @@ if TYPE_CHECKING:
     from .main import Exporter
 
 
-def show_unmatched_events_report(unmatched_events: list[dict], limit: int = 10) -> None:
+def show_unmatched_events_report(
+    unmatched_events: list[dict],
+    limit: int = 10,
+    verbose: bool = False,
+    exporter: "Exporter | None" = None,
+) -> None:
     """Display a report of events that didn't match any rules.
 
     Args:
         unmatched_events: List of event dictionaries that didn't match any rules
         limit: Maximum number of output lines to show (default: 10)
+        verbose: If True, show additional context (URLs, paths, tmux info)
+        exporter: Exporter instance for fetching sub-events (required for verbose)
     """
     if not unmatched_events:
         print("\nNo unmatched events found - all events matched configuration rules.")
@@ -66,10 +73,13 @@ def show_unmatched_events_report(unmatched_events: list[dict], limit: int = 10) 
         # Group by title and sum durations
         title_durations: dict[str, float] = defaultdict(float)
         title_count: dict[str, int] = defaultdict(int)
+        title_events: dict[str, list] = defaultdict(list)  # For verbose mode
         for event in events:
             title = event["data"].get("title", "(no title)")
             title_durations[title] += event["duration"].total_seconds()
             title_count[title] += 1
+            if verbose:
+                title_events[title].append(event)
 
         # Sort titles by duration (descending) and show top titles
         sorted_titles = sorted(title_durations.items(), key=lambda x: x[1], reverse=True)
@@ -84,6 +94,21 @@ def show_unmatched_events_report(unmatched_events: list[dict], limit: int = 10) 
             title_display = title[:60] + "..." if len(title) > 60 else title
             print(f"  {duration_seconds / 60:5.1f}min ({count:2d}x) - {title_display}")
             lines_printed += 1
+
+            # In verbose mode, show specialized data for this title's events
+            if verbose and exporter:
+                specialized_seen: set[str] = set()
+                for event in title_events[title][:3]:  # Limit to 3 examples per title
+                    spec_data = exporter.tag_extractor.get_specialized_context(event)
+                    if spec_data["data"]:
+                        data_str = spec_data["data"]
+                        if data_str not in specialized_seen:
+                            specialized_seen.add(data_str)
+                            # Truncate long data
+                            if len(data_str) > 70:
+                                data_str = data_str[:67] + "..."
+                            print(f"         └─ {spec_data['type']}: {data_str}")
+                            lines_printed += 1
 
         # Show "long tail" summary
         if len(sorted_titles) > max_titles:
@@ -178,6 +203,35 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
                     # Skip internal pages (same check as in get_browser_tags())
                     if url and url not in ("chrome://newtab/", "about:newtab"):
                         result["specialized_data"] = url
+        except Exception:
+            pass
+
+    # Check for terminal apps that might have tmux data
+    elif app in exporter.config.get("terminal_apps", []):
+        result["specialized_type"] = "terminal"
+        try:
+            tmux_bucket = exporter.event_fetcher.get_tmux_bucket()
+            if tmux_bucket:
+                sub_event = exporter.event_fetcher.get_corresponding_event(
+                    window_event, tmux_bucket
+                )
+                if sub_event:
+                    # Build tmux info string
+                    cmd = sub_event["data"].get("pane_current_command", "")
+                    path = sub_event["data"].get("pane_current_path", "")
+                    pane_title = sub_event["data"].get("pane_title", "")
+                    if cmd or path:
+                        parts = []
+                        if cmd:
+                            parts.append(f"cmd:{cmd}")
+                        if path:
+                            # Shorten home directory
+                            if path.startswith("/home/"):
+                                path = "~/" + "/".join(path.split("/")[3:])
+                            parts.append(f"path:{path}")
+                        if pane_title and pane_title not in (cmd, path):
+                            parts.append(f"title:{pane_title}")
+                        result["specialized_data"] = " | ".join(parts)
         except Exception:
             pass
 

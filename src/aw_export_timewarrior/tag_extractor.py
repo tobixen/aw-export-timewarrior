@@ -291,6 +291,56 @@ class TagExtractor:
             ],
         )
 
+    def _fetch_sub_event(
+        self,
+        window_event: dict,
+        apps: tuple,
+        bucket_pattern: str,
+        app_normalizer: Callable | None = None,
+        skip_if: Callable | None = None,
+    ) -> tuple[dict | None, str]:
+        """Fetch sub-event for a window event (browser, editor, etc).
+
+        Args:
+            window_event: The main window event
+            apps: Tuple of app names to match
+            bucket_pattern: Pattern for bucket ID (e.g., 'aw-watcher-{app}')
+            app_normalizer: Optional function to normalize app name
+            skip_if: Optional function that returns True if we should skip this sub_event
+
+        Returns:
+            Tuple of (sub_event or None, event_type string)
+        """
+        app = window_event["data"].get("app", "").lower()
+        if app not in apps:
+            return None, ""
+
+        # Normalize app name if needed
+        app_normalized = app_normalizer(app) if app_normalizer else app
+
+        # Get the bucket ID
+        bucket_key = bucket_pattern.format(app=app_normalized)
+        if bucket_key not in self.event_fetcher.bucket_short:
+            return None, ""
+        bucket_id = self.event_fetcher.bucket_short[bucket_key]["id"]
+
+        # Determine if we should ignore certain events (e.g., emacs buffers)
+        ignorable = self._is_ignorable_event(app, window_event)
+
+        # Get the corresponding sub-event
+        sub_event = self.event_fetcher.get_corresponding_event(
+            window_event, bucket_id, ignorable=ignorable
+        )
+
+        if not sub_event:
+            return None, ""
+
+        # Check if we should skip this sub-event
+        if skip_if and skip_if(sub_event):
+            return None, ""
+
+        return sub_event, app
+
     def _get_subevent_tags(
         self,
         window_event: dict,
@@ -319,27 +369,11 @@ class TagExtractor:
         if window_event["data"].get("app", "").lower() not in apps:
             return False
 
-        app = window_event["data"]["app"].lower()
-
-        # Normalize app name if needed
-        app_normalized = app_normalizer(app) if app_normalizer else app
-
-        # Get the bucket ID
-        bucket_id = self.event_fetcher.bucket_short[bucket_pattern.format(app=app_normalized)]["id"]
-
-        # Determine if we should ignore certain events (e.g., emacs buffers)
-        ignorable = self._is_ignorable_event(app, window_event)
-
-        # Get the corresponding sub-event
-        sub_event = self.event_fetcher.get_corresponding_event(
-            window_event, bucket_id, ignorable=ignorable
+        sub_event, _ = self._fetch_sub_event(
+            window_event, apps, bucket_pattern, app_normalizer, skip_if
         )
 
         if not sub_event:
-            return []
-
-        # Check if we should skip this sub-event
-        if skip_if and skip_if(sub_event):
             return []
 
         # Try each matcher in order
@@ -501,6 +535,105 @@ class TagExtractor:
         tags.add("not-afk")
 
         return tags
+
+    def _fetch_tmux_sub_event(self, window_event: dict) -> dict | None:
+        """Fetch tmux sub-event for a terminal window.
+
+        Uses the same logic as get_tmux_tags() for fetching.
+
+        Args:
+            window_event: The window event
+
+        Returns:
+            The tmux sub-event, or None if not found/not applicable
+        """
+        terminal_apps = self.terminal_apps or {
+            "foot",
+            "kitty",
+            "alacritty",
+            "terminator",
+            "gnome-terminal",
+            "konsole",
+            "xterm",
+            "urxvt",
+            "st",
+        }
+        app = window_event["data"].get("app", "").lower()
+        if app not in terminal_apps:
+            return None
+
+        tmux_bucket = self.event_fetcher.get_tmux_bucket()
+        if not tmux_bucket:
+            return None
+
+        return self.event_fetcher.get_corresponding_event(window_event, tmux_bucket, ignorable=True)
+
+    def get_specialized_context(self, window_event: dict) -> dict[str, str | None]:
+        """Get specialized context data for a window event (URL, path, tmux info).
+
+        Uses the same code paths as the tag extraction methods to ensure consistency.
+
+        Args:
+            window_event: The window event
+
+        Returns:
+            Dict with keys: type (browser/editor/terminal/None), data (the context string)
+        """
+        result: dict[str, str | None] = {"type": None, "data": None}
+
+        # Try browser - same parameters as get_browser_tags()
+        sub_event, _ = self._fetch_sub_event(
+            window_event,
+            apps=("chromium", "chrome", "firefox"),
+            bucket_pattern="aw-watcher-web-{app}",
+            app_normalizer=lambda app: "chrome" if app == "chromium" else app,
+            skip_if=lambda e: e["data"].get("url") in ("chrome://newtab/", "about:newtab"),
+        )
+        if sub_event:
+            url = sub_event["data"].get("url", "")
+            if url:
+                result["type"] = "browser"
+                result["data"] = url
+            return result
+
+        # Try editor - same parameters as get_editor_tags()
+        sub_event, _ = self._fetch_sub_event(
+            window_event,
+            apps=("emacs", "vi", "vim"),
+            bucket_pattern="aw-watcher-{app}",
+        )
+        if sub_event:
+            file_path = sub_event["data"].get("file", "")
+            project = sub_event["data"].get("project", "")
+            if file_path:
+                result["type"] = "editor"
+                result["data"] = file_path
+            elif project:
+                result["type"] = "editor"
+                result["data"] = f"project:{project}"
+            return result
+
+        # Try tmux - same logic as get_tmux_tags()
+        sub_event = self._fetch_tmux_sub_event(window_event)
+        if sub_event:
+            cmd = sub_event["data"].get("pane_current_command", "")
+            path = sub_event["data"].get("pane_current_path", "")
+            pane_title = sub_event["data"].get("pane_title", "")
+            if cmd or path:
+                parts = []
+                if cmd:
+                    parts.append(f"cmd:{cmd}")
+                if path:
+                    # Shorten home directory
+                    if path.startswith("/home/"):
+                        path = "~/" + "/".join(path.split("/")[3:])
+                    parts.append(f"path:{path}")
+                if pane_title and pane_title not in (cmd, path):
+                    parts.append(f"title:{pane_title}")
+                result["type"] = "terminal"
+                result["data"] = " | ".join(parts)
+
+        return result
 
     def apply_retag_rules(self, source_tags: set[str]) -> set[str]:
         """Apply retagging rules to transform tags.

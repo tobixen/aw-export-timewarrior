@@ -489,15 +489,16 @@ class Exporter:
 
         return comparison
 
-    def show_unmatched_events_report(self, limit: int = 10) -> None:
+    def show_unmatched_events_report(self, limit: int = 10, verbose: bool = False) -> None:
         """Display a report of events that didn't match any rules.
 
         Args:
             limit: Maximum number of output lines to show (default: 10)
+            verbose: If True, show additional context (URLs, paths, tmux info)
         """
         from .report import show_unmatched_events_report as _show_report
 
-        _show_report(self.unmatched_events, limit=limit)
+        _show_report(self.unmatched_events, limit=limit, verbose=verbose, exporter=self)
 
     def set_known_tick_stats(
         self,

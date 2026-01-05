@@ -622,7 +622,7 @@ def run_analyze(args: argparse.Namespace) -> int:
     exporter.tick(process_all=True)
 
     # Show unmatched events report with limit
-    exporter.show_unmatched_events_report(limit=args.limit)
+    exporter.show_unmatched_events_report(limit=args.limit, verbose=args.verbose)
 
     return 0
 

@@ -67,16 +67,16 @@ def test_extract_specialized_data_browser(exporter_with_test_data: Exporter) -> 
 
 
 def test_extract_specialized_data_non_browser(exporter_with_test_data: Exporter) -> None:
-    """Test that non-browser/editor apps return no specialized data."""
+    """Test that non-browser/editor/terminal apps return no specialized data."""
     window_event = {
         "timestamp": datetime(2025, 12, 11, 9, 0, 1, tzinfo=UTC),
         "duration": pytest.approx(0.0),
-        "data": {"app": "foot", "title": "ssh server1.example.com"},
+        "data": {"app": "feh", "title": "photo.jpg"},
     }
 
     result = extract_specialized_data(exporter_with_test_data, window_event)
 
-    assert result["app"] == "foot"
+    assert result["app"] == "feh"
     assert result["specialized_type"] is None
     assert result["specialized_data"] is None
 
