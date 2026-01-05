@@ -334,6 +334,9 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
 
         for _key, entries in grouped.items():
             timew_int = entries[0][0]  # All have same timew_int
+            timew_tags = timew_int.tags
+            display_timew_tags = {t for t in timew_tags if not t.startswith("~")}
+
             # Convert to local time for display
             start_local = timew_int.start.astimezone().strftime("%H:%M:%S")
             end_local = (
@@ -341,25 +344,21 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
             )
             lines.append(f"  {start_local} - {end_local}")
 
-            # Collect all suggested tags from overlapping intervals
-            all_suggested_tags: set = set()
-            for _, suggested in entries:
-                all_suggested_tags.update(suggested.tags)
-
-            # Show tag differences
-            timew_tags = timew_int.tags
-            only_in_suggested = all_suggested_tags - timew_tags
-
-            # Always show what's in timew (excluding internal tags like ~aw)
-            # This helps users understand what needs to change
-            display_timew_tags = {t for t in timew_tags if not t.startswith("~")}
-
             if display_timew_tags:
                 lines.append(
                     colored(f"    - In timew:  {', '.join(sorted(display_timew_tags))}", "red")
                 )
-            if only_in_suggested:
-                # Show only the tags that are different (not in timew)
+
+            # Sort suggested intervals by start time
+            sorted_entries = sorted(entries, key=lambda x: x[1].start)
+
+            # Check if all suggested intervals have the same tags
+            all_same_tags = len({frozenset(s.tags) for _, s in sorted_entries}) == 1
+
+            if all_same_tags:
+                # All sub-intervals have the same tags - show once
+                suggested = sorted_entries[0][1]
+                only_in_suggested = suggested.tags - timew_tags
                 display_only_suggested = {t for t in only_in_suggested if not t.startswith("~")}
                 if display_only_suggested:
                     lines.append(
@@ -367,6 +366,19 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
                             f"    + Suggested: {', '.join(sorted(display_only_suggested))}", "green"
                         )
                     )
+            else:
+                # Multiple sub-intervals with different tags - show each separately
+                for _, suggested in sorted_entries:
+                    sub_start = suggested.start.astimezone().strftime("%H:%M:%S")
+                    sub_end = suggested.end.astimezone().strftime("%H:%M:%S")
+                    display_suggested = {t for t in suggested.tags if not t.startswith("~")}
+                    if display_suggested:
+                        lines.append(
+                            colored(
+                                f"    + {sub_start}-{sub_end}: {', '.join(sorted(display_suggested))}",
+                                "green",
+                            )
+                        )
 
     # Matching intervals (if verbose)
     if verbose and comparison["matching"]:
