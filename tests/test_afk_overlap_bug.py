@@ -49,12 +49,28 @@ def test_long_window_event_split_by_afk() -> None:
     # Import here to avoid circular dependency
     from aw_export_timewarrior.main import Exporter
 
-    # Create exporter with test data
+    # Config with a rule for foot terminal - required for events to be tracked
+    config = {
+        "rules": {
+            "app": {
+                "terminal": {
+                    "app_names": ["foot"],
+                    "timew_tags": ["terminal", "4work"],
+                }
+            }
+        },
+        "exclusive": {},
+        "tags": {},
+        "terminal_apps": ["foot"],
+    }
+
+    # Create exporter with test data and config
     exporter = Exporter(
         dry_run=True,
         test_data=test_data,
         start_time=start_time,
         end_time=start_time + timedelta(seconds=7020),  # 1h57m
+        config=config,
     )
 
     # Capture commands
