@@ -20,6 +20,27 @@ $ aw-export-timewarrior  diff --day 2025-12-30  --timeline
 
 What's going on between 01:26:29 and 01:36:22?
 
+```
+$ aw-export-timewarrior  diff --day 2026-01-01
+(...)
+
+  00:26:05 - 00:44:11
+    - In timew:  4RL, 4oss-contrib, not-afk, oss-contrib
+    + Suggested: 4ME, afk, social
+```
+
+I find it hard to believe that activitywatch firs considered I was working with open source software in this period and that I later have been afk and social.  A bug in the ask-away watcher perhaps?
+
+```
+  00:26:05 - 00:44:11
+    + Suggested: activitywatch
+  00:26:05 - 00:44:11
+    - In timew:  4RL, 4oss-contrib, not-afk, oss-contrib
+    + Suggested: 4ME, afk, social
+```
+
+What's this?
+
 ### Report should tell what rules have been applied
 
 ... and it should also give some info from the tmux watcher

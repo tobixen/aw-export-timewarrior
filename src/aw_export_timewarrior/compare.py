@@ -348,18 +348,25 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
 
             # Show tag differences
             timew_tags = timew_int.tags
-            only_in_timew = timew_tags - all_suggested_tags
             only_in_suggested = all_suggested_tags - timew_tags
-            common = timew_tags & all_suggested_tags
 
-            if common and verbose:
-                lines.append(colored(f"    Common:    {', '.join(sorted(common))}", "white"))
-            if only_in_timew:
-                lines.append(colored(f"    - In timew:  {', '.join(sorted(only_in_timew))}", "red"))
-            if only_in_suggested:
+            # Always show what's in timew (excluding internal tags like ~aw)
+            # This helps users understand what needs to change
+            display_timew_tags = {t for t in timew_tags if not t.startswith("~")}
+
+            if display_timew_tags:
                 lines.append(
-                    colored(f"    + Suggested: {', '.join(sorted(only_in_suggested))}", "green")
+                    colored(f"    - In timew:  {', '.join(sorted(display_timew_tags))}", "red")
                 )
+            if only_in_suggested:
+                # Show only the tags that are different (not in timew)
+                display_only_suggested = {t for t in only_in_suggested if not t.startswith("~")}
+                if display_only_suggested:
+                    lines.append(
+                        colored(
+                            f"    + Suggested: {', '.join(sorted(display_only_suggested))}", "green"
+                        )
+                    )
 
     # Matching intervals (if verbose)
     if verbose and comparison["matching"]:
@@ -640,8 +647,14 @@ def format_timeline(
                 if len(suggested_str) > 38:
                     suggested_str = suggested_str[:35] + "..."
             else:
-                # Continuing from previous time point - show blank
-                suggested_str = ""
+                # Continuing from previous time point
+                # Show "(continuing)" if timew has a new interval starting here
+                # to make it clear that AW activity exists but doesn't have a boundary here
+                any_timew_starts_here = any(iv.start == time_point for iv in timew_active)
+                if any_timew_starts_here:
+                    suggested_str = colored("(continuing)", "white", attrs=["dark"])
+                else:
+                    suggested_str = ""
         else:
             suggested_str = colored("(no activity)", "yellow")
 
