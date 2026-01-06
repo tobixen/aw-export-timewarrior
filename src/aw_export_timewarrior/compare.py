@@ -659,12 +659,23 @@ def format_timeline(
                 if len(suggested_str) > 38:
                     suggested_str = suggested_str[:35] + "..."
             else:
-                # Continuing from previous time point
-                # Show "(continuing)" if timew has a new interval starting here
-                # to make it clear that AW activity exists but doesn't have a boundary here
+                # AW interval continuing from previous time point
+                # Check if timew has a new interval starting here with different tags
                 any_timew_starts_here = any(iv.start == time_point for iv in timew_active)
                 if any_timew_starts_here:
-                    suggested_str = colored("(continuing)", "white", attrs=["dark"])
+                    # Timew has a new interval - check if tags differ from AW
+                    timew_tags = set().union(*[iv.tags for iv in timew_active])
+                    suggested_tags = set().union(*[iv.tags for iv in suggested_active])
+                    if timew_tags != suggested_tags:
+                        # Show actual AW tags when they differ from timew
+                        suggested_str = ", ".join(
+                            [", ".join(sorted(iv.tags)) for iv in suggested_active]
+                        )
+                        if len(suggested_str) > 38:
+                            suggested_str = suggested_str[:35] + "..."
+                    else:
+                        # Tags match - just show "(continuing)"
+                        suggested_str = colored("(continuing)", "white", attrs=["dark"])
                 else:
                     suggested_str = ""
         else:
