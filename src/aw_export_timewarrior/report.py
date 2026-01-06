@@ -32,7 +32,14 @@ def show_unmatched_events_report(
         verbose: If True, show additional context (URLs, paths, tmux info)
         exporter: Exporter instance for fetching sub-events (required for verbose)
     """
-    if not unmatched_events:
+    # Check for ignored events (below duration threshold)
+    ignored_count = 0
+    ignored_time = timedelta(0)
+    if exporter:
+        ignored_count = exporter.state.stats.ignored_events_count
+        ignored_time = exporter.state.stats.ignored_events_time
+
+    if not unmatched_events and ignored_count == 0:
         print("\nNo unmatched events found - all events matched configuration rules.")
         return
 
@@ -42,9 +49,13 @@ def show_unmatched_events_report(
 
     # Calculate total unmatched time
     total_unmatched_seconds = sum((e["duration"].total_seconds() for e in unmatched_events), 0)
-    print(
-        f"\nFound {len(unmatched_events)} unmatched events, {total_unmatched_seconds / 60:.1f} min total:\n"
-    )
+
+    if unmatched_events:
+        print(
+            f"\nFound {len(unmatched_events)} unmatched events, {total_unmatched_seconds / 60:.1f} min total:\n"
+        )
+    else:
+        print("\nNo unmatched events above duration threshold.")
 
     # Group by app and title for easier analysis
     by_app: dict[str, list] = defaultdict(list)
@@ -119,6 +130,12 @@ def show_unmatched_events_report(
                 f"  {remaining_time / 60:5.1f}min ({remaining_events:2d}x) - ... and {remaining_count} other titles"
             )
             lines_printed += 1
+
+    # Show ignored events summary (events below duration threshold)
+    if ignored_count > 0:
+        ignored_minutes = ignored_time.total_seconds() / 60
+        print(f"\nAdditionally, {ignored_count} events ({ignored_minutes:.1f} min) were below the")
+        print("duration threshold and not tracked. Use --ignore-interval to adjust.")
 
     print("\n" + "=" * 80 + "\n")
 

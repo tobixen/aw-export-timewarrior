@@ -1669,6 +1669,9 @@ class Exporter:
         if tag_result.result == EventMatchResult.IGNORED:
             num_skipped_events += 1
             total_time_skipped_events += event["duration"]
+            # Track ignored events for analyze reporting
+            self.state.stats.ignored_events_count += 1
+            self.state.stats.ignored_events_time += event["duration"]
             if total_time_skipped_events.total_seconds() > self.min_recording_interval:
                 self.breakpoint()
             return num_skipped_events, total_time_skipped_events

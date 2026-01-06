@@ -34,6 +34,7 @@ class TimeStats:
     Tracks:
     - Per-tag accumulated time
     - Total time for known/unknown events
+    - Total time for ignored events (below duration threshold)
     """
 
     tags_accumulated_time: defaultdict[str, timedelta] = field(
@@ -41,6 +42,9 @@ class TimeStats:
     )
     known_events_time: timedelta = field(default_factory=lambda: timedelta(0))
     unknown_events_time: timedelta = field(default_factory=lambda: timedelta(0))
+    # Track events ignored due to being below duration threshold
+    ignored_events_time: timedelta = field(default_factory=lambda: timedelta(0))
+    ignored_events_count: int = 0
 
     def add_tag_time(self, tag: str, duration: timedelta) -> None:
         """Add time to a specific tag's accumulator."""
