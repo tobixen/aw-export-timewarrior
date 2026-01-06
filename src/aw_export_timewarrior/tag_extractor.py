@@ -73,16 +73,28 @@ class TagExtractor:
         self.event_fetcher = event_fetcher
         self.terminal_apps = terminal_apps or set()
         self.log_callback = log_callback or (lambda msg, **kwargs: logger.info(msg))
+        # Track the last matched rule (set by extraction methods)
+        self._last_matched_rule: str | None = None
 
     @property
     def config(self) -> dict:
         """Get the current config (supports both static dict and dynamic callable)."""
         return self._config_getter()
 
+    @property
+    def last_matched_rule(self) -> str | None:
+        """Get the rule that matched during the last get_tags() call.
+
+        Returns rule in format "type:name" (e.g., "app:terminal", "browser:github").
+        Returns None if no rule matched or get_tags() hasn't been called.
+        """
+        return self._last_matched_rule
+
     def get_tags(self, event: dict) -> set[str] | None | bool:
         """Determine tags for an event.
 
         Tries each extraction method in order until one succeeds.
+        After calling, access self.last_matched_rule to see which rule matched.
 
         Args:
             event: The event to extract tags from
@@ -92,6 +104,9 @@ class TagExtractor:
             None: Event should be ignored (too short, etc.)
             False: No matching rules found
         """
+        # Reset matched rule tracking
+        self._last_matched_rule = None
+
         # Try each extraction method in order
         for method in [
             self.get_afk_tags,
@@ -116,6 +131,7 @@ class TagExtractor:
             Set containing 'afk' or 'not-afk', or False if not an AFK event
         """
         if "status" in event["data"]:
+            self._last_matched_rule = "afk:status"
             return {event["data"]["status"]}
         else:
             return False
@@ -215,11 +231,13 @@ class TagExtractor:
             for i, group in enumerate(path_groups, start=len(cmd_groups) + 1):
                 substitutions[f"${i}"] = group
 
+            self._last_matched_rule = f"tmux:{rule_name}"
             return self._build_tags(rule["timew_tags"], substitutions)
 
         # No rules matched - use default tag extraction
         # Create a simple tag from the command name
         if pane_command:
+            self._last_matched_rule = f"tmux:default({pane_command})"
             return {f"tmux:{pane_command}"}
 
         return []  # Terminal with tmux but no matching rules
@@ -253,6 +271,7 @@ class TagExtractor:
                 "$1": title_match.group(1) if title_match and title_match.groups() else None,
             }
 
+            self._last_matched_rule = f"app:{rule_name}"
             return self._build_tags(rule["timew_tags"], substitutions)
 
         return False
@@ -396,6 +415,7 @@ class TagExtractor:
                 # Try to match
                 tags = matcher_func(rule, sub_event, rule_key)
                 if tags:
+                    self._last_matched_rule = f"{subtype}:{rule_name}"
                     return tags
 
         # No rules matched

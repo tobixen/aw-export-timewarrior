@@ -9,6 +9,7 @@ Generates detailed reports showing ActivityWatch events with columns for:
 """
 
 import csv
+import json
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -16,6 +17,29 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .main import Exporter
+
+# Available columns for report output
+AVAILABLE_COLUMNS = [
+    "timestamp",
+    "duration",
+    "window_title",
+    "app",
+    "specialized_type",
+    "specialized_data",
+    "afk_status",
+    "tags",
+    "matched_rule",
+]
+
+# Default columns shown in table mode
+DEFAULT_COLUMNS = [
+    "timestamp",
+    "duration",
+    "window_title",
+    "specialized_data",
+    "afk_status",
+    "tags",
+]
 
 
 def show_unmatched_events_report(
@@ -256,9 +280,18 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
 
 
 def collect_report_data(
-    exporter: "Exporter", start_time: datetime, end_time: datetime
+    exporter: "Exporter",
+    start_time: datetime,
+    end_time: datetime,
+    include_rule: bool = False,
 ) -> list[dict[str, Any]]:
     """Collect activity data for the report.
+
+    Args:
+        exporter: Exporter instance
+        start_time: Start of time range
+        end_time: End of time range
+        include_rule: If True, include which rule matched each event
 
     Returns a list of dictionaries with keys:
     - timestamp: Event start time
@@ -269,6 +302,7 @@ def collect_report_data(
     - specialized_data: File path or URL
     - afk_status: 'afk', 'not-afk', or 'unknown'
     - tags: Set of determined tags
+    - matched_rule: Rule that matched (if include_rule=True)
     """
     # Get window and AFK buckets
     window_id = exporter.event_fetcher.bucket_by_client["aw-watcher-window"][0]
@@ -304,38 +338,27 @@ def collect_report_data(
         # Extract specialized data
         specialized = extract_specialized_data(exporter, window_event)
 
-        # Determine tags using exporter's tag_extractor logic
-        tags = set()
-        for method in (
-            exporter.tag_extractor.get_afk_tags,
-            exporter.tag_extractor.get_app_tags,
-            exporter.tag_extractor.get_browser_tags,
-            exporter.tag_extractor.get_editor_tags,
-        ):
-            try:
-                result_tags = method(window_event)
-                if result_tags and result_tags is not False:
-                    tags.update(result_tags)
-                    break
-            except Exception:
-                pass
+        # Determine tags using exporter's tag_extractor
+        result_tags = exporter.tag_extractor.get_tags(window_event)
+        matched_rule = exporter.tag_extractor.last_matched_rule if include_rule else None
 
-        # If no tags found, mark as unmatched
-        if not tags:
-            tags = {"UNMATCHED"}
+        tags = set(result_tags) if result_tags and result_tags is not False else {"UNMATCHED"}
 
-        report_data.append(
-            {
-                "timestamp": event_start,
-                "duration": window_event["duration"],
-                "window_title": window_event["data"].get("title", ""),
-                "app": specialized["app"],
-                "specialized_type": specialized["specialized_type"],
-                "specialized_data": specialized["specialized_data"] or "",
-                "afk_status": afk_status,
-                "tags": tags,
-            }
-        )
+        row_data = {
+            "timestamp": event_start,
+            "duration": window_event["duration"],
+            "window_title": window_event["data"].get("title", ""),
+            "app": specialized["app"],
+            "specialized_type": specialized["specialized_type"],
+            "specialized_data": specialized["specialized_data"] or "",
+            "afk_status": afk_status,
+            "tags": tags,
+        }
+
+        if include_rule:
+            row_data["matched_rule"] = matched_rule
+
+        report_data.append(row_data)
 
     # Sort by timestamp
     report_data.sort(key=lambda x: x["timestamp"])
@@ -344,7 +367,11 @@ def collect_report_data(
 
 
 def format_as_table(
-    data: list[dict[str, Any]], all_columns: bool = False, truncate: bool = True
+    data: list[dict[str, Any]],
+    all_columns: bool = False,
+    truncate: bool = True,
+    show_rule: bool = False,
+    columns: list[str] | None = None,
 ) -> None:
     """Format and print report data as a table.
 
@@ -352,40 +379,58 @@ def format_as_table(
         data: List of report data dictionaries
         all_columns: If True, show all columns; otherwise show main columns only
         truncate: If True, truncate long values to fit
+        show_rule: If True, show the matched_rule column
+        columns: Specific columns to show (overrides all_columns if set)
     """
     if not data:
         print("No data to display")
         return
 
     # Define column widths
-    if truncate:
-        col_widths = {
-            "time": 8,  # HH:MM:SS
-            "duration": 8,  # HH:MM:SS
-            "window": 50,
-            "specialized": 60,
-            "afk": 8,
-            "tags": 40,
-        }
-    else:
-        col_widths = {
-            "time": 8,
-            "duration": 8,
-            "window": None,
-            "specialized": None,
-            "afk": 8,
-            "tags": None,
-        }
+    col_widths = {
+        "time": 8,  # HH:MM:SS
+        "duration": 8,  # HH:MM:SS
+        "window": 50 if truncate else None,
+        "app": 15,
+        "type": 8,
+        "specialized": 60 if truncate else None,
+        "afk": 8,
+        "tags": 40 if truncate else None,
+        "rule": 30 if truncate else None,
+    }
 
-    # Print header
-    if all_columns:
-        print(
-            f"{'Time':<8} {'Dur':<8} {'Window Title':<50} {'App':<15} {'Type':<8} {'File/URL':<60} {'AFK':<8} {'Tags'}"
-        )
-        print("=" * 180)
+    # Build header based on columns to show
+    if columns:
+        # Custom column selection (future feature)
+        pass
+    elif all_columns:
+        header_parts = [
+            f"{'Time':<8}",
+            f"{'Dur':<8}",
+            f"{'Window Title':<50}",
+            f"{'App':<15}",
+            f"{'Type':<8}",
+            f"{'File/URL':<60}",
+            f"{'AFK':<8}",
+            f"{'Tags':<40}" if show_rule else "Tags",
+        ]
+        if show_rule:
+            header_parts.append("Rule")
+        print(" ".join(header_parts))
+        print("=" * (210 if show_rule else 180))
     else:
-        print(f"{'Time':<8} {'Dur':<8} {'Window Title':<50} {'File/URL':<60} {'AFK':<8} {'Tags'}")
-        print("=" * 145)
+        header_parts = [
+            f"{'Time':<8}",
+            f"{'Dur':<8}",
+            f"{'Window Title':<50}",
+            f"{'File/URL':<60}",
+            f"{'AFK':<8}",
+            f"{'Tags':<40}" if show_rule else "Tags",
+        ]
+        if show_rule:
+            header_parts.append("Rule")
+        print(" ".join(header_parts))
+        print("=" * (175 if show_rule else 145))
 
     # Print data rows
     for row in data:
@@ -397,26 +442,41 @@ def format_as_table(
         specialized = row["specialized_data"]
         afk = row["afk_status"]
         tags_str = ", ".join(sorted(row["tags"]))
+        rule_str = row.get("matched_rule", "") or ""
 
         if truncate:
             window_title = truncate_string(window_title, col_widths["window"])
             specialized = truncate_string(specialized, col_widths["specialized"])
             tags_str = truncate_string(tags_str, col_widths["tags"])
+            rule_str = truncate_string(rule_str, col_widths["rule"])
 
         if all_columns:
             app = truncate_string(row["app"], 15) if truncate else row["app"]
             spec_type = row["specialized_type"] or "-"
-            print(
-                f"{time_str:<8} {duration_str:<8} {window_title:<50} {app:<15} {spec_type:<8} {specialized:<60} {afk:<8} {tags_str}"
+            line = (
+                f"{time_str:<8} {duration_str:<8} {window_title:<50} {app:<15} {spec_type:<8} {specialized:<60} {afk:<8} {tags_str:<40}"
+                if show_rule
+                else f"{time_str:<8} {duration_str:<8} {window_title:<50} {app:<15} {spec_type:<8} {specialized:<60} {afk:<8} {tags_str}"
             )
+            if show_rule:
+                line += f" {rule_str}"
+            print(line)
         else:
-            print(
-                f"{time_str:<8} {duration_str:<8} {window_title:<50} {specialized:<60} {afk:<8} {tags_str}"
+            line = (
+                f"{time_str:<8} {duration_str:<8} {window_title:<50} {specialized:<60} {afk:<8} {tags_str:<40}"
+                if show_rule
+                else f"{time_str:<8} {duration_str:<8} {window_title:<50} {specialized:<60} {afk:<8} {tags_str}"
             )
+            if show_rule:
+                line += f" {rule_str}"
+            print(line)
 
 
 def format_as_csv(
-    data: list[dict[str, Any]], all_columns: bool = False, delimiter: str = ","
+    data: list[dict[str, Any]],
+    all_columns: bool = False,
+    delimiter: str = ",",
+    include_rule: bool = False,
 ) -> None:
     """Format and print report data as CSV/TSV.
 
@@ -424,6 +484,7 @@ def format_as_csv(
         data: List of report data dictionaries
         all_columns: If True, include all columns; otherwise main columns only
         delimiter: Field delimiter (',' for CSV, '\t' for TSV)
+        include_rule: If True, include the matched_rule column
     """
     writer = csv.writer(sys.stdout, delimiter=delimiter)
 
@@ -448,6 +509,8 @@ def format_as_csv(
             "afk_status",
             "tags",
         ]
+    if include_rule:
+        headers.append("matched_rule")
     writer.writerow(headers)
 
     # Write data
@@ -456,29 +519,71 @@ def format_as_csv(
         duration_sec = int(row["duration"].total_seconds())
 
         if all_columns:
-            writer.writerow(
-                [
-                    row["timestamp"].isoformat(),
-                    duration_sec,
-                    row["window_title"],
-                    row["app"],
-                    row["specialized_type"] or "",
-                    row["specialized_data"],
-                    row["afk_status"],
-                    tags_str,
-                ]
-            )
+            row_data = [
+                row["timestamp"].isoformat(),
+                duration_sec,
+                row["window_title"],
+                row["app"],
+                row["specialized_type"] or "",
+                row["specialized_data"],
+                row["afk_status"],
+                tags_str,
+            ]
         else:
-            writer.writerow(
-                [
-                    row["timestamp"].isoformat(),
-                    duration_sec,
-                    row["window_title"],
-                    row["specialized_data"],
-                    row["afk_status"],
-                    tags_str,
-                ]
-            )
+            row_data = [
+                row["timestamp"].isoformat(),
+                duration_sec,
+                row["window_title"],
+                row["specialized_data"],
+                row["afk_status"],
+                tags_str,
+            ]
+        if include_rule:
+            row_data.append(row.get("matched_rule", "") or "")
+        writer.writerow(row_data)
+
+
+def format_as_json(
+    data: list[dict[str, Any]],
+    all_columns: bool = False,
+    columns: list[str] | None = None,
+    include_rule: bool = False,
+) -> None:
+    """Format and print report data as JSON Lines (one JSON object per line).
+
+    Args:
+        data: List of report data dictionaries
+        all_columns: If True, include all columns
+        columns: Specific columns to include (overrides all_columns if set)
+        include_rule: If True, include the matched_rule column
+    """
+    # Determine which columns to output
+    if columns:
+        output_columns = columns
+    elif all_columns:
+        output_columns = AVAILABLE_COLUMNS.copy()
+        if not include_rule:
+            output_columns = [c for c in output_columns if c != "matched_rule"]
+    else:
+        output_columns = DEFAULT_COLUMNS.copy()
+        if include_rule:
+            output_columns.append("matched_rule")
+
+    for row in data:
+        record = {}
+        for col in output_columns:
+            if col == "timestamp":
+                record["timestamp"] = row["timestamp"].isoformat()
+            elif col == "duration":
+                record["duration_seconds"] = int(row["duration"].total_seconds())
+            elif col == "tags":
+                record["tags"] = sorted(row["tags"])
+            elif col == "matched_rule":
+                record["matched_rule"] = row.get("matched_rule")
+            elif col in row:
+                record[col] = row[col]
+
+        print(json.dumps(record))
 
 
 def generate_activity_report(
@@ -486,29 +591,36 @@ def generate_activity_report(
     all_columns: bool = False,
     format: str = "table",
     truncate: bool = True,
+    show_rule: bool = False,
 ) -> None:
     """Generate and display an activity report.
 
     Args:
         exporter: Exporter instance configured for reading ActivityWatch data
         all_columns: Whether to show all available columns
-        format: Output format ('table', 'csv', 'tsv')
+        format: Output format ('table', 'csv', 'tsv', 'json')
         truncate: Whether to truncate long values (table mode only)
+        show_rule: Whether to show which rule matched each event
     """
     # Collect report data
-    data = collect_report_data(exporter, exporter.start_time, exporter.end_time)
+    data = collect_report_data(
+        exporter, exporter.start_time, exporter.end_time, include_rule=show_rule
+    )
 
     # Format and output
     if format == "table":
-        format_as_table(data, all_columns=all_columns, truncate=truncate)
+        format_as_table(data, all_columns=all_columns, truncate=truncate, show_rule=show_rule)
     elif format == "csv":
-        format_as_csv(data, all_columns=all_columns, delimiter=",")
+        format_as_csv(data, all_columns=all_columns, delimiter=",", include_rule=show_rule)
     elif format == "tsv":
-        format_as_csv(data, all_columns=all_columns, delimiter="\t")
+        format_as_csv(data, all_columns=all_columns, delimiter="\t", include_rule=show_rule)
+    elif format == "json":
+        format_as_json(data, all_columns=all_columns, include_rule=show_rule)
     else:
         raise ValueError(f"Unknown format: {format}")
 
-    # Print summary to stderr
-    print(f"\nTotal events: {len(data)}", file=sys.stderr)
-    total_duration = sum((row["duration"] for row in data), timedelta())
-    print(f"Total duration: {format_duration(total_duration)}", file=sys.stderr)
+    # Print summary to stderr (skip for JSON format to keep output clean)
+    if format != "json":
+        print(f"\nTotal events: {len(data)}", file=sys.stderr)
+        total_duration = sum((row["duration"] for row in data), timedelta())
+        print(f"Total duration: {format_duration(total_duration)}", file=sys.stderr)

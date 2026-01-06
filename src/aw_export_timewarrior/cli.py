@@ -352,12 +352,17 @@ Examples:
     )
     report_parser.add_argument(
         "--format",
-        choices=["table", "csv", "tsv"],
+        choices=["table", "csv", "tsv", "json"],
         default="table",
-        help="Output format (default: table)",
+        help="Output format (default: table). JSON outputs one JSON object per line (JSONL).",
     )
     report_parser.add_argument(
         "--no-truncate", action="store_true", help="Do not truncate long values in table mode"
+    )
+    report_parser.add_argument(
+        "--show-rule",
+        action="store_true",
+        help="Show which rule matched each event",
     )
 
     # ===== VALIDATE subcommand =====
@@ -667,6 +672,7 @@ def run_report(args: argparse.Namespace) -> int:
         all_columns=args.all_columns,
         format=args.format,
         truncate=not args.no_truncate,
+        show_rule=args.show_rule,
     )
 
     return 0
