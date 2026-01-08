@@ -509,6 +509,7 @@ class Exporter:
         tags=None,
         reset_accumulator=False,
         retain_accumulator=True,
+        record_export=False,
     ):
         """
         Set statistics after exporting tags.
@@ -521,6 +522,7 @@ class Exporter:
             tags: Tags being exported
             reset_accumulator: Whether to reset tag accumulator
             retain_accumulator: Whether to retain current tags with stickyness
+            record_export: Whether to record this as an export for reporting
         """
         # Extract timestamps
         if event and not start:
@@ -549,6 +551,7 @@ class Exporter:
             stickyness_factor=self.stickyness_factor
             if (reset_accumulator and retain_accumulator)
             else 0.0,
+            record_export_history=record_export,
         )
 
         # Handle the special case where retain_accumulator adds initial time to tags
@@ -635,9 +638,21 @@ class Exporter:
         # not the END. This prevents skipping window events that occurred during AFK.
         # AFK events overlap with window events (user AFK while window active).
         if "afk" in tags:
-            self.set_known_tick_stats(start=since, end=since)
+            self.set_known_tick_stats(
+                start=since,
+                end=since,
+                tags=tags,
+                reset_accumulator=True,
+                record_export=True,
+            )
         else:
-            self.set_known_tick_stats(event=event, start=since)
+            self.set_known_tick_stats(
+                event=event,
+                start=since,
+                tags=tags,
+                reset_accumulator=True,
+                record_export=True,
+            )
 
         # Reset statistics counters at the start of new tracking cycle
         # This ensures known_events_time only tracks events since the last export

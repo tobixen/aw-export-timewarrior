@@ -58,6 +58,7 @@ class TestStateManagerExportHistory:
             start=datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC),
             end=datetime(2025, 12, 11, 9, 10, 0, tzinfo=UTC),
             tags={"work"},
+            record_export_history=True,
         )
 
         assert len(state.export_history) == 1
@@ -71,6 +72,7 @@ class TestStateManagerExportHistory:
             start=datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC),
             end=datetime(2025, 12, 11, 9, 10, 0, tzinfo=UTC),
             tags={"work"},
+            record_export_history=True,
         )
 
         assert len(state.export_history) == 0
@@ -88,6 +90,7 @@ class TestStateManagerExportHistory:
             end=datetime(2025, 12, 11, 9, 10, 0, tzinfo=UTC),
             tags={"work"},
             reset_stats=True,
+            record_export_history=True,
         )
 
         record = state.export_history[0]
@@ -111,6 +114,7 @@ class TestStateManagerExportHistory:
             reset_stats=True,
             retain_tags={"work"},
             stickyness_factor=0.5,
+            record_export_history=True,
         )
 
         record = state.export_history[0]
@@ -127,6 +131,7 @@ class TestStateManagerExportHistory:
                 start=datetime(2025, 12, 11, 9 + i, 0, 0, tzinfo=UTC),
                 end=datetime(2025, 12, 11, 9 + i, 10, 0, tzinfo=UTC),
                 tags={f"tag{i}"},
+                record_export_history=True,
             )
 
         assert len(state.export_history) == 3
@@ -143,16 +148,19 @@ class TestStateManagerExportHistory:
             start=datetime(2025, 12, 11, 8, 0, 0, tzinfo=UTC),
             end=datetime(2025, 12, 11, 8, 10, 0, tzinfo=UTC),
             tags={"early"},
+            record_export_history=True,
         )
         state.record_export(
             start=datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC),
             end=datetime(2025, 12, 11, 9, 10, 0, tzinfo=UTC),
             tags={"middle"},
+            record_export_history=True,
         )
         state.record_export(
             start=datetime(2025, 12, 11, 10, 0, 0, tzinfo=UTC),
             end=datetime(2025, 12, 11, 10, 10, 0, tzinfo=UTC),
             tags={"late"},
+            record_export_history=True,
         )
 
         # Filter to 9:00-9:30 range

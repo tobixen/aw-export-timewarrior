@@ -260,6 +260,7 @@ class StateManager:
         retain_tags: set[str] | None = None,
         stickyness_factor: float = 0.5,
         manual: bool = True,
+        record_export_history: bool = False,
     ) -> None:
         """Record an export with associated statistics.
 
@@ -274,10 +275,11 @@ class StateManager:
             retain_tags: Tags to retain when resetting (with stickyness applied)
             stickyness_factor: Factor to apply to retained tags (0.0-1.0)
             manual: Whether this is manual tracking
+            record_export_history: Whether to record this as an export for reporting
         """
         # Capture accumulator state before reset (for export history)
         accumulator_before: dict[str, timedelta] = {}
-        if self.track_exports:
+        if self.track_exports and record_export_history:
             accumulator_before = dict(self.stats.tags_accumulated_time)
 
         # Set manual tracking mode
@@ -297,8 +299,8 @@ class StateManager:
             self.current_event_timestamp = None
             self.current_event_processed_duration = timedelta(0)
 
-        # Capture accumulator state after reset and create export record
-        if self.track_exports:
+        # Record export to history if requested
+        if self.track_exports and record_export_history:
             accumulator_after = dict(self.stats.tags_accumulated_time)
             export_record = ExportRecord(
                 timestamp=start,
