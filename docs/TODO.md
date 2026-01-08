@@ -2,6 +2,34 @@
 
 ## High Priority
 
+### Reconsider the "ignore treshold" for windows
+
+The idea to ignore window visits less than three seconds was to avoid "noise" in the data (and logs) if the mouse coursor is dragged over multiple windows etc before starting to work on something.
+
+However, sometimes rapid movement between windows is part of the workflow, other times the application may rapidly change the window title (example: spending an hour in `feh` browsing photos, spending less than three seconds for each).
+
+I think the simplest solution is to just kill this logic entirely.  Assume the short window visits will drown out from the real data.
+
+### Config confusion
+
+In config.py, the `prepend` have been used to indicate additional tags.
+
+In the real config file `add` is used instead.
+
+For many other rules, `timew_tags` is used.
+
+We don't need to care about backward compatibility yet.  `prepend` and `append` is meaningless as the tags is a set and not a list, it should be `add`.  `timew_tags` also doesn't make sense as we want to develop this in a "backend agnostic" tool, so probably only `tags`.  However, `add` and `tags` is not much consistent, so this may be thought better through.
+
+As for te tag rules, we also need options to replace or remove tags.
+
+### Maintain the CHANGELOG
+
+ensure it's up-to-date
+
+### Maintain the TODO-list
+
+Many things here have already been done
+
 ### Report should tell what rules have been applied
 
 ... and it should also give some info from the tmux watcher

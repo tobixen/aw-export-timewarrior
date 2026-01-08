@@ -10,6 +10,14 @@ Be aware, this is not a mature project, there will be dragons, there are quite s
 
 Be aware, that this README may not reflect the latest version of the code (TODO: look through things!)
 
+## Purpose
+
+I want to:
+
+* Easily see what "main categories" I've wasted my time on.
+* Easily fill out information in the accounting systems at work on what projects I've been spending time at.
+* Be able to go back to some point in time and try to remember what I was doing that day.
+
 ## Background and rationale
 
 I found Timewarrior and Activitywatch to be the best open source tools for time tracking, but they do quite different things.  A combination would almost solve my time tracking needs perfectly.
