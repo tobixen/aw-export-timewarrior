@@ -602,20 +602,23 @@ def generate_activity_report(
         truncate: Whether to truncate long values (table mode only)
         show_rule: Whether to show which rule matched each event
     """
+    # Include rule data if explicitly requested OR if showing all columns
+    include_rule = show_rule or all_columns
+
     # Collect report data
     data = collect_report_data(
-        exporter, exporter.start_time, exporter.end_time, include_rule=show_rule
+        exporter, exporter.start_time, exporter.end_time, include_rule=include_rule
     )
 
     # Format and output
     if format == "table":
-        format_as_table(data, all_columns=all_columns, truncate=truncate, show_rule=show_rule)
+        format_as_table(data, all_columns=all_columns, truncate=truncate, show_rule=include_rule)
     elif format == "csv":
-        format_as_csv(data, all_columns=all_columns, delimiter=",", include_rule=show_rule)
+        format_as_csv(data, all_columns=all_columns, delimiter=",", include_rule=include_rule)
     elif format == "tsv":
-        format_as_csv(data, all_columns=all_columns, delimiter="\t", include_rule=show_rule)
+        format_as_csv(data, all_columns=all_columns, delimiter="\t", include_rule=include_rule)
     elif format == "json":
-        format_as_json(data, all_columns=all_columns, include_rule=show_rule)
+        format_as_json(data, all_columns=all_columns, include_rule=include_rule)
     else:
         raise ValueError(f"Unknown format: {format}")
 
