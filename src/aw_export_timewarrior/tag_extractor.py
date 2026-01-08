@@ -146,7 +146,6 @@ class TagExtractor:
             Set of tags, empty list if no match, or False if wrong app type
         """
         # Check if this is a terminal window
-        # Common terminal apps that might run tmux
         terminal_apps = self.terminal_apps or {
             "foot",
             "kitty",
@@ -177,70 +176,73 @@ class TagExtractor:
         if not tmux_event:
             return []  # Terminal window but no tmux activity
 
+        # Use shared subevent tags logic with tmux matcher
+        return self._get_subevent_tags(
+            window_event=window_event,
+            subtype="tmux",
+            matchers=[("timew_tags", self._match_tmux_rule)],
+            sub_event=tmux_event,
+        )
+
+    def _match_tmux_rule(self, rule: dict, sub_event: dict, rule_key: str) -> set[str] | None:
+        """Match a tmux rule against a tmux sub-event.
+
+        Args:
+            rule: The tmux rule configuration
+            sub_event: The tmux event data
+            rule_key: Unused (for API compatibility with other matchers)
+
+        Returns:
+            Set of tags if matched, None otherwise
+        """
         # Extract tmux data
-        session_name = tmux_event["data"].get("session_name", "")
-        window_name = tmux_event["data"].get("window_name", "")
-        pane_title = tmux_event["data"].get("pane_title", "")
-        pane_command = tmux_event["data"].get("pane_current_command", "")
-        pane_path = tmux_event["data"].get("pane_current_path", "")
+        session_name = sub_event["data"].get("session_name", "")
+        window_name = sub_event["data"].get("window_name", "")
+        pane_title = sub_event["data"].get("pane_title", "")
+        pane_command = sub_event["data"].get("pane_current_command", "")
+        pane_path = sub_event["data"].get("pane_current_path", "")
 
-        # Check against configured tmux rules
-        for rule_name in self.config.get("rules", {}).get("tmux", {}):
-            rule = self.config["rules"]["tmux"][rule_name]
+        # Check if session matches (if specified)
+        if "session" in rule and not re.search(rule["session"], session_name):
+            return None
 
-            # Check if session matches (if specified)
-            if "session" in rule and not re.search(rule["session"], session_name):
-                continue
+        # Check if window matches (if specified)
+        if "window" in rule and not re.search(rule["window"], window_name):
+            return None
 
-            # Check if window matches (if specified)
-            if "window" in rule and not re.search(rule["window"], window_name):
-                continue
+        # Check if command matches (if specified)
+        command_match = None
+        if "command" in rule:
+            command_match = re.search(rule["command"], pane_command)
+            if not command_match:
+                return None
 
-            # Check if command matches (if specified)
-            command_match = None
-            if "command" in rule:
-                command_match = re.search(rule["command"], pane_command)
-                if not command_match:
-                    continue
+        # Check if path matches (if specified)
+        path_match = None
+        if "path" in rule:
+            path_match = re.search(rule["path"], pane_path)
+            if not path_match:
+                return None
 
-            # Check if path matches (if specified)
-            path_match = None
-            if "path" in rule:
-                path_match = re.search(rule["path"], pane_path)
-                if not path_match:
-                    continue
+        # Build tags with variable substitution
+        substitutions = {
+            "$session": session_name,
+            "$window": window_name,
+            "$title": pane_title,
+            "$command": pane_command,
+            "$path": pane_path,
+        }
 
-            # Build tags with variable substitution
-            substitutions = {
-                "$session": session_name,
-                "$window": window_name,
-                "$title": pane_title,
-                "$command": pane_command,
-                "$path": pane_path,
-            }
+        # Add capture groups from both command and path matches
+        cmd_groups = command_match.groups() if command_match else ()
+        path_groups = path_match.groups() if path_match else ()
 
-            # Add capture groups from both command and path matches
-            # Command groups get $1, $2, etc. first, then path groups continue the numbering
-            # This allows rules like: command="git (push|pull)", path="/projects/([^/]+)"
-            # with timew_tags=["$1", "$2"] where $1=push, $2=project_name
-            cmd_groups = command_match.groups() if command_match else ()
-            path_groups = path_match.groups() if path_match else ()
+        for i, group in enumerate(cmd_groups, start=1):
+            substitutions[f"${i}"] = group
+        for i, group in enumerate(path_groups, start=len(cmd_groups) + 1):
+            substitutions[f"${i}"] = group
 
-            for i, group in enumerate(cmd_groups, start=1):
-                substitutions[f"${i}"] = group
-            for i, group in enumerate(path_groups, start=len(cmd_groups) + 1):
-                substitutions[f"${i}"] = group
-
-            self._last_matched_rule = f"tmux:{rule_name}"
-            return self._build_tags(rule["timew_tags"], substitutions)
-
-        # No rules matched - use default tag extraction
-        # Create a simple tag from the command name
-        if pane_command:
-            self._last_matched_rule = f"tmux:default({pane_command})"
-            return {f"tmux:{pane_command}"}
-
-        return []  # Terminal with tmux but no matching rules
+        return self._build_tags(rule["timew_tags"], substitutions)
 
     def get_app_tags(self, event: dict) -> set[str] | bool:
         """Extract tags from app/title matching.
@@ -372,36 +374,40 @@ class TagExtractor:
         self,
         window_event: dict,
         subtype: str,
-        apps: tuple,
-        bucket_pattern: str,
+        apps: tuple | None = None,
+        bucket_pattern: str | None = None,
         app_normalizer: Callable | None = None,
         matchers: list | None = None,
         skip_if: Callable | None = None,
+        sub_event: dict | None = None,
     ) -> set[str] | list | bool:
         """Generic method to extract tags from events that require sub-events.
 
         Args:
             window_event: The main window event
-            subtype: Type of rule ('browser', 'editor')
-            apps: Tuple of app names to match
-            bucket_pattern: Pattern for bucket ID (e.g., 'aw-watcher-{app}')
-            app_normalizer: Optional function to normalize app name (e.g., chromium -> chrome)
+            subtype: Type of rule ('browser', 'editor', 'tmux')
+            apps: Tuple of app names to match (not needed if sub_event provided)
+            bucket_pattern: Pattern for bucket ID (not needed if sub_event provided)
+            app_normalizer: Optional function to normalize app name
             matchers: List of (rule_key, matcher_function) tuples to try in order
             skip_if: Optional function that returns True if we should skip this sub_event
+            sub_event: Pre-fetched sub-event (if provided, skips fetch logic)
 
         Returns:
             Set of tags, empty list if no match, or False if wrong app type
         """
-        # Check if this is the right app type
-        if window_event["data"].get("app", "").lower() not in apps:
-            return False
+        # If sub_event not provided, fetch it
+        if sub_event is None:
+            # Check if this is the right app type
+            if apps and window_event["data"].get("app", "").lower() not in apps:
+                return False
 
-        sub_event, _ = self._fetch_sub_event(
-            window_event, apps, bucket_pattern, app_normalizer, skip_if
-        )
+            sub_event, _ = self._fetch_sub_event(
+                window_event, apps or (), bucket_pattern or "", app_normalizer, skip_if
+            )
 
-        if not sub_event:
-            return []
+            if not sub_event:
+                return []
 
         # Try each matcher in order
         for rule_key, matcher_func in matchers or []:

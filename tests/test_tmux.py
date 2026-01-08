@@ -101,8 +101,8 @@ class TestTmuxBucketDetection:
 class TestTmuxTagExtraction:
     """Tests for tmux tag extraction."""
 
-    def test_tmux_event_default_tag(self) -> None:
-        """Test that tmux events get default tag from command when no rules match."""
+    def test_tmux_event_no_matching_rule(self) -> None:
+        """Test that tmux events return empty list when no rules match (consistent with browser/editor)."""
         config = {"rules": {}, "exclusive": {}, "tags": {}}
 
         tmux_event = create_tmux_event(
@@ -115,7 +115,8 @@ class TestTmuxTagExtraction:
 
         extractor, window_event = setup_tmux_test(config, tmux_event)
         tags = extractor.get_tmux_tags(window_event)
-        assert tags == {"tmux:vim"}
+        # Should return empty list when no rules match (will be marked UNMATCHED)
+        assert tags == []
 
     def test_tmux_event_with_command_rule(self) -> None:
         """Test tmux tag extraction with command matching rule."""
