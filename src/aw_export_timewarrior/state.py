@@ -5,6 +5,7 @@ variables in the Exporter class. It includes:
 
 - AfkState enum for explicit AFK state tracking
 - TimeStats class for managing time statistics
+- ExportRecord dataclass for tracking export history
 - StateManager class for coordinating all state and statistics
 
 See docs/STATE_MANAGEMENT_REFACTORING.md for the full refactoring plan.
@@ -89,6 +90,26 @@ class TimeStats:
 
 
 @dataclass
+class ExportRecord:
+    """Record of a single export for report generation.
+
+    Captures the state of the tag accumulator before and after the export,
+    allowing reports to show what was accumulated and exported.
+    """
+
+    timestamp: datetime  # Start time of the exported interval
+    duration: timedelta  # Duration of the exported interval
+    tags: set[str]  # Tags that were exported
+    accumulator_before: dict[str, timedelta]  # Tag accumulator state before reset
+    accumulator_after: dict[str, timedelta]  # Tag accumulator state after reset (with stickyness)
+
+    @property
+    def row_type(self) -> str:
+        """Return the row type for report formatting."""
+        return "export"
+
+
+@dataclass
 class StateManager:
     """Manages state and statistics for the Exporter.
 
@@ -122,6 +143,10 @@ class StateManager:
 
     # Configuration
     enable_validation: bool = True
+
+    # Export history tracking (for report generation)
+    track_exports: bool = False  # Disabled by default for performance
+    export_history: list[ExportRecord] = field(default_factory=list)
 
     def is_afk(self) -> bool | None:
         """Return AFK status.
@@ -250,6 +275,11 @@ class StateManager:
             stickyness_factor: Factor to apply to retained tags (0.0-1.0)
             manual: Whether this is manual tracking
         """
+        # Capture accumulator state before reset (for export history)
+        accumulator_before: dict[str, timedelta] = {}
+        if self.track_exports:
+            accumulator_before = dict(self.stats.tags_accumulated_time)
+
         # Set manual tracking mode
         self.manual_tracking = manual
 
@@ -266,6 +296,18 @@ class StateManager:
             # Also reset current event tracking when starting a new export period
             self.current_event_timestamp = None
             self.current_event_processed_duration = timedelta(0)
+
+        # Capture accumulator state after reset and create export record
+        if self.track_exports:
+            accumulator_after = dict(self.stats.tags_accumulated_time)
+            export_record = ExportRecord(
+                timestamp=start,
+                duration=end - start,
+                tags=set(tags),
+                accumulator_before=accumulator_before,
+                accumulator_after=accumulator_after,
+            )
+            self.export_history.append(export_record)
 
     def handle_afk_transition(
         self,
@@ -394,3 +436,15 @@ class StateManager:
             "tags_with_time": len(self.stats.tags_accumulated_time),
             "accumulated_tags": accumulated_tags,
         }
+
+    def get_exports_in_range(self, start: datetime, end: datetime) -> list[ExportRecord]:
+        """Get exports within a time range.
+
+        Args:
+            start: Range start time
+            end: Range end time
+
+        Returns:
+            List of ExportRecords within the time range
+        """
+        return [export for export in self.export_history if start <= export.timestamp <= end]

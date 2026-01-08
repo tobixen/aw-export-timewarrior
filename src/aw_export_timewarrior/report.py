@@ -42,6 +42,79 @@ DEFAULT_COLUMNS = [
 ]
 
 
+def format_accumulator(accumulator: dict[str, timedelta]) -> str:
+    """Format an accumulator dict for display.
+
+    Args:
+        accumulator: Dict mapping tag names to accumulated timedeltas
+
+    Returns:
+        Formatted string representation, e.g., "work:5m, coding:3m30s"
+    """
+    if not accumulator:
+        return "-"
+
+    parts = []
+    for tag, duration in sorted(accumulator.items()):
+        total_seconds = int(duration.total_seconds())
+        if total_seconds < 60:
+            parts.append(f"{tag}:{total_seconds}s")
+        elif total_seconds < 3600:
+            minutes = total_seconds // 60
+            seconds = total_seconds % 60
+            if seconds:
+                parts.append(f"{tag}:{minutes}m{seconds}s")
+            else:
+                parts.append(f"{tag}:{minutes}m")
+        else:
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            if minutes:
+                parts.append(f"{tag}:{hours}h{minutes}m")
+            else:
+                parts.append(f"{tag}:{hours}h")
+
+    return ", ".join(parts)
+
+
+def interleave_exports(
+    events: list[dict[str, Any]],
+    exports: list[Any],  # ExportRecord from state module
+) -> list[dict[str, Any]]:
+    """Interleave export records with event data by timestamp.
+
+    Args:
+        events: List of event dictionaries with 'timestamp' key
+        exports: List of ExportRecord objects
+
+    Returns:
+        Combined list sorted by timestamp, with export records converted to dicts
+    """
+    # Convert exports to dict format for consistent handling
+    export_dicts = []
+    for export in exports:
+        export_dict = {
+            "timestamp": export.timestamp,
+            "duration": export.duration,
+            "tags": export.tags,
+            "accumulator_before": export.accumulator_before,
+            "accumulator_after": export.accumulator_after,
+            "row_type": "export",
+        }
+        export_dicts.append(export_dict)
+
+    # Mark events with row_type if not already set
+    for event in events:
+        if "row_type" not in event:
+            event["row_type"] = "event"
+
+    # Combine and sort by timestamp
+    combined = events + export_dicts
+    combined.sort(key=lambda x: x["timestamp"])
+
+    return combined
+
+
 def show_unmatched_events_report(
     unmatched_events: list[dict],
     limit: int = 10,
@@ -372,16 +445,20 @@ def format_as_table(
     truncate: bool = True,
     show_rule: bool = False,
     columns: list[str] | None = None,
+    show_exports: bool = False,
 ) -> None:
     """Format and print report data as a table.
 
     Args:
-        data: List of report data dictionaries
+        data: List of report data dictionaries (may include export rows)
         all_columns: If True, show all columns; otherwise show main columns only
         truncate: If True, truncate long values to fit
         show_rule: If True, show the matched_rule column
         columns: Specific columns to show (overrides all_columns if set)
+        show_exports: If True, data may contain export rows to be displayed
     """
+    from termcolor import colored
+
     if not data:
         print("No data to display")
         return
@@ -438,38 +515,62 @@ def format_as_table(
         local_time = row["timestamp"].astimezone()
         time_str = local_time.strftime("%H:%M:%S")
         duration_str = format_duration(row["duration"])
-        window_title = row["window_title"]
-        specialized = row["specialized_data"]
-        afk = row["afk_status"]
-        tags_str = ", ".join(sorted(row["tags"]))
-        rule_str = row.get("matched_rule", "") or ""
 
-        if truncate:
-            window_title = truncate_string(window_title, col_widths["window"])
-            specialized = truncate_string(specialized, col_widths["specialized"])
-            tags_str = truncate_string(tags_str, col_widths["tags"])
-            rule_str = truncate_string(rule_str, col_widths["rule"])
+        # Check if this is an export row
+        row_type = row.get("row_type", "event")
 
-        if all_columns:
-            app = truncate_string(row["app"], 15) if truncate else row["app"]
-            spec_type = row["specialized_type"] or "-"
-            line = (
-                f"{time_str:<8} {duration_str:<8} {window_title:<50} {app:<15} {spec_type:<8} {specialized:<60} {afk:<8} {tags_str:<40}"
-                if show_rule
-                else f"{time_str:<8} {duration_str:<8} {window_title:<50} {app:<15} {spec_type:<8} {specialized:<60} {afk:<8} {tags_str}"
-            )
-            if show_rule:
-                line += f" {rule_str}"
-            print(line)
+        if row_type == "export" and show_exports:
+            # Format export row with colored output
+            tags_str = ", ".join(sorted(row["tags"]))
+            acc_before = format_accumulator(row.get("accumulator_before", {}))
+            acc_after = format_accumulator(row.get("accumulator_after", {}))
+
+            if truncate:
+                tags_str = truncate_string(tags_str, 30)
+                acc_before = truncate_string(acc_before, 40)
+                acc_after = truncate_string(acc_after, 40)
+
+            # Build export line with accumulator info
+            export_marker = "[EXPORT]"
+            export_info = f"{export_marker} {tags_str} | before: {acc_before} | after: {acc_after}"
+            line = f"{time_str:<8} {duration_str:<8} {export_info}"
+
+            # Print with color (cyan for exports)
+            print(colored(line, "cyan", attrs=["bold"]))
         else:
-            line = (
-                f"{time_str:<8} {duration_str:<8} {window_title:<50} {specialized:<60} {afk:<8} {tags_str:<40}"
-                if show_rule
-                else f"{time_str:<8} {duration_str:<8} {window_title:<50} {specialized:<60} {afk:<8} {tags_str}"
-            )
-            if show_rule:
-                line += f" {rule_str}"
-            print(line)
+            # Regular event row
+            window_title = row.get("window_title", "")
+            specialized = row.get("specialized_data", "")
+            afk = row.get("afk_status", "unknown")
+            tags_str = ", ".join(sorted(row["tags"]))
+            rule_str = row.get("matched_rule", "") or ""
+
+            if truncate:
+                window_title = truncate_string(window_title, col_widths["window"])
+                specialized = truncate_string(specialized, col_widths["specialized"])
+                tags_str = truncate_string(tags_str, col_widths["tags"])
+                rule_str = truncate_string(rule_str, col_widths["rule"])
+
+            if all_columns:
+                app = truncate_string(row.get("app", ""), 15) if truncate else row.get("app", "")
+                spec_type = row.get("specialized_type") or "-"
+                line = (
+                    f"{time_str:<8} {duration_str:<8} {window_title:<50} {app:<15} {spec_type:<8} {specialized:<60} {afk:<8} {tags_str:<40}"
+                    if show_rule
+                    else f"{time_str:<8} {duration_str:<8} {window_title:<50} {app:<15} {spec_type:<8} {specialized:<60} {afk:<8} {tags_str}"
+                )
+                if show_rule:
+                    line += f" {rule_str}"
+                print(line)
+            else:
+                line = (
+                    f"{time_str:<8} {duration_str:<8} {window_title:<50} {specialized:<60} {afk:<8} {tags_str:<40}"
+                    if show_rule
+                    else f"{time_str:<8} {duration_str:<8} {window_title:<50} {specialized:<60} {afk:<8} {tags_str}"
+                )
+                if show_rule:
+                    line += f" {rule_str}"
+                print(line)
 
 
 def format_as_csv(
@@ -548,16 +649,18 @@ def format_as_json(
     all_columns: bool = False,
     columns: list[str] | None = None,
     include_rule: bool = False,
+    include_exports: bool = False,
 ) -> None:
     """Format and print report data as JSON Lines (one JSON object per line).
 
     Args:
-        data: List of report data dictionaries
+        data: List of report data dictionaries (may include export rows)
         all_columns: If True, include all columns
         columns: Specific columns to include (overrides all_columns if set)
         include_rule: If True, include the matched_rule column
+        include_exports: If True, data may contain export rows to be output
     """
-    # Determine which columns to output
+    # Determine which columns to output for events
     if columns:
         output_columns = columns
     elif all_columns:
@@ -570,18 +673,38 @@ def format_as_json(
             output_columns.append("matched_rule")
 
     for row in data:
-        record = {}
-        for col in output_columns:
-            if col == "timestamp":
-                record["timestamp"] = row["timestamp"].isoformat()
-            elif col == "duration":
-                record["duration_seconds"] = int(row["duration"].total_seconds())
-            elif col == "tags":
-                record["tags"] = sorted(row["tags"])
-            elif col == "matched_rule":
-                record["matched_rule"] = row.get("matched_rule")
-            elif col in row:
-                record[col] = row[col]
+        row_type = row.get("row_type", "event")
+
+        if row_type == "export" and include_exports:
+            # Format export row
+            record = {
+                "row_type": "export",
+                "timestamp": row["timestamp"].isoformat(),
+                "duration_seconds": int(row["duration"].total_seconds()),
+                "tags": sorted(row["tags"]),
+                "accumulator_before": {
+                    tag: int(duration.total_seconds())
+                    for tag, duration in row.get("accumulator_before", {}).items()
+                },
+                "accumulator_after": {
+                    tag: int(duration.total_seconds())
+                    for tag, duration in row.get("accumulator_after", {}).items()
+                },
+            }
+        else:
+            # Format event row
+            record = {"row_type": "event"} if include_exports else {}
+            for col in output_columns:
+                if col == "timestamp":
+                    record["timestamp"] = row["timestamp"].isoformat()
+                elif col == "duration":
+                    record["duration_seconds"] = int(row["duration"].total_seconds())
+                elif col == "tags":
+                    record["tags"] = sorted(row["tags"])
+                elif col == "matched_rule":
+                    record["matched_rule"] = row.get("matched_rule")
+                elif col in row:
+                    record[col] = row[col]
 
         print(json.dumps(record))
 
@@ -592,6 +715,7 @@ def generate_activity_report(
     format: str = "table",
     truncate: bool = True,
     show_rule: bool = False,
+    show_exports: bool = False,
 ) -> None:
     """Generate and display an activity report.
 
@@ -601,6 +725,7 @@ def generate_activity_report(
         format: Output format ('table', 'csv', 'tsv', 'json')
         truncate: Whether to truncate long values (table mode only)
         show_rule: Whether to show which rule matched each event
+        show_exports: Whether to show export decisions interleaved with events
     """
     # Include rule data if explicitly requested OR if showing all columns
     include_rule = show_rule or all_columns
@@ -610,20 +735,48 @@ def generate_activity_report(
         exporter, exporter.start_time, exporter.end_time, include_rule=include_rule
     )
 
+    # If showing exports, run the exporter to track export decisions
+    exports = []
+    if show_exports:
+        # Enable export tracking
+        exporter.state.track_exports = True
+        # Process all events to trigger export decisions
+        exporter.tick(process_all=True)
+        # Get exports in the time range
+        exports = exporter.state.get_exports_in_range(exporter.start_time, exporter.end_time)
+        # Interleave exports with events
+        if exports:
+            data = interleave_exports(data, exports)
+
     # Format and output
     if format == "table":
-        format_as_table(data, all_columns=all_columns, truncate=truncate, show_rule=include_rule)
+        format_as_table(
+            data,
+            all_columns=all_columns,
+            truncate=truncate,
+            show_rule=include_rule,
+            show_exports=show_exports,
+        )
     elif format == "csv":
         format_as_csv(data, all_columns=all_columns, delimiter=",", include_rule=include_rule)
     elif format == "tsv":
         format_as_csv(data, all_columns=all_columns, delimiter="\t", include_rule=include_rule)
     elif format == "json":
-        format_as_json(data, all_columns=all_columns, include_rule=include_rule)
+        format_as_json(
+            data, all_columns=all_columns, include_rule=include_rule, include_exports=show_exports
+        )
     else:
         raise ValueError(f"Unknown format: {format}")
 
     # Print summary to stderr (skip for JSON format to keep output clean)
     if format != "json":
-        print(f"\nTotal events: {len(data)}", file=sys.stderr)
-        total_duration = sum((row["duration"] for row in data), timedelta())
+        event_count = sum(1 for row in data if row.get("row_type", "event") == "event")
+        export_count = sum(1 for row in data if row.get("row_type") == "export")
+        print(f"\nTotal events: {event_count}", file=sys.stderr)
+        if show_exports and export_count > 0:
+            print(f"Total exports: {export_count}", file=sys.stderr)
+        total_duration = sum(
+            (row["duration"] for row in data if row.get("row_type", "event") == "event"),
+            timedelta(),
+        )
         print(f"Total duration: {format_duration(total_duration)}", file=sys.stderr)

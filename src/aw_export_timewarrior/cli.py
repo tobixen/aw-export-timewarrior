@@ -364,6 +364,11 @@ Examples:
         action="store_true",
         help="Show which rule matched each event",
     )
+    report_parser.add_argument(
+        "--show-exports",
+        action="store_true",
+        help="Show export decisions interleaved with events (colored in terminal)",
+    )
 
     # ===== VALIDATE subcommand =====
     subparsers.add_parser(
@@ -673,6 +678,7 @@ def run_report(args: argparse.Namespace) -> int:
         format=args.format,
         truncate=not args.no_truncate,
         show_rule=args.show_rule,
+        show_exports=args.show_exports,
     )
 
     return 0
