@@ -218,20 +218,26 @@ class TestCollectReportDataWithExports:
         )
 
     def test_interleave_exports_with_events(self, sample_report_data, sample_export_record):
-        """Exports should be interleaved with events by timestamp."""
+        """Exports should be interleaved with events by timestamp.
+
+        Each export creates two entries: export_start and export_end.
+        """
         from src.aw_export_timewarrior.report import interleave_exports
 
         result = interleave_exports(sample_report_data, [sample_export_record])
 
-        # Should have 3 rows: event, export, event
-        assert len(result) == 3
+        # Should have 4 rows: event, export_start, event, export_end
+        # (export starts at 09:02:30, ends at 09:05:00 which is after event 2 at 09:05:00)
+        assert len(result) == 4
         assert result[0]["row_type"] == "event"
-        assert result[1]["row_type"] == "export"
+        assert result[1]["row_type"] == "export_start"
         assert result[2]["row_type"] == "event"
+        assert result[3]["row_type"] == "export_end"
 
         # Verify order is by timestamp
-        assert result[0]["timestamp"] < result[1]["timestamp"]
-        assert result[1]["timestamp"] < result[2]["timestamp"]
+        assert result[0]["timestamp"] <= result[1]["timestamp"]
+        assert result[1]["timestamp"] <= result[2]["timestamp"]
+        assert result[2]["timestamp"] <= result[3]["timestamp"]
 
 
 class TestTableOutputWithExports:

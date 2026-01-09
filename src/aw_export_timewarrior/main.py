@@ -510,6 +510,7 @@ class Exporter:
         reset_accumulator=False,
         retain_accumulator=True,
         record_export=False,
+        decision_timestamp=None,
     ):
         """
         Set statistics after exporting tags.
@@ -523,6 +524,7 @@ class Exporter:
             reset_accumulator: Whether to reset tag accumulator
             retain_accumulator: Whether to retain current tags with stickyness
             record_export: Whether to record this as an export for reporting
+            decision_timestamp: When the export decision was triggered
         """
         # Extract timestamps
         if event and not start:
@@ -531,6 +533,10 @@ class Exporter:
             end = event["timestamp"] + event["duration"]
         if start and not end:
             end = start
+
+        # Decision timestamp defaults to event timestamp if not provided
+        if decision_timestamp is None and event:
+            decision_timestamp = event["timestamp"]
 
         # Prepare tags for retention
         if tags is None:
@@ -552,6 +558,7 @@ class Exporter:
             if (reset_accumulator and retain_accumulator)
             else 0.0,
             record_export_history=record_export,
+            decision_timestamp=decision_timestamp,
         )
 
         # Handle the special case where retain_accumulator adds initial time to tags

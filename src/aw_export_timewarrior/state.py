@@ -95,6 +95,11 @@ class ExportRecord:
 
     Captures the state of the tag accumulator before and after the export,
     allowing reports to show what was accumulated and exported.
+
+    Three timestamps are involved:
+    - timestamp: When the exported interval began (interval start)
+    - decision_timestamp: When the export decision was triggered
+    - end_timestamp: When the exported interval ended (= start of next interval)
     """
 
     timestamp: datetime  # Start time of the exported interval
@@ -102,11 +107,17 @@ class ExportRecord:
     tags: set[str]  # Tags that were exported
     accumulator_before: dict[str, timedelta]  # Tag accumulator state before reset
     accumulator_after: dict[str, timedelta]  # Tag accumulator state after reset (with stickyness)
+    decision_timestamp: datetime | None = None  # When the export decision was made
 
     @property
     def row_type(self) -> str:
         """Return the row type for report formatting."""
         return "export"
+
+    @property
+    def end_timestamp(self) -> datetime:
+        """Return the end timestamp of the exported interval."""
+        return self.timestamp + self.duration
 
 
 @dataclass
@@ -261,6 +272,7 @@ class StateManager:
         stickyness_factor: float = 0.5,
         manual: bool = True,
         record_export_history: bool = False,
+        decision_timestamp: datetime | None = None,
     ) -> None:
         """Record an export with associated statistics.
 
@@ -276,6 +288,7 @@ class StateManager:
             stickyness_factor: Factor to apply to retained tags (0.0-1.0)
             manual: Whether this is manual tracking
             record_export_history: Whether to record this as an export for reporting
+            decision_timestamp: When the export decision was triggered
         """
         # Capture accumulator state before reset (for export history)
         accumulator_before: dict[str, timedelta] = {}
@@ -308,6 +321,7 @@ class StateManager:
                 tags=set(tags),
                 accumulator_before=accumulator_before,
                 accumulator_after=accumulator_after,
+                decision_timestamp=decision_timestamp,
             )
             self.export_history.append(export_record)
 

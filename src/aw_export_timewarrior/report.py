@@ -83,6 +83,11 @@ def interleave_exports(
 ) -> list[dict[str, Any]]:
     """Interleave export records with event data by timestamp.
 
+    Each export is represented as three entries in the timeline:
+    1. export_start: Marks when the exported interval began
+    2. export_decision: Marks when the export decision was triggered
+    3. export_end: Marks when the exported interval ended (= start of next interval)
+
     Args:
         events: List of event dictionaries with 'timestamp' key
         exports: List of ExportRecord objects
@@ -91,17 +96,40 @@ def interleave_exports(
         Combined list sorted by timestamp, with export records converted to dicts
     """
     # Convert exports to dict format for consistent handling
+    # Each export creates three entries: start, decision, and end markers
     export_dicts = []
     for export in exports:
-        export_dict = {
+        # Start marker - when the exported interval began
+        start_dict = {
             "timestamp": export.timestamp,
+            "duration": export.duration,
+            "tags": export.tags,
+            "row_type": "export_start",
+        }
+        export_dicts.append(start_dict)
+
+        # Decision marker - when the export decision was triggered
+        # (only if decision_timestamp is available)
+        if export.decision_timestamp is not None:
+            decision_dict = {
+                "timestamp": export.decision_timestamp,
+                "duration": export.duration,
+                "tags": export.tags,
+                "accumulator_before": export.accumulator_before,
+                "row_type": "export_decision",
+            }
+            export_dicts.append(decision_dict)
+
+        # End marker - when the exported interval ended (= start of next interval)
+        end_dict = {
+            "timestamp": export.end_timestamp,
             "duration": export.duration,
             "tags": export.tags,
             "accumulator_before": export.accumulator_before,
             "accumulator_after": export.accumulator_after,
-            "row_type": "export",
+            "row_type": "export_end",
         }
-        export_dicts.append(export_dict)
+        export_dicts.append(end_dict)
 
     # Mark events with row_type if not already set
     for event in events:
@@ -519,8 +547,36 @@ def format_as_table(
         # Check if this is an export row
         row_type = row.get("row_type", "event")
 
-        if row_type == "export" and show_exports:
-            # Format export row with colored output
+        if row_type == "export_start" and show_exports:
+            # Export start marker - shows when the exported interval began
+            tags_str = ", ".join(sorted(row["tags"]))
+            if truncate:
+                tags_str = truncate_string(tags_str, 40)
+
+            export_marker = "[EXPORT START]"
+            line = f"{time_str:<8} {duration_str:<8} {export_marker} {tags_str}"
+
+            # Print with color (green for export start)
+            print(colored(line, "green"))
+
+        elif row_type == "export_decision" and show_exports:
+            # Export decision marker - shows when threshold was reached
+            tags_str = ", ".join(sorted(row["tags"]))
+            acc_before = format_accumulator(row.get("accumulator_before", {}))
+
+            if truncate:
+                tags_str = truncate_string(tags_str, 30)
+                acc_before = truncate_string(acc_before, 50)
+
+            export_marker = "[EXPORT DECISION]"
+            export_info = f"{export_marker} {tags_str} | accumulated: {acc_before}"
+            line = f"{time_str:<8} {duration_str:<8} {export_info}"
+
+            # Print with color (yellow for export decision)
+            print(colored(line, "yellow"))
+
+        elif row_type == "export_end" and show_exports:
+            # Export end marker - shows when export decision was made (with details)
             tags_str = ", ".join(sorted(row["tags"]))
             acc_before = format_accumulator(row.get("accumulator_before", {}))
             acc_after = format_accumulator(row.get("accumulator_after", {}))
@@ -530,12 +586,28 @@ def format_as_table(
                 acc_before = truncate_string(acc_before, 40)
                 acc_after = truncate_string(acc_after, 40)
 
-            # Build export line with accumulator info
+            export_marker = "[EXPORT END]"
+            export_info = f"{export_marker} {tags_str} | before: {acc_before} | after: {acc_after}"
+            line = f"{time_str:<8} {duration_str:<8} {export_info}"
+
+            # Print with color (cyan bold for export end)
+            print(colored(line, "cyan", attrs=["bold"]))
+
+        elif row_type == "export" and show_exports:
+            # Legacy single-line export format (for backwards compatibility)
+            tags_str = ", ".join(sorted(row["tags"]))
+            acc_before = format_accumulator(row.get("accumulator_before", {}))
+            acc_after = format_accumulator(row.get("accumulator_after", {}))
+
+            if truncate:
+                tags_str = truncate_string(tags_str, 30)
+                acc_before = truncate_string(acc_before, 40)
+                acc_after = truncate_string(acc_after, 40)
+
             export_marker = "[EXPORT]"
             export_info = f"{export_marker} {tags_str} | before: {acc_before} | after: {acc_after}"
             line = f"{time_str:<8} {duration_str:<8} {export_info}"
 
-            # Print with color (cyan for exports)
             print(colored(line, "cyan", attrs=["bold"]))
         else:
             # Regular event row
@@ -675,8 +747,44 @@ def format_as_json(
     for row in data:
         row_type = row.get("row_type", "event")
 
-        if row_type == "export" and include_exports:
-            # Format export row
+        if row_type == "export_start" and include_exports:
+            # Format export start marker
+            record = {
+                "row_type": "export_start",
+                "timestamp": row["timestamp"].isoformat(),
+                "duration_seconds": int(row["duration"].total_seconds()),
+                "tags": sorted(row["tags"]),
+            }
+        elif row_type == "export_decision" and include_exports:
+            # Format export decision marker
+            record = {
+                "row_type": "export_decision",
+                "timestamp": row["timestamp"].isoformat(),
+                "duration_seconds": int(row["duration"].total_seconds()),
+                "tags": sorted(row["tags"]),
+                "accumulator_before": {
+                    tag: int(duration.total_seconds())
+                    for tag, duration in row.get("accumulator_before", {}).items()
+                },
+            }
+        elif row_type == "export_end" and include_exports:
+            # Format export end marker (with accumulator details)
+            record = {
+                "row_type": "export_end",
+                "timestamp": row["timestamp"].isoformat(),
+                "duration_seconds": int(row["duration"].total_seconds()),
+                "tags": sorted(row["tags"]),
+                "accumulator_before": {
+                    tag: int(duration.total_seconds())
+                    for tag, duration in row.get("accumulator_before", {}).items()
+                },
+                "accumulator_after": {
+                    tag: int(duration.total_seconds())
+                    for tag, duration in row.get("accumulator_after", {}).items()
+                },
+            }
+        elif row_type == "export" and include_exports:
+            # Legacy single-line export format
             record = {
                 "row_type": "export",
                 "timestamp": row["timestamp"].isoformat(),
