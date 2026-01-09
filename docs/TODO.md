@@ -2,61 +2,42 @@
 
 ## High Priority
 
-### Reconsider the "ignore treshold" for windows
+### Config terminology cleanup
 
-The idea to ignore window visits less than three seconds was to avoid "noise" in the data (and logs) if the mouse coursor is dragged over multiple windows etc before starting to work on something.
-
-However, sometimes rapid movement between windows is part of the workflow, other times the application may rapidly change the window title (example: spending an hour in `feh` browsing photos, spending less than three seconds for each).
-
-I think the simplest solution is to just kill this logic entirely.  Assume the short window visits will drown out from the real data.
-
-### Config confusion
-
-In config.py, the `prepend` have been used to indicate additional tags.
-
+In config.py, the `prepend` has been used to indicate additional tags.
 In the real config file `add` is used instead.
-
 For many other rules, `timew_tags` is used.
 
-We don't need to care about backward compatibility yet.  `prepend` and `append` is meaningless as the tags is a set and not a list, it should be `add`.  `timew_tags` also doesn't make sense as we want to develop this in a "backend agnostic" tool, so probably only `tags`.  However, `add` and `tags` is not much consistent, so this may be thought better through.
+We don't need to care about backward compatibility yet. `prepend` and `append` is meaningless as the tags is a set and not a list, it should be `add`. `timew_tags` also doesn't make sense as we want to develop this in a "backend agnostic" tool, so probably only `tags`. However, `add` and `tags` is not much consistent, so this may be thought better through.
 
-As for te tag rules, we also need options to replace or remove tags.
-
-### Maintain the CHANGELOG
-
-ensure it's up-to-date
-
-### Maintain the TODO-list
-
-Many things here have already been done
-
-### Report should tell what rules have been applied
-
-... and it should also give some info from the tmux watcher
+As for the tag rules, we also need options to replace or remove tags.
 
 ### Diff should apply (re)tagging rules
 
-if "bedtime" is added to the afk in the timew database, then 4BREAK should also be applied
+If "bedtime" is added to the afk in the timew database, then 4BREAK should also be applied.
 
-### Recursion safety in tag rules
-Add recursion depth limit to `apply_retag_rules()` to prevent infinite loops with circular tag rules.
+### Empty tags in export
 
-### Return type annotations
-Add missing return type annotations throughout codebase per coding standards.
-
-### Empty tags assertion
-Fix or document the confusing assertion on empty tags in `_should_export_accumulator()`.
+The `_should_export_accumulator()` function can return an empty tags set even when it returns `should_export=True`. This happens when the threshold adjustment for exclusive tag conflicts raises `min_tag_recording_interval` above all accumulated tag times. This should either be prevented (return `False` when tags would be empty) or documented as intentional behavior.
 
 ## Medium Priority
 
+### Manual operations
+
+* The logic in aw-watcher-ask-away should possibly also be applicable when not-afk.  Should consider to ask for activity when the hints in the acticitywatcher data is weak
+* Should be easy to specify that "activity with tags X today was Y".  Like, feh was used for sorting inventory, etc.
+
 ### Further main.py reduction
+
 Continue extracting modules from main.py:
 - Event processing pipeline
 
 ### Configuration validation
+
 Add validation for configuration values (currently no validation of loaded TOML).
 
 ### Error handling consistency
+
 Improve error handling:
 - Add logging for caught exceptions
 - Use specific exception types
@@ -65,18 +46,16 @@ Improve error handling:
 ## Low Priority
 
 ### Performance optimizations
+
 - Event caching in `get_corresponding_event`
 - Batch processing for historical sync
-
-### Documentation
-- Architecture diagrams
-- Performance tuning guide
 
 ## Future Directions
 
 ### More watchers
 
 #### tmux watcher
+
 Support added for [aw-watcher-tmux](https://github.com/akohlbecker/aw-watcher-tmux):
 - Automatic detection of tmux bucket
 - Tag extraction with configurable rules (`rules.tmux.*`)
@@ -85,6 +64,7 @@ Support added for [aw-watcher-tmux](https://github.com/akohlbecker/aw-watcher-tm
 - Documentation in README.md
 
 #### terminal watcher
+
 Not yet investigated.
 
 ### Interactivity
@@ -96,6 +76,7 @@ Not yet investigated.
  - Could be CLI wizard or TUI interface
 
 ### Rename to aw-tagger
+
 Rename project from `aw-export-timewarrior` to `aw-tagger` to reflect the core value proposition: rule-based categorization for ActivityWatch.
 
 Key changes:
@@ -109,6 +90,30 @@ See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementati
 
 ## Completed
 
+### Added: Tracking algorithm documentation (Jan 8, 2026)
+
+Created `docs/TRACKING_ALGORITHM.md` explaining:
+- How events are processed and tags accumulated
+- The three timestamps involved in each export (interval start, interval end, decision time)
+- Manual vs automatic tracking modes
+- Stickyness factor and accumulator behavior
+- Export thresholds and configuration parameters
+
+### Added: Report shows matched rules (Jan 7, 2026)
+
+**Problem:** Hard to debug why events were tagged a certain way.
+
+**Solution:** Added `--show-rule` option and `matched_rule` column to report output. Each event now shows which rule matched it (e.g., `browser:github`, `tmux:claude-oss`).
+
+### Added: Export history in reports (Jan 8, 2026)
+
+**Problem:** Hard to understand when exports happened and what was accumulated.
+
+**Solution:** Added `--show-exports` option to report command. Shows export decisions inline with events, including:
+- Interval start timestamp and duration
+- Tags exported
+- Accumulator state before/after the export
+
 ### Fixed: oss-contrib over-tagging (Jan 5, 2026)
 
 **Problem:** Almost everything was being tagged with `oss-contrib` and `activitywatch` even when working on unrelated projects.
@@ -120,10 +125,6 @@ title_regexp = "...Timewarrior diff command|"
 ```
 
 **Fix:** Removed the trailing `|` from the regex in the user's config file.
-
-**Lesson:** The "Report should tell what rules have been applied" TODO item would have made this much easier to debug.
-
----
 
 ### Fixed: Wonkyness in the diff output (Jan 5, 2026)
 
@@ -139,11 +140,7 @@ title_regexp = "...Timewarrior diff command|"
 3. When a timew interval spans multiple AW suggestions with different tags, now shows each sub-interval separately with its time range
 4. Always show current timew tags in diff output (excluding internal `~aw` tags)
 
-**Investigation:** The 00:26:05 - 00:44:11 discrepancy was correct data - AFK watcher showed `not-afk` until 23:44:11 UTC, while ask-away watcher recorded "4ME social" at 23:42:10 UTC. The old diff combined both, making it look contradictory.
-
 **Affected file:** `src/aw_export_timewarrior/compare.py`
-
----
 
 ### Fixed: Analyze not showing rapid activity in same app (Jan 5, 2026)
 
@@ -162,8 +159,6 @@ This preserves the original intent (filter brief window switches) while recogniz
 
 **Test:** Added `tests/test_short_event_accumulation.py` with 5 regression tests
 
----
-
 ### Fixed: Transport block ignoring active window usage (Dec 20, 2025)
 
 **Problem:** TimeWarrior showed one continuous "transport" block from 11:04:54 to 18:14:36 UTC, completely ignoring ~5-6 minutes of active window usage when the laptop was resumed.
@@ -179,3 +174,4 @@ This preserves the original intent (filter brief window switches) while recogniz
 ---
 
 *See also: `docs/CODE_REVIEW.md` for detailed code review and improvement suggestions.*
+*See also: `docs/TRACKING_ALGORITHM.md` for detailed explanation of the tracking algorithm.*
