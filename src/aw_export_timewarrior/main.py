@@ -203,11 +203,13 @@ class Exporter:
 
         # Initialize TagExtractor for all tag matching logic
         # Pass lambda to support tests that change config after initialization
+        # In dry_run mode, use default_retry=0 to avoid sleeping on recent events
         self.tag_extractor = TagExtractor(
             config=lambda: self.config,
             event_fetcher=self.event_fetcher,
             terminal_apps=self.terminal_apps,
             log_callback=self.log,
+            default_retry=0 if self.dry_run else 6,
         )
 
         # Initialize TimeTracker for time tracking backend

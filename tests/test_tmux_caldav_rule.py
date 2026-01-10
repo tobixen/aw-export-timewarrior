@@ -87,7 +87,7 @@ class TestTmuxCaldavRule:
         fetcher.get_tmux_bucket = get_tmux_bucket
 
         def get_corresponding_event(
-            window_event, bucket_id, ignorable=False, fallback_to_recent=False
+            window_event, bucket_id, ignorable=False, fallback_to_recent=False, retry=6
         ):
             # Return the first tmux event (simulating fallback finding it)
             if bucket_id == "aw-watcher-tmux":

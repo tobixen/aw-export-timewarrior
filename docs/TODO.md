@@ -90,6 +90,16 @@ See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementati
 
 ## Completed
 
+### Fixed: Report command stuck on recent events (Jan 10, 2026)
+
+**Problem:** `report --start '2 minutes ago'` would get stuck for a long time when processing recent browser/editor/terminal events.
+
+**Root cause:** `extract_specialized_data()` in report.py was calling `get_corresponding_event()` with the default `retry=6` parameter. For recent events (within 90 seconds of current time), this would sleep up to 6 times (~90s total) if no matching sub-event was found.
+
+**Fix:** Added `retry=0` to all `get_corresponding_event()` calls in `extract_specialized_data()` since the report command is just reading historical data and shouldn't wait for events to propagate.
+
+**Tests:** Added `tests/test_report_no_sleep.py` with 8 tests verifying the fix.
+
 ### Added: Tracking algorithm documentation (Jan 8, 2026)
 
 Created `docs/TRACKING_ALGORITHM.md` explaining:

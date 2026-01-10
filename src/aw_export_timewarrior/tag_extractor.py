@@ -59,6 +59,7 @@ class TagExtractor:
         event_fetcher: Any,  # EventFetcher type
         terminal_apps: set[str] | None = None,
         log_callback: Callable | None = None,
+        default_retry: int = 6,
     ) -> None:
         """Initialize tag extractor.
 
@@ -67,11 +68,14 @@ class TagExtractor:
             event_fetcher: EventFetcher for getting sub-events
             terminal_apps: Set of terminal app names (lowercase)
             log_callback: Optional callback for logging (signature: log(msg, event=None, **kwargs))
+            default_retry: Default retry count for get_corresponding_event calls.
+                Set to 0 for report/dry-run mode to avoid sleeping on recent events.
         """
         # Support both dict and callable (for dynamic config access in tests)
         self._config_getter = config if callable(config) else (lambda: config)
         self.event_fetcher = event_fetcher
         self.terminal_apps = terminal_apps or set()
+        self.default_retry = default_retry
         self.log_callback = log_callback or (lambda msg, **kwargs: logger.info(msg))
         # Track the last matched rule (set by extraction methods)
         self._last_matched_rule: str | None = None
@@ -170,7 +174,11 @@ class TagExtractor:
         # Get corresponding tmux event (handles picking the longest if multiple)
         # Use fallback_to_recent since tmux state persists between recorded events
         tmux_event = self.event_fetcher.get_corresponding_event(
-            window_event, tmux_bucket, ignorable=True, fallback_to_recent=True
+            window_event,
+            tmux_bucket,
+            ignorable=True,
+            fallback_to_recent=True,
+            retry=self.default_retry,
         )
 
         if not tmux_event:
@@ -358,7 +366,7 @@ class TagExtractor:
 
         # Get the corresponding sub-event
         sub_event = self.event_fetcher.get_corresponding_event(
-            window_event, bucket_id, ignorable=ignorable
+            window_event, bucket_id, ignorable=ignorable, retry=self.default_retry
         )
 
         if not sub_event:
@@ -601,7 +609,11 @@ class TagExtractor:
             return None
 
         return self.event_fetcher.get_corresponding_event(
-            window_event, tmux_bucket, ignorable=True, fallback_to_recent=True
+            window_event,
+            tmux_bucket,
+            ignorable=True,
+            fallback_to_recent=True,
+            retry=self.default_retry,
         )
 
     def get_specialized_context(self, window_event: dict) -> dict[str, str | None]:

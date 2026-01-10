@@ -313,8 +313,9 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
                 bucket_id = exporter.event_fetcher.bucket_short[bucket_key]["id"]
                 ignorable = exporter._is_ignorable_event(app, window_event)
                 # Use the public get_corresponding_event() method
+                # retry=0: Don't sleep waiting for events - we're just reading history
                 sub_event = exporter.event_fetcher.get_corresponding_event(
-                    window_event, bucket_id, ignorable=ignorable
+                    window_event, bucket_id, ignorable=ignorable, retry=0
                 )
 
                 if sub_event:
@@ -338,7 +339,10 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
             if bucket_key in exporter.event_fetcher.bucket_short:
                 bucket_id = exporter.event_fetcher.bucket_short[bucket_key]["id"]
                 # Use the public get_corresponding_event() method
-                sub_event = exporter.event_fetcher.get_corresponding_event(window_event, bucket_id)
+                # retry=0: Don't sleep waiting for events - we're just reading history
+                sub_event = exporter.event_fetcher.get_corresponding_event(
+                    window_event, bucket_id, retry=0
+                )
 
                 if sub_event:
                     url = sub_event["data"].get("url", "")
@@ -354,8 +358,9 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
         try:
             tmux_bucket = exporter.event_fetcher.get_tmux_bucket()
             if tmux_bucket:
+                # retry=0: Don't sleep waiting for events - we're just reading history
                 sub_event = exporter.event_fetcher.get_corresponding_event(
-                    window_event, tmux_bucket
+                    window_event, tmux_bucket, retry=0
                 )
                 if sub_event:
                     # Build tmux info string
