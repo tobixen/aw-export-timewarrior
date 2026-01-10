@@ -188,7 +188,7 @@ class TagExtractor:
         return self._get_subevent_tags(
             window_event=window_event,
             subtype="tmux",
-            matchers=[("timew_tags", self._match_tmux_rule)],
+            matchers=[("tags", self._match_tmux_rule)],
             sub_event=tmux_event,
         )
 
@@ -250,7 +250,7 @@ class TagExtractor:
         for i, group in enumerate(path_groups, start=len(cmd_groups) + 1):
             substitutions[f"${i}"] = group
 
-        return self._build_tags(rule["timew_tags"], substitutions)
+        return self._build_tags(self._get_rule_tags(rule), substitutions)
 
     def get_app_tags(self, event: dict) -> set[str] | bool:
         """Extract tags from app/title matching.
@@ -282,7 +282,7 @@ class TagExtractor:
             }
 
             self._last_matched_rule = f"app:{rule_name}"
-            return self._build_tags(rule["timew_tags"], substitutions)
+            return self._build_tags(self._get_rule_tags(rule), substitutions)
 
         return False
 
@@ -423,7 +423,11 @@ class TagExtractor:
                 rule = self.config["rules"][subtype][rule_name]
 
                 # Skip rules that don't have this key
-                if rule_key not in rule:
+                # Support both 'tags' (preferred) and 'timew_tags' (legacy)
+                if rule_key == "tags":
+                    if "tags" not in rule and "timew_tags" not in rule:
+                        continue
+                elif rule_key not in rule:
                     continue
 
                 # Try to match
@@ -468,7 +472,7 @@ class TagExtractor:
         """
         for project in rule.get("projects", []):
             if project == sub_event["data"].get("project"):
-                return self._build_tags(rule["timew_tags"])
+                return self._build_tags(self._get_rule_tags(rule))
         return None
 
     def _match_path_regexp(self, rule: dict, sub_event: dict, rule_key: str) -> set[str] | None:
@@ -519,7 +523,7 @@ class TagExtractor:
         """Generic regexp matcher with group substitution.
 
         Args:
-            rule: The rule dict containing the regexp and timew_tags
+            rule: The rule dict containing the regexp and tags
             text: The text to match against
             rule_key: The key in the rule containing the regexp pattern
 
@@ -536,7 +540,19 @@ class TagExtractor:
         # Build substitutions from match groups
         substitutions = self._extract_capture_groups(match)
 
-        return self._build_tags(rule["timew_tags"], substitutions)
+        return self._build_tags(self._get_rule_tags(rule), substitutions)
+
+    def _get_rule_tags(self, rule: dict) -> list:
+        """Get tags from a rule, supporting both 'tags' and legacy 'timew_tags' keys.
+
+        Args:
+            rule: The rule configuration dict
+
+        Returns:
+            List of tag templates from the rule
+        """
+        # Support both 'tags' (preferred) and 'timew_tags' (legacy)
+        return rule.get("tags", rule.get("timew_tags", []))
 
     def _build_tags(self, tag_templates: list, substitutions: dict | None = None) -> set[str]:
         """Build a set of tags from templates with variable substitution.
@@ -739,10 +755,12 @@ class TagExtractor:
                     else:
                         new_tags.add(tag)
 
-            # Step 3: Add tags if 'add' is specified (original behavior)
-            if "add" in retags:
+            # Step 3: Add tags if 'add' or 'prepend' (legacy) is specified
+            # Support both 'add' (preferred) and 'prepend' (legacy)
+            add_tags = retags.get("add", retags.get("prepend"))
+            if add_tags:
                 tags_to_add = set()
-                for tag in retags["add"]:
+                for tag in add_tags:
                     if "$source_tag" in tag:
                         for source_tag in intersection:
                             tags_to_add.add(tag.replace("$source_tag", source_tag))

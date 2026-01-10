@@ -125,7 +125,7 @@ class TestTmuxTagExtraction:
                 "tmux": {
                     "editing": {
                         "command": r"(vim|emacs|nano)",
-                        "timew_tags": ["coding", "editing", "$command"],
+                        "tags": ["coding", "editing", "$command"],
                     }
                 }
             },
@@ -154,7 +154,7 @@ class TestTmuxTagExtraction:
                 "tmux": {
                     "work_session": {
                         "session": r"work",
-                        "timew_tags": ["work", "$session"],
+                        "tags": ["work", "$session"],
                     }
                 }
             },
@@ -181,7 +181,7 @@ class TestTmuxTagExtraction:
                 "tmux": {
                     "project": {
                         "path": r"/home/user/projects/([^/]+)",
-                        "timew_tags": ["coding", "project:$1"],
+                        "tags": ["coding", "project:$1"],
                     }
                 }
             },
@@ -211,7 +211,7 @@ class TestTmuxTagExtraction:
                     "dev_work": {
                         "session": r"work",
                         "command": r"(python|node)",
-                        "timew_tags": ["work", "dev", "$command"],
+                        "tags": ["work", "dev", "$command"],
                     }
                 }
             },
@@ -295,7 +295,7 @@ class TestTmuxTagExtraction:
                     "git_operations": {
                         "command": r"git\s+(push|pull|commit)",
                         "path": r"/home/user/projects/([^/]+)/([^/]+)",
-                        "timew_tags": ["git", "$1", "org:$2", "proj:$3"],
+                        "tags": ["git", "$1", "org:$2", "proj:$3"],
                     }
                 }
             },
@@ -325,7 +325,7 @@ class TestTmuxTagExtraction:
                 "tmux": {
                     "project_work": {
                         "path": r"/home/user/projects/([^/]+)/([^/]+)",
-                        "timew_tags": ["coding", "org:$1", "project:$2"],
+                        "tags": ["coding", "org:$1", "project:$2"],
                     }
                 }
             },

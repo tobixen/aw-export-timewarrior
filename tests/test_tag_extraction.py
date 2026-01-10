@@ -84,7 +84,7 @@ class TestBrowserTagExtraction:
                 "browser": {
                     "github": {
                         "url_regexp": r"github\.com/([^/]+)/([^/]+)",
-                        "timew_tags": ["4work", "github", "$1"],
+                        "tags": ["4work", "github", "$1"],
                     }
                 }
             },
@@ -162,7 +162,7 @@ class TestBrowserTagExtraction:
                 "browser": {
                     "docs": {
                         "url_regexp": r"docs\.python\.org",
-                        "timew_tags": ["4work", "python", "documentation"],
+                        "tags": ["4work", "python", "documentation"],
                     }
                 }
             },
@@ -202,7 +202,7 @@ class TestEditorTagExtraction:
                 "editor": {
                     "caldav_project": {
                         "projects": ["caldav"],
-                        "timew_tags": ["4work", "caldav", "python"],
+                        "tags": ["4work", "caldav", "python"],
                     }
                 }
             },
@@ -243,7 +243,7 @@ class TestEditorTagExtraction:
                 "editor": {
                     "config_files": {
                         "path_regexp": r"\.config/([^/]+)/",
-                        "timew_tags": ["4me", "config", "$1"],
+                        "tags": ["4me", "config", "$1"],
                     }
                 }
             },
@@ -302,7 +302,7 @@ class TestAppTagExtraction:
                 "app": {
                     "communication": {
                         "app_names": ["Signal", "DeltaChat", "Slack"],
-                        "timew_tags": ["4me", "communication", "$app"],
+                        "tags": ["4me", "communication", "$app"],
                     }
                 }
             },
@@ -332,7 +332,7 @@ class TestAppTagExtraction:
                     "terminal": {
                         "app_names": ["Terminal", "foot", "xterm"],
                         "title_regexp": r"ssh\s+(\S+)",
-                        "timew_tags": ["4work", "ssh", "$1"],
+                        "tags": ["4work", "ssh", "$1"],
                     }
                 }
             },
@@ -361,7 +361,7 @@ class TestAppTagExtraction:
                     "terminal": {
                         "app_names": ["Terminal"],
                         "title_regexp": r"important-task",
-                        "timew_tags": ["4work"],
+                        "tags": ["4work"],
                     }
                 }
             },

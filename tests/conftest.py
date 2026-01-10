@@ -32,6 +32,26 @@ def no_sleep(monkeypatch):
     monkeypatch.setattr(main, "sleep", fake_sleep)
 
 
+@pytest.fixture(autouse=True)
+def reset_config():
+    """Reset the global config to default after each test.
+
+    This prevents test pollution where one test's config changes
+    affect subsequent tests.
+    """
+    from aw_core.config import load_config_toml
+
+    from aw_export_timewarrior import config as config_module
+
+    yield
+
+    # Restore original config after test
+    # Re-load from default to ensure clean state
+    config_module.config.clear()
+    default_config = load_config_toml("aw-export-timewarrior", config_module.default_config)
+    config_module.config.update(default_config)
+
+
 class FixtureDataBuilder:
     """
     Builder class for creating test data.

@@ -2,15 +2,32 @@
 
 ## High Priority
 
-### Config terminology cleanup
+### Github tests fail
 
-In config.py, the `prepend` has been used to indicate additional tags.
-In the real config file `add` is used instead.
-For many other rules, `timew_tags` is used.
+Tests seems to be dependent on timew
 
-We don't need to care about backward compatibility yet. `prepend` and `append` is meaningless as the tags is a set and not a list, it should be `add`. `timew_tags` also doesn't make sense as we want to develop this in a "backend agnostic" tool, so probably only `tags`. However, `add` and `tags` is not much consistent, so this may be thought better through.
+```
+$ gh run view --log-failed --job=60006961560
+(...)
+test	Run tests	2026-01-10T22:03:18.9797781Z ______________ TestDiffWithRealTimew.test_diff_matching_interval _______________
+test	Run tests	2026-01-10T22:03:18.9798216Z tests/test_functional_timew.py:271: in test_diff_matching_interval
+test	Run tests	2026-01-10T22:03:18.9798589Z     timew_db.add_interval(start, end, ["work", "python"])
+test	Run tests	2026-01-10T22:03:18.9799005Z tests/test_functional_timew.py:80: in add_interval
+test	Run tests	2026-01-10T22:03:18.9799353Z     result = self.run_timew("track", start_str, "-", end_str, *tags)
+test	Run tests	2026-01-10T22:03:18.9799686Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+test	Run tests	2026-01-10T22:03:18.9799966Z tests/test_functional_timew.py:72: in run_timew
+test	Run tests	2026-01-10T22:03:18.9800379Z     return subprocess.run(["timew"] + list(args), capture_output=True, text=True, check=False)
+test	Run tests	2026-01-10T22:03:18.9800803Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+test	Run tests	2026-01-10T22:03:18.9801254Z /opt/hostedtoolcache/Python/3.13.11/x64/lib/python3.13/subprocess.py:554: in run
+test	Run tests	2026-01-10T22:03:18.9801645Z     with Popen(*popenargs, **kwargs) as process:
+test	Run tests	2026-01-10T22:03:18.9801904Z          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+test	Run tests	2026-01-10T22:03:18.9802254Z /opt/hostedtoolcache/Python/3.13.11/x64/lib/python3.13/subprocess.py:1039: in __init__
+test	Run tests	2026-01-10T22:03:18.9802696Z     self._execute_child(args, executable, preexec_fn, close_fds,
+test	Run tests	2026-01-10T22:03:18.9803159Z /opt/hostedtoolcache/Python/3.13.11/x64/lib/python3.13/subprocess.py:1991: in _execute_child
+test	Run tests	2026-01-10T22:03:18.9803637Z     raise child_exception_type(errno_num, err_msg, err_filename)
+test	Run tests	2026-01-10T22:03:18.9804022Z E   FileNotFoundError: [Errno 2] No such file or directory: 'timew'
 
-As for the tag rules, we also need options to replace or remove tags.
+```
 
 ## Medium Priority
 
@@ -89,6 +106,17 @@ See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementati
 ---
 
 ## Completed
+
+### Config terminology cleanup (Jan 10, 2026)
+
+**Change:** Standardized config terminology to use `tags` and `add` as the preferred keys, with backward compatibility for legacy `timew_tags` and `prepend` keys.
+
+**Details:**
+- Rule definitions now prefer `tags` over legacy `timew_tags`
+- Retag rules now prefer `add` over legacy `prepend`
+- Both legacy keys still work for backward compatibility with existing user config files
+- Updated default config and test fixtures to use new terminology
+- Updated documentation (README.md) to use new terminology
 
 ### Fixed: Empty tags in export (Jan 10, 2026)
 

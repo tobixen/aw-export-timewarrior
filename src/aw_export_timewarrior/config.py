@@ -75,27 +75,27 @@ min_lid_duration = 10.0
 
 [tags.housework]
 source_tags = [ "housework", "dishwash" ]
-prepend = [ "4chores", "afk" ]
+add = [ "4chores", "afk" ]
 
 [tags.tea]
 source_tags = [ "tea" ]
-prepend = [ "4break", "afk", "tea" ]
+add = [ "4break", "afk", "tea" ]
 
 [tags.entertainment]
 source_tags = [ "entertainment" ]
-prepend = [ "4break" ]
+add = [ "4break" ]
 
 [rules.browser.entertainment]
 url_regexp = "^https://(?:www\\\\.)?(theguardian).com/"
-timew_tags = [ "entertainment", "$1" ]
+tags = [ "entertainment", "$1" ]
 
 [rules.app.comms]
 app_names = ["Signal", "DeltaChat"]
-timew_tags = [ "4me", "personal communication", "$app" ]
+tags = [ "4me", "personal communication", "$app" ]
 
 [rules.editor.acme]
 project_regexp = "acme"
-timew_tags = [ "4work", "acme" ]
+tags = [ "4work", "acme" ]
 
 ## Even if we're multitasking and working for both customer acme and customer
 ## emca at once, we probably should bill only one of them

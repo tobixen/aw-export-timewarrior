@@ -149,7 +149,7 @@ grace_time = 30
 # Existing config sections remain the same
 [rules.browser.github]
 url_regexp = "github\\.com"
-timew_tags = ["coding", "github"]
+tags = ["coding", "github"]
 
 [tags.work]
 source_tags = ["coding"]

@@ -88,12 +88,12 @@ class TestRegexpMatchingBugRegression:
                     # First rule - won't match
                     "gitlab": {
                         "url_regexp": r"gitlab\.com/([^/]+)/([^/]+)",
-                        "timew_tags": ["4work", "gitlab", "$1"],
+                        "tags": ["4work", "gitlab", "$1"],
                     },
                     # Second rule - should match
                     "github": {
                         "url_regexp": r"github\.com/([^/]+)/([^/]+)",
-                        "timew_tags": ["4work", "github", "$1"],
+                        "tags": ["4work", "github", "$1"],
                     },
                 }
             },
@@ -142,12 +142,12 @@ class TestRegexpMatchingBugRegression:
                     # First rule - project based, won't match
                     "work_project": {
                         "projects": ["some-other-project"],
-                        "timew_tags": ["4work", "other-project"],
+                        "tags": ["4work", "other-project"],
                     },
                     # Second rule - regexp based, should match
                     "config_files": {
                         "path_regexp": r"\.config/([^/]+)/",
-                        "timew_tags": ["4me", "config", "$1"],
+                        "tags": ["4me", "config", "$1"],
                     },
                 }
             },
@@ -194,7 +194,7 @@ class TestRegexpMatchingBugRegression:
                 "browser": {
                     "github_issue": {
                         "url_regexp": r"github\.com/([^/]+)/([^/]+)/issues",
-                        "timew_tags": ["4work", "github", "$1", "$2"],
+                        "tags": ["4work", "github", "$1", "$2"],
                     }
                 }
             },
@@ -272,7 +272,7 @@ class TestBuildTagsEdgeCases:
                 "app": {
                     "communication": {
                         "app_names": ["Signal", "Slack"],
-                        "timew_tags": ["4me", "communication", "$app"],
+                        "tags": ["4me", "communication", "$app"],
                     }
                 }
             },

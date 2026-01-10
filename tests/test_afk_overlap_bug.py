@@ -55,7 +55,7 @@ def test_long_window_event_split_by_afk() -> None:
             "app": {
                 "terminal": {
                     "app_names": ["foot"],
-                    "timew_tags": ["terminal", "4work"],
+                    "tags": ["terminal", "4work"],
                 }
             }
         },

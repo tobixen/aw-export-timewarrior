@@ -72,15 +72,15 @@ Configuration is stored in `~/.config/activitywatch/aw-export-timewarrior/aw-exp
 ```toml
 [rules.browser.github]
 url_regexp = "github\\.com"
-timew_tags = ["coding", "github"]
+tags = ["coding", "github"]
 
 [rules.editor.myproject]
 path_regexp = "/home/user/projects/myproject"
-timew_tags = ["myproject", "coding"]
+tags = ["myproject", "coding"]
 
 [rules.app.slack]
 app_names = ["slack", "Slack"]
-timew_tags = ["communication", "slack"]
+tags = ["communication", "slack"]
 
 [tags.coding-is-work]
 source_tags = ["coding"]

@@ -2,58 +2,58 @@
 
 [tags.coding]
 source_tags = ["python", "coding"]
-prepend = ["4work"]
+add = ["4work"]
 
 [tags.learning]
 source_tags = ["learning", "python"]
-prepend = ["4work"]
+add = ["4work"]
 
 # Editor rules - match Python files
 [rules.editor.python]
 file_regexp = "\\.py$"
-timew_tags = ["coding", "python"]
+tags = ["coding", "python"]
 
 # VSCode/Code app rules
 [rules.app.vscode]
 app_names = ["Code"]
 title_regexp = "\\.py"
-timew_tags = ["coding", "python"]
+tags = ["coding", "python"]
 
 # Emacs app rules
 [rules.app.emacs]
 app_names = ["Emacs"]
 title_regexp = "\\.py"
-timew_tags = ["coding", "python"]
+tags = ["coding", "python"]
 
 # Browser rules - Python documentation
 [rules.browser.python-docs]
 url_regexp = "docs\\.python\\.org"
-timew_tags = ["learning", "python"]
+tags = ["learning", "python"]
 
 # Browser rules - GitHub
 [rules.browser.github]
 url_regexp = "github\\.com"
-timew_tags = ["coding", "browsing"]
+tags = ["coding", "browsing"]
 
 # Terminal/foot app
 [rules.app.terminal]
 app_names = ["foot"]
-timew_tags = ["terminal", "4work"]
+tags = ["terminal", "4work"]
 
 # Tmux rules - editing code
 [rules.tmux.editing]
 command = "(vim|emacs|nano)"
-timew_tags = ["coding", "editing", "$command"]
+tags = ["coding", "editing", "$command"]
 
 # Tmux rules - work session
 [rules.tmux.work-session]
 session = "work"
-timew_tags = ["4work", "tmux", "$session"]
+tags = ["4work", "tmux", "$session"]
 
 # Tmux rules - project-specific with multiple capture groups
 [rules.tmux.activitywatch]
 path = "/home/[^/]+/([^/]+)/([^/]+)"
-timew_tags = ["coding", "org:$1", "project:$2", "4work"]
+tags = ["coding", "org:$1", "project:$2", "4work"]
 
 [exclusive.main_category]
 tags = ["4work", "4break", "4chores"]

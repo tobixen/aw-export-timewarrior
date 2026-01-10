@@ -27,7 +27,7 @@ class TestTmuxCaldavRule:
                     "claude-oss": {
                         "command": "claude",
                         "path": r"(?:/home/tobias|~)/(activitywatch.*|caldav|inventory-system|mobilizon)",
-                        "timew_tags": ["$1", "4OSS", "oss-contrib", "claude"],
+                        "tags": ["$1", "4OSS", "oss-contrib", "claude"],
                     }
                 }
             },

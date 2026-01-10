@@ -104,12 +104,12 @@ def test_browser_scope_bug_multiple_rules(mock_aw_client: Mock) -> None:
                 # First rule - has projects but no url_regexp (won't match)
                 "projects_rule": {
                     "projects": ["some-other-project"],
-                    "timew_tags": ["4work", "wrong-tags"],
+                    "tags": ["4work", "wrong-tags"],
                 },
                 # Second rule - has url_regexp (should match)
                 "github": {
                     "url_regexp": r"github\.com/([^/]+)/([^/]+)",
-                    "timew_tags": ["4work", "github", "$1"],
+                    "tags": ["4work", "github", "$1"],
                 },
             }
         },
@@ -162,12 +162,12 @@ def test_editor_scope_bug_projects_then_regexp(mock_aw_client: Mock) -> None:
                 # First rule - projects only (won't match)
                 "work_projects": {
                     "projects": ["work-project", "client-project"],
-                    "timew_tags": ["4work", "wrong-tags"],
+                    "tags": ["4work", "wrong-tags"],
                 },
                 # Second rule - path_regexp (should match)
                 "config_files": {
                     "path_regexp": r"\.config/([^/]+)/",
-                    "timew_tags": ["4me", "config", "$1"],
+                    "tags": ["4me", "config", "$1"],
                 },
             }
         },

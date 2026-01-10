@@ -26,7 +26,7 @@ class TestIgnoredEventsTracking:
                 "browser": {
                     "github": {
                         "url_regexp": r"github\.com",
-                        "timew_tags": ["github", "coding"],
+                        "tags": ["github", "coding"],
                     }
                 }
             },
