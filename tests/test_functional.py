@@ -1,9 +1,16 @@
+import shutil
 from argparse import Namespace
 from pathlib import Path
 
 import pytest
 
 from aw_export_timewarrior.cli import run_diff, run_sync
+
+# Skip all tests in this module if timew is not installed
+pytestmark = pytest.mark.skipif(
+    shutil.which("timew") is None,
+    reason="TimeWarrior (timew) is not installed",
+)
 
 
 @pytest.fixture

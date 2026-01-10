@@ -1,6 +1,7 @@
 """Integration tests for the export workflow and timewarrior interaction."""
 
 import logging
+import shutil
 import subprocess
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
@@ -14,6 +15,12 @@ from aw_export_timewarrior.main import (
     timew_run,
 )
 from aw_export_timewarrior.state import AfkState
+
+# Helper to skip tests that require timew
+requires_timew = pytest.mark.skipif(
+    shutil.which("timew") is None,
+    reason="TimeWarrior (timew) is not installed",
+)
 
 
 def create_aw_event(timestamp, duration, data):
@@ -242,6 +249,7 @@ class TestEnsureTagExported:
         assert "programming" in tags_arg
         assert "~aw" in tags_arg
 
+    @requires_timew
     @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
     @patch("aw_export_timewarrior.main.timew_run")
     @patch("aw_export_timewarrior.main.get_timew_info")
@@ -274,6 +282,7 @@ class TestEnsureTagExported:
         # Should not have called timew_run because of override
         mock_timew_run.assert_not_called()
 
+    @requires_timew
     @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
     @patch("aw_export_timewarrior.main.timew_run")
     @patch("aw_export_timewarrior.main.get_timew_info")
@@ -338,6 +347,7 @@ class TestExporterTick:
         assert exporter.state.last_tick == timew_info["start_dt"]
         assert exporter.state.last_known_tick == timew_info["start_dt"]
 
+    @requires_timew
     @patch("aw_export_timewarrior.main.get_timew_info")
     @patch("aw_export_timewarrior.main.timew_retag")
     def test_tick_sleeps_when_no_events(

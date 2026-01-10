@@ -6,10 +6,19 @@ This tests that timew commands are properly captured in dry-run mode,
 allowing us to verify what commands would be executed without actually running them.
 """
 
+import shutil
 from datetime import UTC, datetime
+
+import pytest
 
 from aw_export_timewarrior.main import Exporter
 from tests.conftest import FixtureDataBuilder
+
+# Helper to check if timew is available
+requires_timew = pytest.mark.skipif(
+    shutil.which("timew") is None,
+    reason="TimeWarrior (timew) is not installed",
+)
 
 
 def test_basic_command_capture() -> None:
@@ -110,10 +119,10 @@ def test_clear_captured_commands() -> None:
     assert len(exporter.get_captured_commands()) == 0
 
 
+@requires_timew
 def test_commands_not_captured_in_normal_mode() -> None:
     """Test that commands are NOT captured when not in dry-run mode."""
-    # Note: This test doesn't actually run timew commands because we're using test_data
-    # In real use without test_data, it would try to run actual commands
+    # Note: This test runs timew commands in non-dry-run mode, so timew must be installed
     data = (
         FixtureDataBuilder()
         .add_window_event("Code", "main.py - VS Code", duration=600)
