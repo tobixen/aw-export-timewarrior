@@ -11,6 +11,7 @@ up in `test_functional.py`.
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from argparse import Namespace
@@ -20,6 +21,12 @@ from pathlib import Path
 import pytest
 
 from aw_export_timewarrior.compare import SuggestedInterval, fetch_timew_intervals
+
+# Skip all tests in this module if timew is not installed
+pytestmark = pytest.mark.skipif(
+    shutil.which("timew") is None,
+    reason="TimeWarrior (timew) is not installed",
+)
 
 
 class MockNamespace(Namespace):
