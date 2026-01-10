@@ -12,10 +12,6 @@ We don't need to care about backward compatibility yet. `prepend` and `append` i
 
 As for the tag rules, we also need options to replace or remove tags.
 
-### Diff should apply (re)tagging rules
-
-If "bedtime" is added to the afk in the timew database, then 4BREAK should also be applied.
-
 ## Medium Priority
 
 ### Manual operations

@@ -497,8 +497,12 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         tags = " ".join(sorted(final_tags))
         commands.append(f"timew track {start_str} - {end_str} {tags} :adjust")
 
-    # Generate COMMENTED commands for manually edited entries (no ~aw tag)
-    # These are shown for reference but not executed automatically
+    # For manually edited entries (no ~aw tag), we:
+    # 1. Show commented track commands (what AW would suggest) for reference
+    # 2. Apply retag rules to derive additional tags that should be added
+    # E.g., if user added "bedtime", retag rules might imply "4BREAK" should also be added.
+    retag_commands = []
+
     if manual_entries:
         commands.append("")
         commands.append("# Manually edited intervals (no ~aw tag, not overwriting):")
@@ -511,18 +515,63 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
             commands.append(f"# timew track {start_str} - {end_str} {tags} :adjust")
             commands.append(f"#   (current: {old_tags})")
 
+            # Apply retag rules to the current TimeWarrior tags
+            current_tags = timew_int.tags - {"~aw"}  # Exclude internal marker
+            expanded_tags = retag_by_rules(current_tags, config)
+
+            # Find tags that should be added (derived from retag rules but not yet in timew)
+            derived_tags = expanded_tags - current_tags
+            if derived_tags:
+                # Generate command to add derived tags
+                tags_to_add = " ".join(sorted(derived_tags))
+                retag_commands.append(f"timew tag @{timew_int.id} {tags_to_add}")
+
+    # Add retag commands for derived tags from manual entries
+    if retag_commands:
+        commands.append("")
+        commands.append("# Apply retag rules to manually added tags:")
+        commands.extend(retag_commands)
+
     # NOTE: "extra" intervals (in TimeWarrior but not in ActivityWatch) are intentionally
     # not deleted to maintain continuous tracking. The :adjust flag on track commands
     # will handle merging/adjusting boundaries to absorb small gaps.
-    # For reference, extra intervals found (not generating delete commands):
+    # However, we still apply retag rules to derive additional tags if needed.
     if comparison["extra"]:
-        commands.append("")
-        commands.append("# Extra intervals in TimeWarrior (not deleting to maintain continuity):")
+        extra_retag_commands = []
+        extra_info = []
+
         for timew_int in sorted(comparison["extra"], key=lambda x: x.start):
+            # Apply retag rules to the current TimeWarrior tags
+            current_tags = timew_int.tags - {"~aw"}  # Exclude internal marker
+            expanded_tags = retag_by_rules(current_tags, config)
+
+            # Find tags that should be added (derived from retag rules but not yet in timew)
+            derived_tags = expanded_tags - current_tags
+
             timestamp_str = timew_int.start.astimezone().strftime("%Y-%m-%d %H:%M")
             end_str = timew_int.end.astimezone().strftime("%H:%M") if timew_int.end else "ongoing"
-            tags_str = " ".join(sorted(timew_int.tags))
-            commands.append(f"#   @{timew_int.id}: {timestamp_str} - {end_str} ({tags_str})")
+            tags_str = " ".join(sorted(current_tags))
+
+            if derived_tags:
+                # Generate command to add derived tags
+                tags_to_add = " ".join(sorted(derived_tags))
+                extra_retag_commands.append(f"timew tag @{timew_int.id} {tags_to_add}")
+                extra_info.append(
+                    f"#   @{timew_int.id}: {timestamp_str} - {end_str} ({tags_str}) → +{', '.join(sorted(derived_tags))}"
+                )
+            else:
+                extra_info.append(f"#   @{timew_int.id}: {timestamp_str} - {end_str} ({tags_str})")
+
+        # Add retag commands for extra intervals
+        if extra_retag_commands:
+            commands.append("")
+            commands.append("# Apply retag rules to extra intervals in TimeWarrior:")
+            commands.extend(extra_retag_commands)
+
+        # Show info about extra intervals
+        commands.append("")
+        commands.append("# Extra intervals in TimeWarrior (not deleting to maintain continuity):")
+        commands.extend(extra_info)
 
     return commands
 

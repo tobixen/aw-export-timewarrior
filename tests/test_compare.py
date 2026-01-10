@@ -1,6 +1,7 @@
 """Tests for compare mode functionality."""
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from aw_export_timewarrior.compare import (
     SuggestedInterval,
@@ -770,4 +771,64 @@ class TestGenerateFixCommands:
         )
         assert any("timew track" in cmd for cmd in executable_commands), (
             f"Should have a timew track command. Commands: {commands}"
+        )
+
+    def test_retag_rules_applied_to_manual_entries(self, tmp_path: Path) -> None:
+        """Test that retag rules are applied to derive additional tags for manual entries.
+
+        If a user manually adds 'bedtime' to an interval, and there's a retag rule
+        that 'bedtime' implies '4BREAK', the diff should generate a command to add
+        '4BREAK' to the interval.
+        """
+        from unittest.mock import patch
+
+        # TimeWarrior has an interval with manually added 'bedtime' (no ~aw tag)
+        comparison = {
+            "matching": [],
+            "different_tags": [
+                (
+                    TimewInterval(
+                        id=42,
+                        start=datetime(2025, 12, 10, 22, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 12, 10, 23, 0, 0, tzinfo=UTC),
+                        tags={"afk", "bedtime"},  # NO ~aw - manually edited
+                    ),
+                    SuggestedInterval(
+                        start=datetime(2025, 12, 10, 22, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 12, 10, 23, 0, 0, tzinfo=UTC),
+                        tags={"afk"},  # AW suggests just "afk"
+                    ),
+                )
+            ],
+            "missing": [],
+            "extra": [],
+        }
+
+        # Create a mock retag_by_rules that adds 4BREAK when bedtime is present
+        def mock_retag_by_rules(tags, config):
+            result = set(tags)
+            if "bedtime" in tags:
+                result.add("4BREAK")
+            return result
+
+        # Patch retag_by_rules in the main module (where it's imported from)
+        with patch("aw_export_timewarrior.main.retag_by_rules", side_effect=mock_retag_by_rules):
+            commands = generate_fix_commands(comparison)
+
+        # Should have an executable command to add derived tags
+        executable_commands = [c for c in commands if c.strip() and not c.startswith("#")]
+        commented_commands = [c for c in commands if c.startswith("#")]
+
+        # The commented part should show the manual entry with suggestion
+        assert any("Manually edited" in c for c in commented_commands), (
+            f"Should mention manually edited intervals. Commands: {commands}"
+        )
+        assert any("bedtime" in c for c in commands), (
+            f"Should show bedtime tag somewhere. Commands: {commands}"
+        )
+
+        # Should have an executable 'timew tag' command to add 4BREAK
+        assert any("timew tag" in c and "4BREAK" in c for c in executable_commands), (
+            f"Should have an executable 'timew tag' command to add derived tag 4BREAK. "
+            f"Executable commands: {executable_commands}"
         )
