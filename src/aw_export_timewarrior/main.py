@@ -1686,6 +1686,15 @@ class Exporter:
                 tags.add(tag)
             self.state.stats.tags_accumulated_time[tag] *= self.stickyness_factor
 
+        # If no tags to export (threshold was raised too high to avoid conflicts),
+        # don't export but keep the decayed accumulator
+        if not tags:
+            self.log(
+                "Threshold raised to avoid exclusive tag conflicts resulted in no tags to export",
+                level=logging.DEBUG,
+            )
+            return False, set(), self.state.last_known_tick, {}
+
         # Determine since timestamp
         if self.state.manual_tracking:
             since = event["timestamp"] - self.state.stats.known_events_time + event["duration"]

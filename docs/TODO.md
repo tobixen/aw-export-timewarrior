@@ -16,10 +16,6 @@ As for the tag rules, we also need options to replace or remove tags.
 
 If "bedtime" is added to the afk in the timew database, then 4BREAK should also be applied.
 
-### Empty tags in export
-
-The `_should_export_accumulator()` function can return an empty tags set even when it returns `should_export=True`. This happens when the threshold adjustment for exclusive tag conflicts raises `min_tag_recording_interval` above all accumulated tag times. This should either be prevented (return `False` when tags would be empty) or documented as intentional behavior.
-
 ## Medium Priority
 
 ### Manual operations
@@ -44,6 +40,14 @@ Improve error handling:
 - Document expected vs. exceptional failure cases
 
 ## Low Priority
+
+### Reconsider the tests
+
+There are tons and tons of test code, and still lots of bugs have been found and fixed.
+
+Probably quite much of the tests are redundant, probably we don't need this many tests, probably they could be consolidated.
+
+Would it make sense to have a fixture containing a semi-large dataset containing real data as well as data known to have caused problems earlier, combined with a relatively large ruleset, and then verify that all the different commands will do as predicted with this data set and produce the same timeline?
 
 ### Performance optimizations
 
@@ -89,6 +93,16 @@ See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementati
 ---
 
 ## Completed
+
+### Fixed: Empty tags in export (Jan 10, 2026)
+
+**Problem:** `_should_export_accumulator()` could return `should_export=True` with an empty tags set when the threshold adjustment for exclusive tag conflicts raised `min_tag_recording_interval` above all accumulated tag times.
+
+**Root cause:** When two exclusive tags had exactly the same accumulated time, the while loop would raise the threshold until both were eliminated, but the function would still return `should_export=True` with an empty tags set.
+
+**Fix:** Added a check after tag collection - if no tags remain after conflict resolution, return `False` instead of `True` with empty tags. The accumulator is still decayed to prevent indefinite growth.
+
+**Test:** Added `tests/test_empty_tags_export.py` with regression tests.
 
 ### Fixed: Report command stuck on recent events (Jan 10, 2026)
 
