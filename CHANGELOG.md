@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `--format=json` to output a valid JSON array instead of NDJSON
 - Fix diagnostic output (DRY RUN messages, "Processing time range") going to stdout - now goes to stderr for clean JSON output that can be piped to jq
 - Fix `accumulator_before` in export records showing post-stickyness values - now shows pre-stickyness values for accurate visibility into what triggered the export
+- Fix `_should_export_accumulator()` returning `should_export=True` with empty tags when exclusive tag conflicts eliminated all tags above threshold
 
 ## [0.2.0] - 2026-01-10
 
