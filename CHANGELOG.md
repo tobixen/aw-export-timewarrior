@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-01-10
+
+### Added
+- Add GitHub Actions CI workflow (lint + test)
+- Add GitHub Actions publish workflow for PyPI releases
+
+### Changed
+- Modernize pyproject.toml with full project metadata (description, license, classifiers, URLs)
+- Use poetry-dynamic-versioning for automatic version from git tags
+- Replace `toml` dependency with built-in `tomllib` (Python 3.11+)
+- Streamline README with links to detailed documentation
+
 ## [0.1.0] - 2026-01-10
 
 ### Added

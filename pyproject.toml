@@ -1,18 +1,44 @@
 [project]
 name = "aw-export-timewarrior"
-version = "0.1.0"
-description = ""
+version = "0.0.0"  # Managed by poetry-dynamic-versioning from git tags
+description = "Export ActivityWatch data to TimeWarrior with rule-based tag categorization"
 authors = [
-    {name = "Tobias Brox",email = "tobias@redpill-linpro.com"}
+    {name = "Tobias Brox", email = "tobias@redpill-linpro.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.13,<4.0"
+license = {text = "MIT"}
+requires-python = ">=3.13"
+keywords = ["activitywatch", "timewarrior", "time-tracking", "productivity"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Utilities",
+]
 dependencies = [
     "termcolor>=3.1.0,<4.0.0",
     "aw-client",
     "dateparser>=1.0.0",
-    "toml>=0.10.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.8.0",
+    "pre-commit>=3.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/tobixen/aw-export-timewarrior"
+Repository = "https://github.com/tobixen/aw-export-timewarrior"
+Documentation = "https://github.com/tobixen/aw-export-timewarrior#readme"
+Issues = "https://github.com/tobixen/aw-export-timewarrior/issues"
+Changelog = "https://github.com/tobixen/aw-export-timewarrior/blob/main/CHANGELOG.md"
 
 [project.scripts]
 aw-export-timewarrior = "aw_export_timewarrior.cli:main"
@@ -20,9 +46,14 @@ aw-export-timewarrior = "aw_export_timewarrior.cli:main"
 [tool.poetry]
 packages = [{include = "aw_export_timewarrior", from = "src"}]
 
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+style = "pep440"
+
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.ruff]
 line-length = 100
@@ -50,3 +81,8 @@ indent-style = "space"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501"]  # Allow longer lines in tests
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"

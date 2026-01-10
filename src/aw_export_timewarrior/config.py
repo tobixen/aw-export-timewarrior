@@ -1,6 +1,6 @@
+import tomllib
 from pathlib import Path
 
-import toml
 from aw_core.config import load_config_toml
 
 default_config = """
@@ -116,6 +116,7 @@ def load_custom_config(config_path):
     if config_path:
         config_path = Path(config_path)
         if config_path.exists():
-            config = toml.load(config_path)
+            with open(config_path, "rb") as f:
+                config = tomllib.load(f)
         else:
             raise FileNotFoundError(f"Config file not found: {config_path}")
