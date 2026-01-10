@@ -352,9 +352,9 @@ Examples:
     )
     report_parser.add_argument(
         "--format",
-        choices=["table", "csv", "tsv", "json"],
+        choices=["table", "csv", "tsv", "json", "ndjson"],
         default="table",
-        help="Output format (default: table). JSON outputs one JSON object per line (JSONL).",
+        help="Output format (default: table). JSON outputs a valid JSON array. NDJSON outputs one JSON object per line (newline-delimited JSON).",
     )
     report_parser.add_argument(
         "--no-truncate", action="store_true", help="Do not truncate long values in table mode"
@@ -546,7 +546,7 @@ def _handle_start_stop_testdata_from_args(args, exporter_args, method):
     if method != "sync" and not end:
         end = datetime.now().astimezone()
 
-    print(f"Processing time range: {start} to {end}")
+    print(f"Processing time range: {start} to {end}", file=sys.stderr)
     exporter_args["start_time"] = start
     exporter_args["end_time"] = end
     exporter_args["test_data"] = test_data
@@ -577,8 +577,8 @@ def run_sync(args: argparse.Namespace) -> int:
 
     # Run exporter
     if args.dry_run:
-        print("=== DRY RUN MODE ===")
-        print("No changes will be made to timewarrior\n")
+        print("=== DRY RUN MODE ===", file=sys.stderr)
+        print("No changes will be made to timewarrior\n", file=sys.stderr)
 
     if args.once:
         # Process all available events in one call

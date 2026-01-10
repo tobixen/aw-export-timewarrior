@@ -294,19 +294,37 @@ class TestTableOutputWithExports:
         # Should contain accumulator info
         assert "work" in table_output
 
-    def test_json_output_includes_exports(self, mixed_data):
-        """JSON output should include export records."""
-        from src.aw_export_timewarrior.report import format_as_json
+    def test_ndjson_output_includes_exports(self, mixed_data):
+        """NDJSON output should include export records."""
+        from src.aw_export_timewarrior.report import format_as_ndjson
 
         output = StringIO()
         with patch("sys.stdout", output):
-            format_as_json(mixed_data, include_exports=True)
+            format_as_ndjson(mixed_data, include_exports=True)
 
         lines = output.getvalue().strip().split("\n")
         assert len(lines) == 2
 
         # Second line should be export
         export_record = json.loads(lines[1])
+        assert export_record["row_type"] == "export"
+        assert "accumulator_before" in export_record
+        assert "accumulator_after" in export_record
+
+    def test_json_output_includes_exports(self, mixed_data):
+        """JSON array output should include export records."""
+        from src.aw_export_timewarrior.report import format_as_json
+
+        output = StringIO()
+        with patch("sys.stdout", output):
+            format_as_json(mixed_data, include_exports=True)
+
+        parsed = json.loads(output.getvalue())
+        assert isinstance(parsed, list)
+        assert len(parsed) == 2
+
+        # Second element should be export
+        export_record = parsed[1]
         assert export_record["row_type"] == "export"
         assert "accumulator_before" in export_record
         assert "accumulator_after" in export_record

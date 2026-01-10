@@ -8,6 +8,7 @@ Future: When migrating to aw_export_tags, implementations will be
 pluggable backends selected by user configuration.
 """
 
+import sys
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
@@ -131,7 +132,7 @@ class DryRunTracker(TimeTracker):
             self.capture_commands.append(cmd)
 
         if not self.hide_output:
-            print(f"DRY RUN: Would start tracking {tags} at {start_time}")
+            print(f"DRY RUN: Would start tracking {tags} at {start_time}", file=sys.stderr)
 
     def stop_tracking(self) -> None:
         """Stop simulated tracking."""
@@ -140,7 +141,9 @@ class DryRunTracker(TimeTracker):
                 self.capture_commands.append(["timew", "stop"])
 
             if not self.hide_output:
-                print(f"DRY RUN: Would stop tracking {self.current_tracking['tags']}")
+                print(
+                    f"DRY RUN: Would stop tracking {self.current_tracking['tags']}", file=sys.stderr
+                )
             self.current_tracking = None
 
     def retag(self, tags: set[str]) -> None:
@@ -154,7 +157,7 @@ class DryRunTracker(TimeTracker):
                 self.capture_commands.append(["timew", "tag", "@1"] + sorted(tags))
 
             if not self.hide_output:
-                print(f"DRY RUN: Would retag to {tags}")
+                print(f"DRY RUN: Would retag to {tags}", file=sys.stderr)
             self.current_tracking["tags"] = tags
 
     def get_intervals(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
@@ -202,4 +205,4 @@ class DryRunTracker(TimeTracker):
             self.capture_commands.append(["timew", "track", start_str, "-", end_str] + sorted(tags))
 
         self.intervals.append({"start": start, "end": end, "tags": tags})
-        print(f"DRY RUN: Would track {tags} from {start} to {end}")
+        print(f"DRY RUN: Would track {tags} from {start} to {end}", file=sys.stderr)

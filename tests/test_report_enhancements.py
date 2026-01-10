@@ -12,6 +12,7 @@ from src.aw_export_timewarrior.main import Exporter
 from src.aw_export_timewarrior.report import (
     collect_report_data,
     format_as_json,
+    format_as_ndjson,
     format_as_table,
 )
 
@@ -72,14 +73,14 @@ def sample_report_data() -> list[dict]:
     ]
 
 
-class TestJSONOutput:
-    """Tests for JSON output format (JSONL - one dict per line)."""
+class TestNDJSONOutput:
+    """Tests for NDJSON output format (one dict per line)."""
 
-    def test_format_as_json_outputs_valid_jsonl(self, sample_report_data):
+    def test_format_as_ndjson_outputs_valid_jsonl(self, sample_report_data):
         """Each line of output should be valid JSON."""
         output = StringIO()
         with patch("sys.stdout", output):
-            format_as_json(sample_report_data)
+            format_as_ndjson(sample_report_data)
 
         lines = output.getvalue().strip().split("\n")
         assert len(lines) == len(sample_report_data)
@@ -89,11 +90,11 @@ class TestJSONOutput:
             parsed = json.loads(line)
             assert isinstance(parsed, dict)
 
-    def test_format_as_json_includes_all_fields(self, sample_report_data):
-        """JSON output with all_columns should include all required fields."""
+    def test_format_as_ndjson_includes_all_fields(self, sample_report_data):
+        """NDJSON output with all_columns should include all required fields."""
         output = StringIO()
         with patch("sys.stdout", output):
-            format_as_json(sample_report_data, all_columns=True)
+            format_as_ndjson(sample_report_data, all_columns=True)
 
         lines = output.getvalue().strip().split("\n")
         first_record = json.loads(lines[0])
@@ -110,11 +111,11 @@ class TestJSONOutput:
         }
         assert expected_fields.issubset(set(first_record.keys()))
 
-    def test_format_as_json_includes_rule_when_present(self, sample_report_data):
-        """JSON output should include matched_rule field when available."""
+    def test_format_as_ndjson_includes_rule_when_present(self, sample_report_data):
+        """NDJSON output should include matched_rule field when available."""
         output = StringIO()
         with patch("sys.stdout", output):
-            format_as_json(sample_report_data, include_rule=True)
+            format_as_ndjson(sample_report_data, include_rule=True)
 
         lines = output.getvalue().strip().split("\n")
         first_record = json.loads(lines[0])
@@ -122,11 +123,11 @@ class TestJSONOutput:
         assert "matched_rule" in first_record
         assert first_record["matched_rule"] == "browser:example"
 
-    def test_format_as_json_tags_as_list(self, sample_report_data):
+    def test_format_as_ndjson_tags_as_list(self, sample_report_data):
         """Tags should be serialized as a sorted list for JSON compatibility."""
         output = StringIO()
         with patch("sys.stdout", output):
-            format_as_json(sample_report_data)
+            format_as_ndjson(sample_report_data)
 
         lines = output.getvalue().strip().split("\n")
         first_record = json.loads(lines[0])
@@ -134,11 +135,11 @@ class TestJSONOutput:
         assert isinstance(first_record["tags"], list)
         assert set(first_record["tags"]) == {"work", "4RL"}
 
-    def test_format_as_json_timestamp_iso_format(self, sample_report_data):
+    def test_format_as_ndjson_timestamp_iso_format(self, sample_report_data):
         """Timestamps should be in ISO format."""
         output = StringIO()
         with patch("sys.stdout", output):
-            format_as_json(sample_report_data)
+            format_as_ndjson(sample_report_data)
 
         lines = output.getvalue().strip().split("\n")
         first_record = json.loads(lines[0])
@@ -147,17 +148,55 @@ class TestJSONOutput:
         parsed_ts = datetime.fromisoformat(first_record["timestamp"])
         assert parsed_ts.year == 2025
 
-    def test_format_as_json_with_column_filter(self, sample_report_data):
-        """JSON output should respect column filter."""
+    def test_format_as_ndjson_with_column_filter(self, sample_report_data):
+        """NDJSON output should respect column filter."""
         output = StringIO()
         with patch("sys.stdout", output):
-            format_as_json(sample_report_data, columns=["timestamp", "tags", "app"])
+            format_as_ndjson(sample_report_data, columns=["timestamp", "tags", "app"])
 
         lines = output.getvalue().strip().split("\n")
         first_record = json.loads(lines[0])
 
         # Should only have specified columns
         assert set(first_record.keys()) == {"timestamp", "tags", "app"}
+
+
+class TestJSONOutput:
+    """Tests for JSON output format (valid JSON array)."""
+
+    def test_format_as_json_outputs_valid_array(self, sample_report_data):
+        """Output should be a valid JSON array."""
+        output = StringIO()
+        with patch("sys.stdout", output):
+            format_as_json(sample_report_data)
+
+        parsed = json.loads(output.getvalue())
+        assert isinstance(parsed, list)
+        assert len(parsed) == len(sample_report_data)
+
+        for record in parsed:
+            assert isinstance(record, dict)
+
+    def test_format_as_json_includes_all_fields(self, sample_report_data):
+        """JSON output with all_columns should include all required fields."""
+        output = StringIO()
+        with patch("sys.stdout", output):
+            format_as_json(sample_report_data, all_columns=True)
+
+        parsed = json.loads(output.getvalue())
+        first_record = parsed[0]
+
+        expected_fields = {
+            "timestamp",
+            "duration_seconds",
+            "window_title",
+            "app",
+            "specialized_type",
+            "specialized_data",
+            "afk_status",
+            "tags",
+        }
+        assert expected_fields.issubset(set(first_record.keys()))
 
 
 class TestRuleDisplay:
@@ -253,11 +292,11 @@ class TestColumnToggle:
         header_line = lines[0]
         assert "Window" not in header_line
 
-    def test_format_as_json_with_all_columns(self, sample_report_data):
-        """JSON output with all_columns should include everything."""
+    def test_format_as_ndjson_with_all_columns(self, sample_report_data):
+        """NDJSON output with all_columns should include everything."""
         output = StringIO()
         with patch("sys.stdout", output):
-            format_as_json(sample_report_data, all_columns=True, include_rule=True)
+            format_as_ndjson(sample_report_data, all_columns=True, include_rule=True)
 
         lines = output.getvalue().strip().split("\n")
         first_record = json.loads(lines[0])
@@ -288,8 +327,8 @@ class TestColumnToggle:
 class TestIntegration:
     """Integration tests using real test data."""
 
-    def test_json_output_from_real_data(self, exporter_with_test_data: Exporter):
-        """Test JSON output with real anonymized test data."""
+    def test_ndjson_output_from_real_data(self, exporter_with_test_data: Exporter):
+        """Test NDJSON output with real anonymized test data."""
         start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
         end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
@@ -297,7 +336,7 @@ class TestIntegration:
 
         output = StringIO()
         with patch("sys.stdout", output):
-            format_as_json(data, include_rule=True)
+            format_as_ndjson(data, include_rule=True)
 
         lines = output.getvalue().strip().split("\n")
 
@@ -307,6 +346,28 @@ class TestIntegration:
         # All should be valid JSON
         for line in lines:
             record = json.loads(line)
+            assert "timestamp" in record
+            assert "tags" in record
+
+    def test_json_output_from_real_data(self, exporter_with_test_data: Exporter):
+        """Test JSON array output with real anonymized test data."""
+        start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
+        end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
+
+        data = collect_report_data(exporter_with_test_data, start_time, end_time, include_rule=True)
+
+        output = StringIO()
+        with patch("sys.stdout", output):
+            format_as_json(data, include_rule=True)
+
+        parsed = json.loads(output.getvalue())
+
+        # Should be a valid JSON array
+        assert isinstance(parsed, list)
+        assert len(parsed) == len(data)
+
+        # All records should have required fields
+        for record in parsed:
             assert "timestamp" in record
             assert "tags" in record
 

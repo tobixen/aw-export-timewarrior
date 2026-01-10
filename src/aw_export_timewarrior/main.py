@@ -513,6 +513,7 @@ class Exporter:
         retain_accumulator=True,
         record_export=False,
         decision_timestamp=None,
+        accumulator_before=None,
     ):
         """
         Set statistics after exporting tags.
@@ -527,6 +528,7 @@ class Exporter:
             retain_accumulator: Whether to retain current tags with stickyness
             record_export: Whether to record this as an export for reporting
             decision_timestamp: When the export decision was triggered
+            accumulator_before: Pre-stickyness accumulator state for accurate reporting
         """
         # Extract timestamps
         if event and not start:
@@ -561,6 +563,7 @@ class Exporter:
             else 0.0,
             record_export_history=record_export,
             decision_timestamp=decision_timestamp,
+            accumulator_before=accumulator_before,
         )
 
         # Handle the special case where retain_accumulator adds initial time to tags
@@ -575,7 +578,7 @@ class Exporter:
                     )
 
     ## TODO: move all dealings with statistics to explicit statistics-handling methods
-    def ensure_tag_exported(self, tags, event, since=None):
+    def ensure_tag_exported(self, tags, event, since=None, accumulator_before=None):
         if since is None:
             since = event["timestamp"]
 
@@ -646,13 +649,15 @@ class Exporter:
         # For AFK events, only advance last_known_tick to the START of the interval,
         # not the END. This prevents skipping window events that occurred during AFK.
         # AFK events overlap with window events (user AFK while window active).
+        # NOTE: For AFK events, export recording is deferred until after ask-away tags
+        # are computed (see below) to include the full tags and proper duration.
         if "afk" in tags:
             self.set_known_tick_stats(
                 start=since,
                 end=since,
                 tags=tags,
                 reset_accumulator=True,
-                record_export=True,
+                record_export=False,  # Deferred - will record after ask-away tags computed
             )
         else:
             self.set_known_tick_stats(
@@ -661,6 +666,7 @@ class Exporter:
                 tags=tags,
                 reset_accumulator=True,
                 record_export=True,
+                accumulator_before=accumulator_before,
             )
 
         # Reset statistics counters at the start of new tracking cycle
@@ -730,6 +736,19 @@ class Exporter:
         # Check if tags are exactly the same as current tags (after rule application)
         # This prevents redundant timew start commands when tags haven't changed
         final_tags = tags | {"~aw"} | ask_away_tags  # Add ~aw tag and ask-away tags
+
+        # Record the deferred AFK export now that we have final_tags computed
+        # For AFK events, use the proper end time (event end, not just since)
+        if "afk" in tags:
+            afk_end = event["timestamp"] + event["duration"]
+            self.state.record_export(
+                start=since,
+                end=afk_end,
+                tags=final_tags,
+                reset_stats=False,  # Already reset above
+                record_export_history=True,
+            )
+
         if self.timew_info is not None and final_tags == self.timew_info["tags"]:
             return
 
@@ -1608,7 +1627,7 @@ class Exporter:
 
     def _should_export_accumulator(
         self, interval_since_last_tick: timedelta, event: dict
-    ) -> tuple[bool, set[str], datetime]:
+    ) -> tuple[bool, set[str], datetime, dict[str, timedelta]]:
         """Decide if accumulator should be exported and get tags to export.
 
         Args:
@@ -1616,10 +1635,11 @@ class Exporter:
             event: Current event being processed
 
         Returns:
-            Tuple of (should_export, tags_to_export, since_timestamp):
+            Tuple of (should_export, tags_to_export, since_timestamp, accumulator_before):
             - should_export: True if accumulator should be exported
             - tags_to_export: Set of tags that should be exported
             - since_timestamp: Timestamp to use for export
+            - accumulator_before: Accumulator state before stickyness applied (for reporting)
         """
         # Check if enough time has passed and we have significant tags
         if not (
@@ -1632,7 +1652,7 @@ class Exporter:
                 > self.min_recording_interval_adj
             )
         ):
-            return False, set(), self.state.last_known_tick
+            return False, set(), self.state.last_known_tick, {}
 
         self.log("Emptying the accumulator!")
 
@@ -1654,6 +1674,9 @@ class Exporter:
         ):
             min_tag_recording_interval += 1
 
+        # Capture accumulator state BEFORE applying stickyness (for accurate reporting)
+        accumulator_before = dict(self.state.stats.tags_accumulated_time)
+
         # Collect tags above threshold and apply stickyness
         for tag in self.state.stats.tags_accumulated_time:
             if (
@@ -1669,7 +1692,7 @@ class Exporter:
         else:
             since = self.state.last_known_tick
 
-        return True, tags, since
+        return True, tags, since, accumulator_before
 
     def _handle_tag_result(
         self,
@@ -1861,12 +1884,14 @@ class Exporter:
                 self.set_timew_info(self.retag_current_interval())
 
             # Check if we should export the accumulated tags
-            should_export, tags_to_export, since = self._should_export_accumulator(
-                interval_since_last_known_tick, event
+            should_export, tags_to_export, since, accumulator_before = (
+                self._should_export_accumulator(interval_since_last_known_tick, event)
             )
             if should_export:
                 self.log(f"Ensuring tags export, tags={tags_to_export}")
-                self.ensure_tag_exported(tags_to_export, event, since)
+                self.ensure_tag_exported(
+                    tags_to_export, event, since, accumulator_before=accumulator_before
+                )
 
             self.state.last_tick = (
                 event_end if self.state.last_tick is None else max(self.state.last_tick, event_end)

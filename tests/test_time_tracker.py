@@ -51,10 +51,10 @@ class TestDryRunTracker:
         assert current["start"] == start_time
         assert current["tags"] == tags
 
-        # Check dry-run output
+        # Check dry-run output (goes to stderr for clean JSON output)
         captured = capsys.readouterr()
-        assert "DRY RUN: Would start tracking" in captured.out
-        assert "work" in captured.out or str(tags) in captured.out
+        assert "DRY RUN: Would start tracking" in captured.err
+        assert "work" in captured.err or str(tags) in captured.err
 
     def test_stop_tracking(self, capsys) -> None:
         """Test stopping tracking clears current entry."""
@@ -67,9 +67,9 @@ class TestDryRunTracker:
         tracker.stop_tracking()
         assert tracker.get_current_tracking() is None
 
-        # Check dry-run output
+        # Check dry-run output (goes to stderr for clean JSON output)
         captured = capsys.readouterr()
-        assert "DRY RUN: Would stop tracking" in captured.out
+        assert "DRY RUN: Would stop tracking" in captured.err
 
     def test_stop_tracking_when_nothing_active(self, capsys) -> None:
         """Test stopping tracking when nothing is active."""
@@ -96,7 +96,7 @@ class TestDryRunTracker:
 
         # Check dry-run output
         captured = capsys.readouterr()
-        assert "DRY RUN: Would retag to" in captured.out
+        assert "DRY RUN: Would retag to" in captured.err
 
     def test_retag_when_nothing_active(self, capsys) -> None:
         """Test retagging when nothing is active."""
@@ -125,7 +125,7 @@ class TestDryRunTracker:
 
         # Check dry-run output
         captured = capsys.readouterr()
-        assert "DRY RUN: Would track" in captured.out
+        assert "DRY RUN: Would track" in captured.err
 
     def test_get_intervals_empty(self) -> None:
         """Test getting intervals when none exist."""
@@ -212,12 +212,12 @@ class TestDryRunTracker:
 
         assert len(tracker.intervals) == 1
 
-        # Verify all dry-run messages were printed
+        # Verify all dry-run messages were printed (to stderr for clean JSON output)
         captured = capsys.readouterr()
-        assert "Would start tracking" in captured.out
-        assert "Would retag" in captured.out
-        assert "Would stop tracking" in captured.out
-        assert "Would track" in captured.out
+        assert "Would start tracking" in captured.err
+        assert "Would retag" in captured.err
+        assert "Would stop tracking" in captured.err
+        assert "Would track" in captured.err
 
 
 class TestTimeTrackerCompleteImplementation:

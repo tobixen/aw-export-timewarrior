@@ -721,6 +721,127 @@ def format_as_csv(
         writer.writerow(row_data)
 
 
+def _build_json_record(
+    row: dict[str, Any],
+    output_columns: list[str],
+    include_exports: bool = False,
+) -> dict[str, Any] | None:
+    """Build a JSON record from a data row.
+
+    Args:
+        row: The data row to convert
+        output_columns: List of columns to include for event rows
+        include_exports: If True, include export rows in output
+
+    Returns:
+        A dictionary representing the JSON record, or None if the row should be skipped
+    """
+    row_type = row.get("row_type", "event")
+
+    if row_type == "export_start" and include_exports:
+        # Format export start marker
+        return {
+            "row_type": "export_start",
+            "timestamp": row["timestamp"].isoformat(),
+            "duration_seconds": int(row["duration"].total_seconds()),
+            "tags": sorted(row["tags"]),
+        }
+    elif row_type == "export_decision" and include_exports:
+        # Format export decision marker
+        return {
+            "row_type": "export_decision",
+            "timestamp": row["timestamp"].isoformat(),
+            "duration_seconds": int(row["duration"].total_seconds()),
+            "tags": sorted(row["tags"]),
+            "accumulator_before": {
+                tag: int(duration.total_seconds())
+                for tag, duration in row.get("accumulator_before", {}).items()
+            },
+        }
+    elif row_type == "export_end" and include_exports:
+        # Format export end marker (with accumulator details)
+        return {
+            "row_type": "export_end",
+            "timestamp": row["timestamp"].isoformat(),
+            "duration_seconds": int(row["duration"].total_seconds()),
+            "tags": sorted(row["tags"]),
+            "accumulator_before": {
+                tag: int(duration.total_seconds())
+                for tag, duration in row.get("accumulator_before", {}).items()
+            },
+            "accumulator_after": {
+                tag: int(duration.total_seconds())
+                for tag, duration in row.get("accumulator_after", {}).items()
+            },
+        }
+    elif row_type == "export" and include_exports:
+        # Legacy single-line export format
+        return {
+            "row_type": "export",
+            "timestamp": row["timestamp"].isoformat(),
+            "duration_seconds": int(row["duration"].total_seconds()),
+            "tags": sorted(row["tags"]),
+            "accumulator_before": {
+                tag: int(duration.total_seconds())
+                for tag, duration in row.get("accumulator_before", {}).items()
+            },
+            "accumulator_after": {
+                tag: int(duration.total_seconds())
+                for tag, duration in row.get("accumulator_after", {}).items()
+            },
+        }
+    elif (
+        row_type in ("export_start", "export_decision", "export_end", "export")
+        and not include_exports
+    ):
+        # Skip export rows if not included
+        return None
+    else:
+        # Format event row
+        record: dict[str, Any] = {"row_type": "event"} if include_exports else {}
+        for col in output_columns:
+            if col == "timestamp":
+                record["timestamp"] = row["timestamp"].isoformat()
+            elif col == "duration":
+                record["duration_seconds"] = int(row["duration"].total_seconds())
+            elif col == "tags":
+                record["tags"] = sorted(row["tags"])
+            elif col == "matched_rule":
+                record["matched_rule"] = row.get("matched_rule")
+            elif col in row:
+                record[col] = row[col]
+        return record
+
+
+def _get_output_columns(
+    all_columns: bool = False,
+    columns: list[str] | None = None,
+    include_rule: bool = False,
+) -> list[str]:
+    """Determine which columns to output for events.
+
+    Args:
+        all_columns: If True, include all columns
+        columns: Specific columns to include (overrides all_columns if set)
+        include_rule: If True, include the matched_rule column
+
+    Returns:
+        List of column names to include
+    """
+    if columns:
+        return columns
+    elif all_columns:
+        output_columns = AVAILABLE_COLUMNS.copy()
+        if not include_rule:
+            output_columns = [c for c in output_columns if c != "matched_rule"]
+        return output_columns
+    else:
+        output_columns = DEFAULT_COLUMNS.copy()
+        if include_rule:
+            output_columns.append("matched_rule")
+        return output_columns
+
+
 def format_as_json(
     data: list[dict[str, Any]],
     all_columns: bool = False,
@@ -728,7 +849,7 @@ def format_as_json(
     include_rule: bool = False,
     include_exports: bool = False,
 ) -> None:
-    """Format and print report data as JSON Lines (one JSON object per line).
+    """Format and print report data as a valid JSON array.
 
     Args:
         data: List of report data dictionaries (may include export rows)
@@ -737,89 +858,39 @@ def format_as_json(
         include_rule: If True, include the matched_rule column
         include_exports: If True, data may contain export rows to be output
     """
-    # Determine which columns to output for events
-    if columns:
-        output_columns = columns
-    elif all_columns:
-        output_columns = AVAILABLE_COLUMNS.copy()
-        if not include_rule:
-            output_columns = [c for c in output_columns if c != "matched_rule"]
-    else:
-        output_columns = DEFAULT_COLUMNS.copy()
-        if include_rule:
-            output_columns.append("matched_rule")
+    output_columns = _get_output_columns(all_columns, columns, include_rule)
+
+    records = []
+    for row in data:
+        record = _build_json_record(row, output_columns, include_exports)
+        if record is not None:
+            records.append(record)
+
+    print(json.dumps(records, indent=2))
+
+
+def format_as_ndjson(
+    data: list[dict[str, Any]],
+    all_columns: bool = False,
+    columns: list[str] | None = None,
+    include_rule: bool = False,
+    include_exports: bool = False,
+) -> None:
+    """Format and print report data as NDJSON (newline-delimited JSON, one JSON object per line).
+
+    Args:
+        data: List of report data dictionaries (may include export rows)
+        all_columns: If True, include all columns
+        columns: Specific columns to include (overrides all_columns if set)
+        include_rule: If True, include the matched_rule column
+        include_exports: If True, data may contain export rows to be output
+    """
+    output_columns = _get_output_columns(all_columns, columns, include_rule)
 
     for row in data:
-        row_type = row.get("row_type", "event")
-
-        if row_type == "export_start" and include_exports:
-            # Format export start marker
-            record = {
-                "row_type": "export_start",
-                "timestamp": row["timestamp"].isoformat(),
-                "duration_seconds": int(row["duration"].total_seconds()),
-                "tags": sorted(row["tags"]),
-            }
-        elif row_type == "export_decision" and include_exports:
-            # Format export decision marker
-            record = {
-                "row_type": "export_decision",
-                "timestamp": row["timestamp"].isoformat(),
-                "duration_seconds": int(row["duration"].total_seconds()),
-                "tags": sorted(row["tags"]),
-                "accumulator_before": {
-                    tag: int(duration.total_seconds())
-                    for tag, duration in row.get("accumulator_before", {}).items()
-                },
-            }
-        elif row_type == "export_end" and include_exports:
-            # Format export end marker (with accumulator details)
-            record = {
-                "row_type": "export_end",
-                "timestamp": row["timestamp"].isoformat(),
-                "duration_seconds": int(row["duration"].total_seconds()),
-                "tags": sorted(row["tags"]),
-                "accumulator_before": {
-                    tag: int(duration.total_seconds())
-                    for tag, duration in row.get("accumulator_before", {}).items()
-                },
-                "accumulator_after": {
-                    tag: int(duration.total_seconds())
-                    for tag, duration in row.get("accumulator_after", {}).items()
-                },
-            }
-        elif row_type == "export" and include_exports:
-            # Legacy single-line export format
-            record = {
-                "row_type": "export",
-                "timestamp": row["timestamp"].isoformat(),
-                "duration_seconds": int(row["duration"].total_seconds()),
-                "tags": sorted(row["tags"]),
-                "accumulator_before": {
-                    tag: int(duration.total_seconds())
-                    for tag, duration in row.get("accumulator_before", {}).items()
-                },
-                "accumulator_after": {
-                    tag: int(duration.total_seconds())
-                    for tag, duration in row.get("accumulator_after", {}).items()
-                },
-            }
-        else:
-            # Format event row
-            record = {"row_type": "event"} if include_exports else {}
-            for col in output_columns:
-                if col == "timestamp":
-                    record["timestamp"] = row["timestamp"].isoformat()
-                elif col == "duration":
-                    record["duration_seconds"] = int(row["duration"].total_seconds())
-                elif col == "tags":
-                    record["tags"] = sorted(row["tags"])
-                elif col == "matched_rule":
-                    record["matched_rule"] = row.get("matched_rule")
-                elif col in row:
-                    record[col] = row[col]
-
-        print(json.dumps(record))
+        record = _build_json_record(row, output_columns, include_exports)
+        if record is not None:
+            print(json.dumps(record))
 
 
 def generate_activity_report(
@@ -878,11 +949,15 @@ def generate_activity_report(
         format_as_json(
             data, all_columns=all_columns, include_rule=include_rule, include_exports=show_exports
         )
+    elif format == "ndjson":
+        format_as_ndjson(
+            data, all_columns=all_columns, include_rule=include_rule, include_exports=show_exports
+        )
     else:
         raise ValueError(f"Unknown format: {format}")
 
-    # Print summary to stderr (skip for JSON format to keep output clean)
-    if format != "json":
+    # Print summary to stderr (skip for JSON/NDJSON formats to keep output clean)
+    if format not in ("json", "ndjson"):
         event_count = sum(1 for row in data if row.get("row_type", "event") == "event")
         export_count = sum(1 for row in data if row.get("row_type") == "export")
         print(f"\nTotal events: {event_count}", file=sys.stderr)

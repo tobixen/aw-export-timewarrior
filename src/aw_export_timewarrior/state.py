@@ -273,6 +273,7 @@ class StateManager:
         manual: bool = True,
         record_export_history: bool = False,
         decision_timestamp: datetime | None = None,
+        accumulator_before: dict[str, timedelta] | None = None,
     ) -> None:
         """Record an export with associated statistics.
 
@@ -289,11 +290,17 @@ class StateManager:
             manual: Whether this is manual tracking
             record_export_history: Whether to record this as an export for reporting
             decision_timestamp: When the export decision was triggered
+            accumulator_before: Pre-computed accumulator state before stickyness applied.
+                               If None, captures current accumulator state (post-stickyness).
         """
-        # Capture accumulator state before reset (for export history)
-        accumulator_before: dict[str, timedelta] = {}
-        if self.track_exports and record_export_history:
-            accumulator_before = dict(self.stats.tags_accumulated_time)
+        # Use provided accumulator_before or capture current state
+        if accumulator_before is None:
+            accumulator_before = {}
+            if self.track_exports and record_export_history:
+                accumulator_before = dict(self.stats.tags_accumulated_time)
+        elif not self.track_exports or not record_export_history:
+            # Don't use accumulator_before if we're not recording history
+            accumulator_before = {}
 
         # Set manual tracking mode
         self.manual_tracking = manual
