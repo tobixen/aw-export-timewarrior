@@ -48,6 +48,10 @@ aw-export-timewarrior diff --day yesterday
 
 # Apply suggested changes
 aw-export-timewarrior diff --day yesterday --apply
+
+# Gain insight into events and rules
+aw-export-timewarrior report --from '2 hours ago' --show-rule
+aw-export-timewarrior analyze --day yesterday --limit 30
 ```
 
 ## Configuration
