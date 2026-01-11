@@ -6,6 +6,7 @@ for use in tests and debugging.
 """
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,8 @@ from typing import Any
 import aw_client
 
 from .utils import parse_datetime
+
+logger = logging.getLogger(__name__)
 
 
 def serialize_event(event: Any) -> dict[str, Any]:
@@ -108,6 +111,7 @@ def export_aw_data(
                 print(f"  {bucket_id}: No events", file=progress_output)
 
         except Exception as e:
+            logger.warning("Failed to export events from bucket %s: %s", bucket_id, e)
             print(f"  {bucket_id}: Error - {e}", file=progress_output)
             data["events"][bucket_id] = {"error": str(e)}
 
@@ -136,6 +140,7 @@ def export_aw_data(
                 with open(output_path, "w") as f:
                     yaml.dump(data, f, default_flow_style=False, sort_keys=False)
         except ImportError:
+            logger.warning("PyYAML not installed, falling back to JSON format")
             print("Warning: PyYAML not installed, using JSON instead", file=sys.stderr)
             format = "json"
 

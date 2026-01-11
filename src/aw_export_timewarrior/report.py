@@ -10,10 +10,13 @@ Generates detailed reports showing ActivityWatch events with columns for:
 
 import csv
 import json
+import logging
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .main import Exporter
@@ -325,8 +328,8 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
                         result["specialized_data"] = file_path
                     elif project:
                         result["specialized_data"] = f"project:{project}"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to get editor sub-event for %s: %s", app, e)
 
     # Check for browser events - mirrors logic from get_browser_tags()
     elif app in ("chromium", "chrome", "firefox"):
@@ -349,8 +352,8 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
                     # Skip internal pages (same check as in get_browser_tags())
                     if url and url not in ("chrome://newtab/", "about:newtab"):
                         result["specialized_data"] = url
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to get browser sub-event for %s: %s", app, e)
 
     # Check for terminal apps that might have tmux data
     elif app in exporter.config.get("terminal_apps", []):
@@ -379,8 +382,8 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
                         if pane_title and pane_title not in (cmd, path):
                             parts.append(f"title:{pane_title}")
                         result["specialized_data"] = " | ".join(parts)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to get tmux sub-event for %s: %s", app, e)
 
     return result
 

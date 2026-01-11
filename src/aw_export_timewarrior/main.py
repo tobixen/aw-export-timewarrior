@@ -1597,9 +1597,10 @@ class Exporter:
             # Normal mode or dry-run without start_time - get current timew tracking state
             try:
                 self.set_timew_info(self.retag_current_interval())
-            except Exception:
+            except Exception as e:
                 # No active tracking - create mock info
                 if self.dry_run:
+                    logger.debug("No active timew tracking (dry-run mode): %s", e)
                     mock_start = self.start_time or datetime.now(UTC)
                     self.timew_info = {
                         "start": mock_start.strftime("%Y%m%dT%H%M%SZ"),
