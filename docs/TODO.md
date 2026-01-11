@@ -2,11 +2,6 @@
 
 ## Medium Priority
 
-### Further main.py reduction
-
-Continue extracting modules from main.py:
-- Event processing pipeline
-
 ### Error handling consistency
 
 Improve error handling:
@@ -68,6 +63,17 @@ See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementati
 ---
 
 ## Completed
+
+### Refactor: Extract event pipeline from main.py (Jan 11, 2026)
+
+**Change:** Moved event processing logic to new `event_pipeline.py` module.
+
+**Details:**
+- New `EventPipeline` class handles fetching, filtering, and merging events
+- `EventPipelineConfig` dataclass for pipeline configuration
+- Methods extracted: `_fetch_and_prepare_events`, `_split_window_events_by_afk`,
+  `_apply_afk_gap_workaround`, `_merge_afk_and_lid_events`, `_resolve_event_conflicts`
+- Reduces main.py by ~395 lines (from 2170 to 1795 lines)
 
 ### Added: Configuration validation (Jan 10, 2026)
 
