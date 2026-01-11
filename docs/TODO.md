@@ -2,19 +2,10 @@
 
 ## Medium Priority
 
-### Manual operations
-
-* The logic in aw-watcher-ask-away should possibly also be applicable when not-afk.  Should consider to ask for activity when the hints in the acticitywatcher data is weak
-* Should be easy to specify that "activity with tags X today was Y".  Like, feh was used for sorting inventory, etc.
-
 ### Further main.py reduction
 
 Continue extracting modules from main.py:
 - Event processing pipeline
-
-### Configuration validation
-
-Add validation for configuration values (currently no validation of loaded TOML).
 
 ### Error handling consistency
 
@@ -77,6 +68,21 @@ See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementati
 ---
 
 ## Completed
+
+### Added: Configuration validation (Jan 10, 2026)
+
+**Feature:** Added comprehensive validation for TOML configuration files.
+
+**Details:**
+- New `config_validation.py` module with `ConfigValidator` class
+- Validates top-level settings, tuning parameters, tag rules, matching rules, and exclusive groups
+- Type checking for all known fields with proper error messages
+- Range validation (e.g., `stickyness_factor` must be between 0 and 1)
+- Regex syntax validation with helpful error messages
+- Warns about common mistakes (trailing `|` in regex, empty tag lists)
+- Warns about unknown fields (possible typos)
+- `validate` CLI subcommand for explicit validation
+- Config is automatically validated on load
 
 ### Fixed: GitHub CI tests failing (Jan 10, 2026)
 

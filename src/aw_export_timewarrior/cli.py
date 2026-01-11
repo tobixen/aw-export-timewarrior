@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .export import load_test_data
-from .main import Exporter, load_config
+from .main import Exporter
 from .output import setup_logging
 from .utils import parse_datetime
 
@@ -686,9 +686,33 @@ def run_report(args: argparse.Namespace) -> int:
 
 def run_validate(args: argparse.Namespace) -> int:
     """Execute the validate subcommand."""
-    load_config(args.config)
-    print("Configuration is valid")
-    return 0
+    from .config import config, load_custom_config
+    from .config_validation import validate_config
+
+    # Load config without validation (we'll do it explicitly)
+    if args.config:
+        load_custom_config(args.config, validate=False)
+
+    errors, warnings = validate_config(config)
+
+    # Print warnings
+    for warning in warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
+
+    # Print errors
+    for error in errors:
+        print(f"Error: {error}", file=sys.stderr)
+
+    # Summary
+    if errors:
+        print(f"\nConfiguration has {len(errors)} error(s) and {len(warnings)} warning(s)")
+        return 1
+    elif warnings:
+        print(f"\nConfiguration is valid with {len(warnings)} warning(s)")
+        return 0
+    else:
+        print("Configuration is valid")
+        return 0
 
 
 def main(argv=None) -> int:

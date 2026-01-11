@@ -1,7 +1,12 @@
+import logging
 import tomllib
 from pathlib import Path
 
 from aw_core.config import load_config_toml
+
+from .config_validation import validate_and_warn
+
+logger = logging.getLogger(__name__)
 
 default_config = """
 # Enable workaround for aw-watcher-window-wayland issue #41
@@ -109,14 +114,24 @@ tags = [ "4break", "4chores", "4work", "4me" ]
 
 config = load_config_toml("aw-export-timewarrior", default_config)
 
+# Validate default config on module load
+validate_and_warn(config)
 
-def load_custom_config(config_path):
-    """Load config from a custom file path."""
+
+def load_custom_config(config_path, validate: bool = True):
+    """Load config from a custom file path.
+
+    Args:
+        config_path: Path to the config file
+        validate: Whether to validate the config (default True)
+    """
     global config
     if config_path:
         config_path = Path(config_path)
         if config_path.exists():
             with open(config_path, "rb") as f:
                 config = tomllib.load(f)
+            if validate:
+                validate_and_warn(config)
         else:
             raise FileNotFoundError(f"Config file not found: {config_path}")
