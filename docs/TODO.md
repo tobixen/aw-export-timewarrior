@@ -2,12 +2,7 @@
 
 ## Medium Priority
 
-### Error handling consistency
-
-Improve error handling:
-- Add logging for caught exceptions
-- Use specific exception types
-- Document expected vs. exceptional failure cases
+(No current medium priority items)
 
 ## Low Priority
 
@@ -63,6 +58,18 @@ See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementati
 ---
 
 ## Completed
+
+### Fix: Error handling consistency (Jan 11, 2026)
+
+**Change:** Improved error handling throughout the codebase.
+
+**Details:**
+- Replaced silent `except Exception: pass` handlers with logging
+- Added logger to report.py, export.py, retag.py
+- Log debug messages when specialized data extraction fails (report.py)
+- Log warnings when bucket export fails or PyYAML unavailable (export.py)
+- Log warnings with error details on retag failures (retag.py)
+- Log debug message when no active timew tracking in dry-run mode (main.py)
 
 ### Refactor: Extract event pipeline from main.py (Jan 11, 2026)
 
