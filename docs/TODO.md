@@ -1,10 +1,64 @@
 # TODO - aw-export-timewarrior
 
-## Medium Priority
+## Medium priority
 
-(No current medium priority items)
+### Think more about the config file
+
+My personal config file is getting huge.  That's to be expected when one is trying to track everything ... but could the config format be optimized?
+
+### Think more about the accumulator, mutually exclusive tags, multitasking and task switching
+
+Today there are two code paths for deciding tags, it's "single window for more than X minutes" and "tag accumulator".  In addition we have a third code path for ignoring very short events from Timewarrior.  I've currently disabled that logic in my local config, probably the latter logic should be removed completely.   Probably we should have only one code path instead of two.
+
+Below are some use cases and wanted behaviour (those should probably be documented in the algorithm document).  We should think through how the algorithms may be tuned for optimal behaviour.  Today it's possible to configure sets of mutually exclusively tags.  In my configuration, "primary categories" and "secondary categories" are configured like that.  Probably the algorithms should be changed so that at the point a tag is observed that is incompatible with the current tagging, the old tags should be thrown away and a new export interval should begin (but it's for sure needed with some "grace time" here, merely checking what's in a browser tab and closing it should not cause new tagging).   Maybe it also makes sense to be able to cnofigure that it's *required* with one tag from the set?  For me, that would make sense for the "primary category" (and some of my "primary categories" also requires a "secondary category" to be set).
+
+
+#### Single-tasking
+
+I'm working on ONE task for an hour, and while doing that I browse github, I edit files, I have some sessions wit Claude, I do research through Google, Perplexity, etc.  Some of those things won't have matcing rules - oter things may have rules giving a bit different tags, but almost all of them having the main category tag, and most of them having the correct secondary category tag.  There will be some noise as my desktop is still cluttered with unrelated windows and browser tags, brief distractions, terminal windows with the wrong cwd etc yielding completely other tags.  Some activity may produce tags that don't include main and secondary categories.
+
+**Wanted behavour:** The whole hour period should be tagged with all applicable tags.  The "noise" should be ignored, and the unmatched activity should not break the tagging.
+
+**Current behaviour:** Not too far off.  The work period will most likely be broken up into smaller intervals with a little bit different tagging, but not too bad.
+
+#### Multi-tasking
+
+For a period I'm rapidly switching my attention between two or more tasks - say, for one hour I'm doing some work on a puppet project, it involves waiting for pipeline runs and deployments every now and then (tags: 4EMPLOYER, 4acme, puppet, ...), while waiting for it I write a story about my previous weekend activities in my personal diary (tags: 4ME, 4personal-admin, diary, ...).  75% of the hour is spent on work, 25% of the time on the journalling.
+
+**Wanted behaviour**: The main thing is that when summing up the time spent on each task at the end of the day, the sum for each category should approximately reflect how much time I spent on it.  Some alternatives:
+ * The "correct" approach is to log even the smallest intervals and start a new interval as soon as incompatible tags appears.  This may also be the simplest implementation.  I'm a bit concerned on scalability when timew is overloaded with hundreds of intervals during a single work day session, but perhaps I shouldn't be.
+ * The "data compression method" alternative is to recognize the whole interval as a "multi tasking interval", split it up into two "artificial" intervals, 45 minutes recorded on 4EMPLOYER, 15 minutes recorded on 4ME.
+ * The "data supression method" alternative is to just discard some of the data, somehow arbitrarily allow some activity to be recorded as work even if I was doing private things and vice versa.
+ 
+**Unwanted behaviour:** Tag mixing, say, the interval is tagged both with 4customer1 and 4customer2.  This may make sense, it may be legitimate to bill the customer also for the time spent waiting for pipelines, and it may be legitimate to get salary for the time one spends reading news while waiting for pipeline runs.  However, for one thing this produces data that can be quite hard to process by reporting scripts, and it's also bad to slap "4ME" over the whole hour when only a quarter of the attention was spent on the private work task.
+
+**Other consideration:** Humans are generally not very good at multi-tasking, quite much of the time will most likely not be spent on either of the tasks, but for mental context switching.
+
+**Current behaviour:** "Data supression" mostly - at least it is or was intended that no interval less than a minute or two should be recorded in timewarrior.  There is logic in the code for shedding data if tags are incompatible.  However, quite often one ends up with periods with sligthly conflicting tags - tag combinations that aren't explicitly forbidden in the configuration, but which doesn't make sense anyway.
+
+#### Task switching
+
+Say, I work on task A between 13:00 and 14:00 (tags A, python) and task B for the next hour (tags B, python) and A and B being explicily configured as mutually exclusive.
+
+**Wanted behaviour:**: 
+* The exported tagging should change exactly at 14:00.
+* diff, report etc should also reporting on a new activity exactly at 14:00, for any values of `--from` and `--to` that spans over the activity switch.
+* If doing a continuous `aw-export-timewarrior sync` and then the next day does an `aw-export timewarrior diff --day=yesterday apply`, then 
+
+**Current behaviour:** I believe that if there is one window activity for a full hour followed by another lasting for a full hour, then things will work pretty well.  The problem is if there is a mix of activity giving slightly different tasks, then one may hit some weird corner cases:
+* A short interval spanning the 14:00 timestamp having "python" as task but neither A nor B (due to the accumulator logic).
+* I don't think one would always get 14:00 as the exact timestamp for the transition
+* I think the `report`, `diff` and `sync --dryrun`  commands may give slightly different transition timestamps dependent on what is given in `--start` and `--end`.
+* I think that in some circumstances a continuous `aw-export-timewarrior sync` may give different timestamps and taggings than an `aw-export-timewarrior sync --day` or `aw-export-timewarrior diff --apply`
+
+### Manual operations
+
+* The logic in aw-watcher-ask-away should possibly also be applicable when not-afk.  Should consider to ask for activity when the hints in the acticitywatcher data is weak
+* Should be easy to specify that "activity with tags X today was Y".  Like, feh was used for sorting inventory, etc.
+
 
 ## Low Priority
+
 
 ### Reconsider the tests
 
@@ -29,15 +83,6 @@ The comprehensive fixture approach remains a future option but the current test 
 ## Future Directions
 
 ### More watchers
-
-#### tmux watcher
-
-Support added for [aw-watcher-tmux](https://github.com/akohlbecker/aw-watcher-tmux):
-- Automatic detection of tmux bucket
-- Tag extraction with configurable rules (`rules.tmux.*`)
-- Variable substitution: `$session`, `$window`, `$command`, `$path`, `$1`, `$2`, etc.
-- Default tag `tmux:$command` when no rules match
-- Documentation in README.md
 
 #### terminal watcher
 
@@ -64,163 +109,6 @@ See **[PROJECT_SPLIT_PLAN.md](PROJECT_SPLIT_PLAN.md)** for detailed implementati
 
 ---
 
-## Completed
-
-### Fix: Error handling consistency (Jan 11, 2026)
-
-**Change:** Improved error handling throughout the codebase.
-
-**Details:**
-- Replaced silent `except Exception: pass` handlers with logging
-- Added logger to report.py, export.py, retag.py
-- Log debug messages when specialized data extraction fails (report.py)
-- Log warnings when bucket export fails or PyYAML unavailable (export.py)
-- Log warnings with error details on retag failures (retag.py)
-- Log debug message when no active timew tracking in dry-run mode (main.py)
-
-### Refactor: Extract event pipeline from main.py (Jan 11, 2026)
-
-**Change:** Moved event processing logic to new `event_pipeline.py` module.
-
-**Details:**
-- New `EventPipeline` class handles fetching, filtering, and merging events
-- `EventPipelineConfig` dataclass for pipeline configuration
-- Methods extracted: `_fetch_and_prepare_events`, `_split_window_events_by_afk`,
-  `_apply_afk_gap_workaround`, `_merge_afk_and_lid_events`, `_resolve_event_conflicts`
-- Reduces main.py by ~395 lines (from 2170 to 1795 lines)
-
-### Added: Configuration validation (Jan 10, 2026)
-
-**Feature:** Added comprehensive validation for TOML configuration files.
-
-**Details:**
-- New `config_validation.py` module with `ConfigValidator` class
-- Validates top-level settings, tuning parameters, tag rules, matching rules, and exclusive groups
-- Type checking for all known fields with proper error messages
-- Range validation (e.g., `stickyness_factor` must be between 0 and 1)
-- Regex syntax validation with helpful error messages
-- Warns about common mistakes (trailing `|` in regex, empty tag lists)
-- Warns about unknown fields (possible typos)
-- `validate` CLI subcommand for explicit validation
-- Config is automatically validated on load
-
-### Fixed: GitHub CI tests failing (Jan 10, 2026)
-
-**Problem:** Tests in `test_functional_timew.py` failed in GitHub Actions because TimeWarrior (`timew`) is not installed on the CI runner.
-
-**Fix:** Added `pytestmark` to skip all tests in the module when `timew` is not available using `shutil.which("timew")`.
-
-### Config terminology cleanup (Jan 10, 2026)
-
-**Change:** Standardized config terminology to use `tags` and `add` as the preferred keys, with backward compatibility for legacy `timew_tags` and `prepend` keys.
-
-**Details:**
-- Rule definitions now prefer `tags` over legacy `timew_tags`
-- Retag rules now prefer `add` over legacy `prepend`
-- Both legacy keys still work for backward compatibility with existing user config files
-- Updated default config and test fixtures to use new terminology
-- Updated documentation (README.md) to use new terminology
-
-### Fixed: Empty tags in export (Jan 10, 2026)
-
-**Problem:** `_should_export_accumulator()` could return `should_export=True` with an empty tags set when the threshold adjustment for exclusive tag conflicts raised `min_tag_recording_interval` above all accumulated tag times.
-
-**Root cause:** When two exclusive tags had exactly the same accumulated time, the while loop would raise the threshold until both were eliminated, but the function would still return `should_export=True` with an empty tags set.
-
-**Fix:** Added a check after tag collection - if no tags remain after conflict resolution, return `False` instead of `True` with empty tags. The accumulator is still decayed to prevent indefinite growth.
-
-**Test:** Added `tests/test_empty_tags_export.py` with regression tests.
-
-### Fixed: Report command stuck on recent events (Jan 10, 2026)
-
-**Problem:** `report --start '2 minutes ago'` would get stuck for a long time when processing recent browser/editor/terminal events.
-
-**Root cause:** `extract_specialized_data()` in report.py was calling `get_corresponding_event()` with the default `retry=6` parameter. For recent events (within 90 seconds of current time), this would sleep up to 6 times (~90s total) if no matching sub-event was found.
-
-**Fix:** Added `retry=0` to all `get_corresponding_event()` calls in `extract_specialized_data()` since the report command is just reading historical data and shouldn't wait for events to propagate.
-
-**Tests:** Added `tests/test_report_no_sleep.py` with 8 tests verifying the fix.
-
-### Added: Tracking algorithm documentation (Jan 8, 2026)
-
-Created `docs/TRACKING_ALGORITHM.md` explaining:
-- How events are processed and tags accumulated
-- The three timestamps involved in each export (interval start, interval end, decision time)
-- Manual vs automatic tracking modes
-- Stickyness factor and accumulator behavior
-- Export thresholds and configuration parameters
-
-### Added: Report shows matched rules (Jan 7, 2026)
-
-**Problem:** Hard to debug why events were tagged a certain way.
-
-**Solution:** Added `--show-rule` option and `matched_rule` column to report output. Each event now shows which rule matched it (e.g., `browser:github`, `tmux:claude-oss`).
-
-### Added: Export history in reports (Jan 8, 2026)
-
-**Problem:** Hard to understand when exports happened and what was accumulated.
-
-**Solution:** Added `--show-exports` option to report command. Shows export decisions inline with events, including:
-- Interval start timestamp and duration
-- Tags exported
-- Accumulator state before/after the export
-
-### Fixed: oss-contrib over-tagging (Jan 5, 2026)
-
-**Problem:** Almost everything was being tagged with `oss-contrib` and `activitywatch` even when working on unrelated projects.
-
-**Root cause:** Config bug in `[rules.app.claude-activitywatch]` - the `title_regexp` ended with a trailing `|` creating an empty alternative that matched ANY string:
-```
-title_regexp = "...Timewarrior diff command|"
-                                          ^ trailing pipe!
-```
-
-**Fix:** Removed the trailing `|` from the regex in the user's config file.
-
-### Fixed: Wonkyness in the diff output (Jan 5, 2026)
-
-**Problems:**
-1. Timeline showed empty AW column when AW activity was continuing from a previous row
-2. Diff showed duplicate entries when a timew interval overlapped with multiple AW suggestions
-3. Diff combined all suggested tags when timew interval spanned multiple AW intervals with different tags, making it look like contradictory tags (e.g., both `not-afk` and `afk`)
-4. Diff wasn't showing the current timew tags, only the difference
-
-**Fixes:**
-1. Added "(continuing)" indicator in timeline when AW activity continues but has no boundary
-2. Grouped diff output by timew interval to avoid duplicates
-3. When a timew interval spans multiple AW suggestions with different tags, now shows each sub-interval separately with its time range
-4. Always show current timew tags in diff output (excluding internal `~aw` tags)
-
-**Affected file:** `src/aw_export_timewarrior/compare.py`
-
-### Fixed: Analyze not showing rapid activity in same app (Jan 5, 2026)
-
-**Problem:** `analyze` command showed very little when `report` showed significant feh (image viewer) activity. Rapidly flipping through photos created many <3s events that were all ignored.
-
-**Root cause:** The `ignore_interval` (3s) filter was applied before checking rules. Short events were discarded as "window-switching noise" even when they represented legitimate activity (same app, rapid title changes).
-
-**Fix:** Modified `find_tags_from_event()` to:
-1. First determine tags before checking duration
-2. Track consecutive short events by (app, tags) context
-3. Only ignore if wall-clock time in same context < `ignore_interval`
-
-This preserves the original intent (filter brief window switches) while recognizing sustained activity with rapid updates.
-
-**Affected file:** `src/aw_export_timewarrior/main.py`
-
-**Test:** Added `tests/test_short_event_accumulation.py` with 5 regression tests
-
-### Fixed: Transport block ignoring active window usage (Dec 20, 2025)
-
-**Problem:** TimeWarrior showed one continuous "transport" block from 11:04:54 to 18:14:36 UTC, completely ignoring ~5-6 minutes of active window usage when the laptop was resumed.
-
-**Root cause:** In `_resolve_event_conflicts()`, the merge logic was removing AFK events whenever they conflicted with lid events, regardless of which state the lid indicated. When the lid was "open" (not-afk) and overlapped with a user AFK event (afk), the AFK event was incorrectly removed.
-
-**Fix:** Modified `events_conflict()` to only consider it a conflict when the lid event indicates AFK (closed/suspended). When lid is open (not-afk), user AFK events from aw-watcher-afk are now preserved.
-
-**Affected file:** `src/aw_export_timewarrior/main.py`
-
-**Test:** Added `test_lid_open_does_not_remove_afk_events()` regression test in `tests/test_lid_afk.py`
 
 ---
 
