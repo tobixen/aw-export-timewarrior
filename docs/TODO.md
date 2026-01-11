@@ -14,6 +14,13 @@ Probably quite much of the tests are redundant, probably we don't need this many
 
 Would it make sense to have a fixture containing a semi-large dataset containing real data as well as data known to have caused problems earlier, combined with a relatively large ruleset, and then verify that all the different commands will do as predicted with this data set and produce the same timeline?
 
+**Analysis (Jan 11, 2026):** Reviewed 35 test files (~12,000 lines). Found that:
+- Bug-specific test files (10 files, ~2300 lines) test distinct subsystems and are well-organized
+- Time tracker test files test different implementations (DryRunTracker vs TimewTracker), not duplicates
+- Consolidated shared fixtures for 3 report test files into conftest.py (saved ~16 lines)
+
+The comprehensive fixture approach remains a future option but the current test structure is reasonable.
+
 ### Performance optimizations
 
 - Event caching in `get_corresponding_event`
