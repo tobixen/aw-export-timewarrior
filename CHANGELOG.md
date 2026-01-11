@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-01-11
+
+### Added
+- Add configuration validation with comprehensive checks for all config sections
+- Add `validate` CLI subcommand for explicit config validation
+- Add retag rules application to manually edited TimeWarrior intervals in diff mode
+
+### Changed
+- Standardize config terminology: `tags` preferred over `timew_tags`, `add` preferred over `prepend`
+- Legacy config keys (`timew_tags`, `prepend`) still supported for backward compatibility
+- Config is now automatically validated on load with warnings/errors logged
+
+### Fixed
+- Fix CI tests failing when TimeWarrior is not installed - tests now skip gracefully
+- Fix timezone-dependent test assertion in diff delete ordering test
+
 ## [0.3.0] - 2026-01-10
 
 ### Added
