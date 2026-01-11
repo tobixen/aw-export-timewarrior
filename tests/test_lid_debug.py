@@ -69,7 +69,7 @@ def test_simple_lid_event() -> None:
     exporter.tracker.start_tracking = debug_start_tracking
 
     # Fetch events
-    completed_events, current_event = exporter._fetch_and_prepare_events()
+    completed_events, current_event = exporter._pipeline.fetch_and_prepare_events()
 
     print("\n=== FETCHED EVENTS ===")
     print(f"Completed events: {len(completed_events)}")

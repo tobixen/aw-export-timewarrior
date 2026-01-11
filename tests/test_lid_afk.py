@@ -237,7 +237,7 @@ def test_lid_open_does_not_remove_afk_events() -> None:
     exporter = Exporter(test_data=data, dry_run=True, enable_assert=False)
 
     # Test at the merge level - check that merged events preserve the AFK event
-    completed_events, _ = exporter._fetch_and_prepare_events()
+    completed_events, _ = exporter._pipeline.fetch_and_prepare_events()
 
     # Find AFK events (status = "afk") in the merged events
     afk_events = [e for e in completed_events if e.get("data", {}).get("status") == "afk"]
@@ -278,7 +278,7 @@ def test_lid_event_source_preservation() -> None:
     exporter = Exporter(test_data=data, dry_run=True, enable_assert=False)
 
     # Fetch and prepare events to test merging logic
-    completed_events, _ = exporter._fetch_and_prepare_events()
+    completed_events, _ = exporter._pipeline.fetch_and_prepare_events()
 
     # Find lid-sourced events
     lid_events = [e for e in completed_events if e.get("data", {}).get("source") == "lid"]
