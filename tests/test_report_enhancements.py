@@ -3,7 +3,6 @@
 import json
 from datetime import UTC, datetime, timedelta
 from io import StringIO
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -16,21 +15,9 @@ from src.aw_export_timewarrior.report import (
     format_as_table,
 )
 
-
-@pytest.fixture
-def test_data_path() -> Path:
-    """Path to the anonymized test data file."""
-    return Path(__file__).parent / "fixtures" / "report_test_data.json"
-
-
-@pytest.fixture
-def exporter_with_test_data(test_data_path: Path) -> Exporter:
-    """Create an Exporter instance with test data loaded."""
-    from src.aw_export_timewarrior.export import load_test_data
-
-    test_data = load_test_data(test_data_path)
-    exporter = Exporter(dry_run=True, test_data=test_data)
-    return exporter
+# Uses shared fixtures from conftest.py:
+# - report_test_data_path
+# - exporter_with_report_data
 
 
 @pytest.fixture
@@ -202,12 +189,14 @@ class TestJSONOutput:
 class TestRuleDisplay:
     """Tests for displaying which rule matched each event."""
 
-    def test_collect_report_data_includes_matched_rule(self, exporter_with_test_data: Exporter):
+    def test_collect_report_data_includes_matched_rule(self, exporter_with_report_data: Exporter):
         """Report data should include the matched rule name."""
         start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
         end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
-        data = collect_report_data(exporter_with_test_data, start_time, end_time, include_rule=True)
+        data = collect_report_data(
+            exporter_with_report_data, start_time, end_time, include_rule=True
+        )
 
         # All events should have matched_rule key
         for row in data:
@@ -215,12 +204,14 @@ class TestRuleDisplay:
             # Value can be None (unmatched) or a string (rule name)
             assert row["matched_rule"] is None or isinstance(row["matched_rule"], str)
 
-    def test_matched_rule_format(self, exporter_with_test_data: Exporter):
+    def test_matched_rule_format(self, exporter_with_report_data: Exporter):
         """Matched rule should be in format 'type:name' (e.g., 'browser:github')."""
         start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
         end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
-        data = collect_report_data(exporter_with_test_data, start_time, end_time, include_rule=True)
+        data = collect_report_data(
+            exporter_with_report_data, start_time, end_time, include_rule=True
+        )
 
         # Find events with matched rules
         matched_events = [row for row in data if row.get("matched_rule")]
@@ -230,12 +221,14 @@ class TestRuleDisplay:
             # Should contain a colon separator (type:name format)
             assert ":" in rule, f"Rule '{rule}' should be in 'type:name' format"
 
-    def test_unmatched_events_have_none_rule(self, exporter_with_test_data: Exporter):
+    def test_unmatched_events_have_none_rule(self, exporter_with_report_data: Exporter):
         """Events that don't match any rule should have matched_rule=None."""
         start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
         end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
-        data = collect_report_data(exporter_with_test_data, start_time, end_time, include_rule=True)
+        data = collect_report_data(
+            exporter_with_report_data, start_time, end_time, include_rule=True
+        )
 
         # Find unmatched events
         unmatched = [row for row in data if "UNMATCHED" in row["tags"]]
@@ -327,12 +320,14 @@ class TestColumnToggle:
 class TestIntegration:
     """Integration tests using real test data."""
 
-    def test_ndjson_output_from_real_data(self, exporter_with_test_data: Exporter):
+    def test_ndjson_output_from_real_data(self, exporter_with_report_data: Exporter):
         """Test NDJSON output with real anonymized test data."""
         start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
         end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
-        data = collect_report_data(exporter_with_test_data, start_time, end_time, include_rule=True)
+        data = collect_report_data(
+            exporter_with_report_data, start_time, end_time, include_rule=True
+        )
 
         output = StringIO()
         with patch("sys.stdout", output):
@@ -349,12 +344,14 @@ class TestIntegration:
             assert "timestamp" in record
             assert "tags" in record
 
-    def test_json_output_from_real_data(self, exporter_with_test_data: Exporter):
+    def test_json_output_from_real_data(self, exporter_with_report_data: Exporter):
         """Test JSON array output with real anonymized test data."""
         start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
         end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
-        data = collect_report_data(exporter_with_test_data, start_time, end_time, include_rule=True)
+        data = collect_report_data(
+            exporter_with_report_data, start_time, end_time, include_rule=True
+        )
 
         output = StringIO()
         with patch("sys.stdout", output):
@@ -371,14 +368,16 @@ class TestIntegration:
             assert "timestamp" in record
             assert "tags" in record
 
-    def test_csv_output_with_rule_column(self, exporter_with_test_data: Exporter):
+    def test_csv_output_with_rule_column(self, exporter_with_report_data: Exporter):
         """Test CSV output includes rule column when requested."""
         from src.aw_export_timewarrior.report import format_as_csv
 
         start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
         end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
-        data = collect_report_data(exporter_with_test_data, start_time, end_time, include_rule=True)
+        data = collect_report_data(
+            exporter_with_report_data, start_time, end_time, include_rule=True
+        )
 
         output = StringIO()
         with patch("sys.stdout", output):

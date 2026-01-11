@@ -1,7 +1,6 @@
 """Tests for the report generation functionality."""
 
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 
@@ -13,21 +12,9 @@ from src.aw_export_timewarrior.report import (
     truncate_string,
 )
 
-
-@pytest.fixture
-def test_data_path() -> Path:
-    """Path to the anonymized test data file."""
-    return Path(__file__).parent / "fixtures" / "report_test_data.json"
-
-
-@pytest.fixture
-def exporter_with_test_data(test_data_path: Path) -> Exporter:
-    """Create an Exporter instance with test data loaded."""
-    from src.aw_export_timewarrior.export import load_test_data
-
-    test_data = load_test_data(test_data_path)
-    exporter = Exporter(dry_run=True, test_data=test_data)
-    return exporter
+# Uses shared fixtures from conftest.py:
+# - report_test_data_path
+# - exporter_with_report_data
 
 
 def test_format_duration() -> None:
@@ -47,7 +34,7 @@ def test_truncate_string() -> None:
     assert len(truncate_string("x" * 100, 50)) == 50
 
 
-def test_extract_specialized_data_browser(exporter_with_test_data: Exporter) -> None:
+def test_extract_specialized_data_browser(exporter_with_report_data: Exporter) -> None:
     """Test extraction of browser URL data."""
     # Create a test window event with chromium
     window_event = {
@@ -56,7 +43,7 @@ def test_extract_specialized_data_browser(exporter_with_test_data: Exporter) -> 
         "data": {"app": "chromium", "title": "Chat - Test Chat - Chromium"},
     }
 
-    result = extract_specialized_data(exporter_with_test_data, window_event)
+    result = extract_specialized_data(exporter_with_report_data, window_event)
 
     assert result["app"] == "chromium"
     assert result["specialized_type"] == "browser"
@@ -66,7 +53,7 @@ def test_extract_specialized_data_browser(exporter_with_test_data: Exporter) -> 
         assert "https://" in result["specialized_data"]
 
 
-def test_extract_specialized_data_non_browser(exporter_with_test_data: Exporter) -> None:
+def test_extract_specialized_data_non_browser(exporter_with_report_data: Exporter) -> None:
     """Test that non-browser/editor/terminal apps return no specialized data."""
     window_event = {
         "timestamp": datetime(2025, 12, 11, 9, 0, 1, tzinfo=UTC),
@@ -74,19 +61,19 @@ def test_extract_specialized_data_non_browser(exporter_with_test_data: Exporter)
         "data": {"app": "feh", "title": "photo.jpg"},
     }
 
-    result = extract_specialized_data(exporter_with_test_data, window_event)
+    result = extract_specialized_data(exporter_with_report_data, window_event)
 
     assert result["app"] == "feh"
     assert result["specialized_type"] is None
     assert result["specialized_data"] is None
 
 
-def test_collect_report_data(exporter_with_test_data: Exporter) -> None:
+def test_collect_report_data(exporter_with_report_data: Exporter) -> None:
     """Test collecting report data from test dataset."""
     start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
     end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
-    data = collect_report_data(exporter_with_test_data, start_time, end_time)
+    data = collect_report_data(exporter_with_report_data, start_time, end_time)
 
     # Should have multiple events
     assert len(data) > 0
@@ -112,24 +99,24 @@ def test_collect_report_data(exporter_with_test_data: Exporter) -> None:
     assert any("https://" in url for url in urls)
 
 
-def test_report_data_sorted_by_timestamp(exporter_with_test_data: Exporter) -> None:
+def test_report_data_sorted_by_timestamp(exporter_with_report_data: Exporter) -> None:
     """Test that report data is sorted by timestamp."""
     start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
     end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
-    data = collect_report_data(exporter_with_test_data, start_time, end_time)
+    data = collect_report_data(exporter_with_report_data, start_time, end_time)
 
     # Verify chronological order
     for i in range(len(data) - 1):
         assert data[i]["timestamp"] <= data[i + 1]["timestamp"]
 
 
-def test_report_includes_afk_status(exporter_with_test_data: Exporter) -> None:
+def test_report_includes_afk_status(exporter_with_report_data: Exporter) -> None:
     """Test that AFK status is included in report data."""
     start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
     end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
-    data = collect_report_data(exporter_with_test_data, start_time, end_time)
+    data = collect_report_data(exporter_with_report_data, start_time, end_time)
 
     # Check that AFK status is populated
     afk_statuses = {row["afk_status"] for row in data}
@@ -138,12 +125,12 @@ def test_report_includes_afk_status(exporter_with_test_data: Exporter) -> None:
     assert afk_statuses.issubset({"not-afk", "afk", "unknown"})
 
 
-def test_report_includes_tags(exporter_with_test_data: Exporter) -> None:
+def test_report_includes_tags(exporter_with_report_data: Exporter) -> None:
     """Test that tags are determined for events."""
     start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
     end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
-    data = collect_report_data(exporter_with_test_data, start_time, end_time)
+    data = collect_report_data(exporter_with_report_data, start_time, end_time)
 
     # All events should have tags (at minimum 'UNMATCHED' if no rules match)
     for row in data:

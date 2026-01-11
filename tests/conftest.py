@@ -6,6 +6,7 @@ and fixtures for aw-export-timewarrior.
 """
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -563,3 +564,25 @@ def create_afk_transition_fixture():
         .add_afk_event("afk", 300)  # Goes AFK after 5 min
         .build()
     )
+
+
+# =============================================================================
+# Shared fixtures for report tests
+# =============================================================================
+
+
+@pytest.fixture
+def report_test_data_path() -> Path:
+    """Path to the anonymized report test data file."""
+    return Path(__file__).parent / "fixtures" / "report_test_data.json"
+
+
+@pytest.fixture
+def exporter_with_report_data(report_test_data_path: Path):
+    """Create an Exporter instance with report test data loaded."""
+    from src.aw_export_timewarrior.export import load_test_data
+    from src.aw_export_timewarrior.main import Exporter
+
+    test_data = load_test_data(report_test_data_path)
+    exporter = Exporter(dry_run=True, test_data=test_data)
+    return exporter

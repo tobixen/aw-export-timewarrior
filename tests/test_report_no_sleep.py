@@ -10,25 +10,12 @@ from unittest.mock import patch
 
 import pytest
 
-
-@pytest.fixture
-def test_data_path() -> Path:
-    """Path to the anonymized test data file."""
-    return Path(__file__).parent / "fixtures" / "report_test_data.json"
+# Uses shared fixtures from conftest.py:
+# - report_test_data_path
+# - exporter_with_report_data
 
 
-@pytest.fixture
-def exporter_with_test_data(test_data_path: Path):
-    """Create an Exporter instance with test data loaded."""
-    from src.aw_export_timewarrior.export import load_test_data
-    from src.aw_export_timewarrior.main import Exporter
-
-    test_data = load_test_data(test_data_path)
-    exporter = Exporter(dry_run=True, test_data=test_data)
-    return exporter
-
-
-def test_collect_report_data_does_not_sleep(exporter_with_test_data):
+def test_collect_report_data_does_not_sleep(exporter_with_report_data):
     """Test that collect_report_data doesn't call time.sleep."""
     from src.aw_export_timewarrior.report import collect_report_data
 
@@ -37,7 +24,7 @@ def test_collect_report_data_does_not_sleep(exporter_with_test_data):
 
     # Mock time.sleep to track if it's called
     with patch("time.sleep") as mock_sleep:
-        data = collect_report_data(exporter_with_test_data, start_time, end_time)
+        data = collect_report_data(exporter_with_report_data, start_time, end_time)
 
         # Assert sleep was never called
         mock_sleep.assert_not_called()
@@ -46,7 +33,7 @@ def test_collect_report_data_does_not_sleep(exporter_with_test_data):
     assert len(data) > 0
 
 
-def test_extract_specialized_data_does_not_sleep(exporter_with_test_data):
+def test_extract_specialized_data_does_not_sleep(exporter_with_report_data):
     """Test that extract_specialized_data doesn't call time.sleep for browser events."""
     from src.aw_export_timewarrior.report import extract_specialized_data
 
@@ -58,13 +45,13 @@ def test_extract_specialized_data_does_not_sleep(exporter_with_test_data):
     }
 
     with patch("time.sleep") as mock_sleep:
-        extract_specialized_data(exporter_with_test_data, browser_event)
+        extract_specialized_data(exporter_with_report_data, browser_event)
 
         # Assert sleep was never called
         mock_sleep.assert_not_called()
 
 
-def test_get_corresponding_event_does_not_sleep_for_report(exporter_with_test_data):
+def test_get_corresponding_event_does_not_sleep_for_report(exporter_with_report_data):
     """Test that get_corresponding_event doesn't sleep when retry=0."""
     # Create a window event
     window_event = {
@@ -75,14 +62,14 @@ def test_get_corresponding_event_does_not_sleep_for_report(exporter_with_test_da
 
     # Get a browser bucket ID
     bucket_key = "aw-watcher-web-chrome"
-    if bucket_key not in exporter_with_test_data.event_fetcher.bucket_short:
+    if bucket_key not in exporter_with_report_data.event_fetcher.bucket_short:
         pytest.skip("No browser bucket in test data")
 
-    bucket_id = exporter_with_test_data.event_fetcher.bucket_short[bucket_key]["id"]
+    bucket_id = exporter_with_report_data.event_fetcher.bucket_short[bucket_key]["id"]
 
     with patch("time.sleep") as mock_sleep:
         # get_corresponding_event with retry=0 should never sleep
-        exporter_with_test_data.event_fetcher.get_corresponding_event(
+        exporter_with_report_data.event_fetcher.get_corresponding_event(
             window_event, bucket_id, retry=0
         )
 
@@ -90,17 +77,17 @@ def test_get_corresponding_event_does_not_sleep_for_report(exporter_with_test_da
         mock_sleep.assert_not_called()
 
 
-def test_generate_activity_report_does_not_sleep(exporter_with_test_data, capsys):
+def test_generate_activity_report_does_not_sleep(exporter_with_report_data, capsys):
     """Test that generate_activity_report doesn't call time.sleep."""
     from src.aw_export_timewarrior.report import generate_activity_report
 
     # Set the exporter's time range to match our test data
-    exporter_with_test_data.start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
-    exporter_with_test_data.end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
+    exporter_with_report_data.start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
+    exporter_with_report_data.end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
     with patch("time.sleep") as mock_sleep:
         generate_activity_report(
-            exporter=exporter_with_test_data,
+            exporter=exporter_with_report_data,
             all_columns=False,
             format="table",
             truncate=True,
@@ -110,17 +97,19 @@ def test_generate_activity_report_does_not_sleep(exporter_with_test_data, capsys
         mock_sleep.assert_not_called()
 
 
-def test_generate_activity_report_with_show_exports_does_not_sleep(exporter_with_test_data, capsys):
+def test_generate_activity_report_with_show_exports_does_not_sleep(
+    exporter_with_report_data, capsys
+):
     """Test that generate_activity_report with show_exports doesn't sleep."""
     from src.aw_export_timewarrior.report import generate_activity_report
 
     # Set the exporter's time range to match our test data
-    exporter_with_test_data.start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
-    exporter_with_test_data.end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
+    exporter_with_report_data.start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
+    exporter_with_report_data.end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
 
     with patch("time.sleep") as mock_sleep:
         generate_activity_report(
-            exporter=exporter_with_test_data,
+            exporter=exporter_with_report_data,
             all_columns=True,
             format="table",
             truncate=True,
