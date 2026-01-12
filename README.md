@@ -14,9 +14,44 @@ Currently this script exports data from ActivityWatch into TimeWarrior, but I'm 
 
 ## Installation
 
+### From PyPI
+
 ```bash
 pip install aw-export-timewarrior
 ```
+
+### From Source
+
+```bash
+git clone https://github.com/tobixen/aw-export-timewarrior
+cd aw-export-timewarrior
+make install
+```
+
+### Running as a Systemd Service
+
+For continuous sync mode, you can run as a systemd user service:
+
+```bash
+make enable-service    # Install and start the service
+```
+
+Or manually:
+
+```bash
+cp misc/aw-export-timewarrior.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now aw-export-timewarrior
+```
+
+Check status and logs:
+
+```bash
+systemctl --user status aw-export-timewarrior
+journalctl --user -u aw-export-timewarrior -f
+```
+
+Let me know if you try it or start using it.  Following the SemVer standard, I'm free to break backward compatibility in the 0.x-series - and if I believe I'm the only user, I will most likely do that without any notice.
 
 ### Requirements
 
@@ -102,6 +137,17 @@ tags = ["afk", "not-afk"]
 | `validate` | Validate configuration file |
 
 Use `--help` with any command for detailed options.
+
+## Development
+
+```bash
+make install-dev      # Install with dev dependencies
+make test             # Run tests
+make lint             # Run ruff check
+make format           # Run ruff format
+make clean            # Remove build artifacts
+make help             # Show all available targets
+```
 
 ## Documentation
 
