@@ -20,7 +20,7 @@ pip install aw-export-timewarrior
 
 ### Requirements
 
-- Modern python - 3.13+ according to the `pyproject.toml`, but it may probably work on elder versions as well.
+- Python - It's currently only tested for 3.13.  If you want to use it with older python, let me know.
 - [ActivityWatch](https://activitywatch.net/) with aw-watcher-window running
 - [TimeWarrior](https://timewarrior.net/) installed
 
@@ -32,7 +32,7 @@ For richer tag extraction, install additional watchers:
 - [aw-watcher-vim](https://github.com/ActivityWatch/aw-watcher-vim) - Extract tags from Vim file paths
 - [activity-watch-mode](https://github.com/pauldub/activity-watch-mode) - Extract tags from Emacs file paths
 - [aw-watcher-tmux](https://github.com/akohlbecker/aw-watcher-tmux) - Extract tags from tmux sessions
-- [aw-watcher-ask-away](https://github.com/tobixen/aw-watcher-ask-away) - Prompt for activity description after AFK periods
+- [aw-watcher-afk-prompt](https://github.com/tobixen/aw-watcher-afk-prompt) - Prompt for activity description after AFK periods (legacy name: aw-watcher-ask-away)
 - [aw-watcher-afk-lid](https://github.com/tobixen/aw-watcher-afk-lid) - Track AFK based on laptop lid state
 
 Support for other watchers may be considered, reach out by email or add an issue or pull request for it.

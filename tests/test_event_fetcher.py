@@ -621,5 +621,89 @@ class TestCheckBucketFreshness:
             assert mock_logger.warning.call_count >= 2
 
 
+class TestAfkPromptBucketDetection:
+    """Tests for AFK prompt bucket detection (aw-watcher-afk-prompt / aw-watcher-ask-away)."""
+
+    def test_new_bucket_name_detected(self) -> None:
+        """Test that new bucket name aw-watcher-afk-prompt is detected."""
+        test_data = {
+            "buckets": {
+                "aw-watcher-afk-prompt_test": create_test_bucket(
+                    "aw-watcher-afk-prompt_test", "aw-watcher-afk-prompt"
+                ),
+            }
+        }
+
+        fetcher = EventFetcher(test_data=test_data)
+        bucket_id = fetcher.get_afk_prompt_bucket()
+
+        assert bucket_id == "aw-watcher-afk-prompt_test"
+
+    def test_legacy_bucket_name_fallback(self) -> None:
+        """Test that legacy bucket name aw-watcher-ask-away is used as fallback."""
+        test_data = {
+            "buckets": {
+                "aw-watcher-ask-away_test": create_test_bucket(
+                    "aw-watcher-ask-away_test", "aw-watcher-ask-away"
+                ),
+            }
+        }
+
+        fetcher = EventFetcher(test_data=test_data)
+        bucket_id = fetcher.get_afk_prompt_bucket()
+
+        assert bucket_id == "aw-watcher-ask-away_test"
+
+    def test_new_bucket_preferred_over_legacy(self) -> None:
+        """Test that new bucket name is preferred when both exist."""
+        test_data = {
+            "buckets": {
+                "aw-watcher-afk-prompt_test": create_test_bucket(
+                    "aw-watcher-afk-prompt_test", "aw-watcher-afk-prompt"
+                ),
+                "aw-watcher-ask-away_test": create_test_bucket(
+                    "aw-watcher-ask-away_test", "aw-watcher-ask-away"
+                ),
+            }
+        }
+
+        fetcher = EventFetcher(test_data=test_data)
+        bucket_id = fetcher.get_afk_prompt_bucket()
+
+        # Should prefer the new name
+        assert bucket_id == "aw-watcher-afk-prompt_test"
+
+    def test_no_bucket_returns_none(self) -> None:
+        """Test that None is returned when neither bucket exists."""
+        test_data = {
+            "buckets": {
+                "aw-watcher-window_test": create_test_bucket(
+                    "aw-watcher-window_test", "aw-watcher-window"
+                ),
+            }
+        }
+
+        fetcher = EventFetcher(test_data=test_data)
+        bucket_id = fetcher.get_afk_prompt_bucket()
+
+        assert bucket_id is None
+
+    def test_legacy_alias_works(self) -> None:
+        """Test that legacy method name get_ask_away_bucket still works."""
+        test_data = {
+            "buckets": {
+                "aw-watcher-afk-prompt_test": create_test_bucket(
+                    "aw-watcher-afk-prompt_test", "aw-watcher-afk-prompt"
+                ),
+            }
+        }
+
+        fetcher = EventFetcher(test_data=test_data)
+
+        # Legacy alias should return same result
+        assert fetcher.get_ask_away_bucket() == fetcher.get_afk_prompt_bucket()
+        assert fetcher.get_ask_away_bucket() == "aw-watcher-afk-prompt_test"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -133,6 +133,10 @@ class FixtureDataBuilder:
                 "created": current_time_iso,
                 "last_updated": current_time_iso,
             },
+            # AFK prompt bucket (using legacy name for backward compatibility in tests)
+            # The new name is aw-watcher-afk-prompt, but tests use the legacy name
+            # to maintain backward compatibility with existing test data.
+            # See test_event_fetcher.py::TestAfkPromptBucketDetection for bucket name tests.
             "aw-watcher-ask-away_test": {
                 "id": "aw-watcher-ask-away_test",
                 "name": "aw-watcher-ask-away_test",

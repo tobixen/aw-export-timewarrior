@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Rename aw-watcher-ask-away support to aw-watcher-afk-prompt (the project was forked and renamed)
+- New bucket name `aw-watcher-afk-prompt` is checked first, with fallback to legacy `aw-watcher-ask-away`
+
 ## [0.4.1] - 2026-01-11
 
 ### Added
@@ -47,9 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-01-10
 
 ### Added
-- Add support for aw-watcher-ask-away integration - user-entered messages during AFK periods now appear as tags
-- Add overlap-based matching for ask-away events (handles timestamp/duration mismatches)
-- Add automatic tag extraction from ask-away messages (multi-word messages split into tags)
+- Add support for aw-watcher-afk-prompt integration (formerly aw-watcher-ask-away) - user-entered messages during AFK periods now appear as tags
+- Add overlap-based matching for afk-prompt events (handles timestamp/duration mismatches)
+- Add automatic tag extraction from afk-prompt messages (multi-word messages split into tags)
 - Add `--show-exports` option to report command showing export decisions with timestamps and accumulator state
 - Add `--show-rule` option to report command showing which rule matched each event
 - Add three-line export display: [EXPORT START], [EXPORT DECISION], [EXPORT END] for better visibility

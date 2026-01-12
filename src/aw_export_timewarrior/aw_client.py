@@ -313,15 +313,26 @@ class EventFetcher:
             return self.bucket_by_client["aw-watcher-lid"][0]
         return None
 
-    def get_ask_away_bucket(self) -> str | None:
-        """Get ask-away watcher bucket ID.
+    def get_afk_prompt_bucket(self) -> str | None:
+        """Get AFK prompt watcher bucket ID.
+
+        Checks for the new aw-watcher-afk-prompt first, then falls back to
+        the legacy aw-watcher-ask-away for backward compatibility.
 
         Returns:
-            Bucket ID for aw-watcher-ask-away, or None if not available
+            Bucket ID for aw-watcher-afk-prompt or aw-watcher-ask-away,
+            or None if neither is available
         """
+        # Check for new bucket name first (aw-watcher-afk-prompt)
+        if self.has_bucket_client("aw-watcher-afk-prompt"):
+            return self.bucket_by_client["aw-watcher-afk-prompt"][0]
+        # Fall back to legacy bucket name (aw-watcher-ask-away)
         if self.has_bucket_client("aw-watcher-ask-away"):
             return self.bucket_by_client["aw-watcher-ask-away"][0]
         return None
+
+    # Legacy alias for backward compatibility
+    get_ask_away_bucket = get_afk_prompt_bucket
 
     def get_tmux_bucket(self) -> str | None:
         """Get tmux watcher bucket ID.
