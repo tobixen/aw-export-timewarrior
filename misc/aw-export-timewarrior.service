@@ -1,0 +1,44 @@
+########################################
+# aw-export-timewarrior.service        #
+########################################
+#
+# Systemd user service for running aw-export-timewarrior in continuous sync mode.
+# This service exports ActivityWatch data to TimeWarrior automatically.
+#
+# Prerequisites:
+# - aw-server must be installed and running
+# - aw-watcher-window and aw-watcher-afk should be running
+# - TimeWarrior (timew) must be installed
+# - This package must be installed (make install)
+# - Configuration file should exist at ~/.config/aw-export-timewarrior/config.toml
+#
+# Installation:
+# 1. Copy service file: cp misc/aw-export-timewarrior.service ~/.config/systemd/user/
+# 2. Reload systemd: systemctl --user daemon-reload
+# 3. Enable the service: systemctl --user enable aw-export-timewarrior.service
+# 4. Start the service: systemctl --user start aw-export-timewarrior.service
+#
+# Or simply run: make enable-service
+#
+# The service will automatically retry connection to aw-server if it's not ready yet.
+#
+
+[Unit]
+Description=ActivityWatch to TimeWarrior Exporter
+Documentation=https://github.com/tobixen/aw-export-timewarrior
+After=aw-server.service
+# Wait for window and afk watchers to be running
+Wants=aw-watcher-window.service aw-watcher-afk.service
+
+[Service]
+Type=simple
+ExecStart=aw-export-timewarrior sync
+Restart=on-failure
+RestartSec=30
+Environment=PYTHONUNBUFFERED=1
+
+# Give the service time to shut down gracefully
+TimeoutStopSec=10
+
+[Install]
+WantedBy=default.target
