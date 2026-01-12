@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-01-12
+
+### Added
+- Add Makefile with targets for install, test, lint, format, and service management
+- Add systemd user service file (`misc/aw-export-timewarrior.service`) for continuous sync mode
+- Add comprehensive test coverage for tag_extractor.py (79% → 99%) and time_tracker.py (83% → 92%)
+
 ### Changed
 - Rename aw-watcher-ask-away support to aw-watcher-afk-prompt (the project was forked and renamed)
 - New bucket name `aw-watcher-afk-prompt` is checked first, with fallback to legacy `aw-watcher-ask-away`
+- Update README with installation from source instructions and systemd service setup
 
 ## [0.4.1] - 2026-01-11
 

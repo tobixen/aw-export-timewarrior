@@ -14,13 +14,16 @@ Currently this script exports data from ActivityWatch into TimeWarrior, but I'm 
 
 ## Installation
 
-### From PyPI
+Let me know if you try it or start using it.  Following the SemVer standard, I'm free to break backward compatibility in the 0.x-series - and if I believe I'm the only user, I will most likely do that without any notice.
+
+
+### Installation from PyPI
 
 ```bash
 pip install aw-export-timewarrior
 ```
 
-### From Source
+### Installation from Source
 
 ```bash
 git clone https://github.com/tobixen/aw-export-timewarrior
@@ -36,14 +39,6 @@ For continuous sync mode, you can run as a systemd user service:
 make enable-service    # Install and start the service
 ```
 
-Or manually:
-
-```bash
-cp misc/aw-export-timewarrior.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now aw-export-timewarrior
-```
-
 Check status and logs:
 
 ```bash
@@ -51,11 +46,9 @@ systemctl --user status aw-export-timewarrior
 journalctl --user -u aw-export-timewarrior -f
 ```
 
-Let me know if you try it or start using it.  Following the SemVer standard, I'm free to break backward compatibility in the 0.x-series - and if I believe I'm the only user, I will most likely do that without any notice.
-
 ### Requirements
 
-- Python - It's currently only tested for 3.13.  If you want to use it with older python, let me know.
+- Python - It's currently only tested with 3.13.  If you want to use it with other versions, let me know.
 - [ActivityWatch](https://activitywatch.net/) with aw-watcher-window running
 - [TimeWarrior](https://timewarrior.net/) installed
 
