@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-01-27
+
+### Fixed
+- Fix CI publish workflow to use PEP 517 build (python -m build)
+
 ## [0.6.1] - 2026-01-27
 
 ### Fixed
