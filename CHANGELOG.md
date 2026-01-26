@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-01-27
+
+### Fixed
+- Fix CI publish workflow to install poetry-dynamic-versioning as plugin
+
 ## [0.6.0] - 2026-01-27
 
 ### Added
