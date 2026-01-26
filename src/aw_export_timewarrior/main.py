@@ -62,6 +62,7 @@ class EventMatchResult(Enum):
 
     IGNORED = auto()  # Event too short to process
     NO_MATCH = auto()  # Event processed but no tags found
+    UNHANDLED = auto()  # Specialized context found (browser/editor/terminal) but no rules matched
     MATCHED = auto()  # Tags found
 
 
@@ -1113,6 +1114,13 @@ class Exporter:
         if not isinstance(tags, set):
             tags = set(tags) if tags else set()
 
+        # Empty tags means specialized context was found but no rules matched
+        if not tags:
+            return TagResult(
+                result=EventMatchResult.UNHANDLED,
+                reason="Specialized context found but no rules matched",
+            )
+
         return TagResult(result=EventMatchResult.MATCHED, tags=tags)
 
     def _process_current_event_incrementally(self, event):
@@ -1355,10 +1363,10 @@ class Exporter:
                 self.breakpoint()
             return num_skipped_events, total_time_skipped_events
 
-        if tag_result.result == EventMatchResult.NO_MATCH:
+        if tag_result.result in (EventMatchResult.NO_MATCH, EventMatchResult.UNHANDLED):
             self.state.stats.unknown_events_time += event["duration"]
             # Track unmatched event if requested (for analyze command)
-            # Note: We track ALL NO_MATCH events here, even ones that later get
+            # Note: We track ALL NO_MATCH and UNHANDLED events here, even ones that later get
             # exported as UNKNOWN tags, because they represent unmatched activity
             if self.show_unmatched:
                 self.unmatched_events.append(event)
@@ -1371,8 +1379,11 @@ class Exporter:
                 self.ensure_tag_exported({"UNKNOWN", "not-afk"}, event)
                 self.state.stats.unknown_events_time = timedelta(0)
             else:
+                result_type = (
+                    "unhandled" if tag_result.result == EventMatchResult.UNHANDLED else "unknown"
+                )
                 self.log(
-                    f"{self.state.stats.unknown_events_time.total_seconds()}s unknown events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)",
+                    f"{self.state.stats.unknown_events_time.total_seconds()}s {result_type} events.  Data: {event['data']} - ({num_skipped_events} smaller events skipped, total duration {total_time_skipped_events.total_seconds()}s)",
                     event=event,
                 )
         else:
@@ -1693,6 +1704,11 @@ class Exporter:
 
                 self.log("sleeping, because no events found")
                 if not self.dry_run:  # Don't sleep in dry-run mode
+                    user_output(
+                        f"Waiting for new events (sleeping {self.sleep_interval}s)...",
+                        color="white",
+                        attrs=["dark"],
+                    )
                     sleep(self.sleep_interval)
 
             return True

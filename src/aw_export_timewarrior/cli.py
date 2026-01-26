@@ -585,8 +585,10 @@ def run_sync(args: argparse.Namespace) -> int:
         exporter.tick(process_all=True)
         print("\nProcessing completed")
     else:
-        if not exporter.end_time:
-            print("Starting continuous monitoring (Ctrl+C to stop)...")
+        if exporter.end_time:
+            print(f"Starting sync until {exporter.end_time} (Ctrl+C to stop)...", flush=True)
+        else:
+            print("Starting continuous monitoring (Ctrl+C to stop)...", flush=True)
 
         while exporter.tick():
             # Small sleep to prevent 100% CPU usage during continuous sync

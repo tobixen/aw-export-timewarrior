@@ -314,7 +314,7 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
             bucket_key = f"aw-watcher-{app}"
             if bucket_key in exporter.event_fetcher.bucket_short:
                 bucket_id = exporter.event_fetcher.bucket_short[bucket_key]["id"]
-                ignorable = exporter._is_ignorable_event(app, window_event)
+                ignorable = exporter.tag_extractor._is_ignorable_event(app, window_event)
                 # Use the public get_corresponding_event() method
                 # retry=0: Don't sleep waiting for events - we're just reading history
                 sub_event = exporter.event_fetcher.get_corresponding_event(

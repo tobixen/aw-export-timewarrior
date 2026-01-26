@@ -6,11 +6,15 @@ of events from ActivityWatch before they are processed for tag extraction.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
+from .output import user_output
 from .utils import get_event_range, normalize_duration, normalize_timestamp
 
 logger = logging.getLogger(__name__)
+
+# Default threshold for considering window events stale (5 minutes)
+DEFAULT_STALE_EVENTS_THRESHOLD = timedelta(minutes=5)
 
 
 @dataclass
@@ -70,6 +74,10 @@ class EventPipeline:
 
     # Internal state
     _ask_away_events: list = field(default_factory=list, init=False, repr=False)
+    _last_stale_warning: datetime | None = field(default=None, init=False, repr=False)
+    _stale_warning_interval: timedelta = field(
+        default_factory=lambda: timedelta(minutes=5), init=False, repr=False
+    )
 
     def fetch_and_prepare_events(self) -> tuple[list, dict | None]:
         """Fetch, filter, merge, and sort events from ActivityWatch.
@@ -134,10 +142,15 @@ class EventPipeline:
             self._ask_away_events = []
 
         # Fetch window events and merge with AFK events
-        afk_window_events = (
-            self.event_fetcher.get_events(window_id, start=self.last_tick, end=self.end_time)
-            + merged_afk_events
+        window_events = self.event_fetcher.get_events(
+            window_id, start=self.last_tick, end=self.end_time
         )
+
+        # Check for missing or stale window events (only in live monitoring mode)
+        if not self.end_time:
+            self._check_stale_window_events(window_events)
+
+        afk_window_events = window_events + merged_afk_events
 
         # Sort by timestamp
         afk_window_events.sort(key=lambda e: normalize_timestamp(e["timestamp"]))
@@ -165,6 +178,61 @@ class EventPipeline:
     def get_ask_away_events(self) -> list:
         """Get the ask-away events fetched during the last pipeline run."""
         return self._ask_away_events
+
+    def _check_stale_window_events(self, window_events: list) -> None:
+        """Check if window events are missing or stale, and warn the user.
+
+        This helps diagnose issues where aw-watcher-window is not running.
+
+        Args:
+            window_events: List of window events fetched from ActivityWatch
+        """
+        now = datetime.now(UTC)
+
+        # Don't warn too frequently
+        if (
+            self._last_stale_warning
+            and (now - self._last_stale_warning) < self._stale_warning_interval
+        ):
+            return
+
+        if not window_events:
+            # No window events at all
+            logger.error(
+                "No window events found. Is aw-watcher-window running? "
+                "Check: systemctl --user status aw-watcher-window"
+            )
+            user_output(
+                "ERROR: No window events found. Is aw-watcher-window running?",
+                color="red",
+                attrs=["bold"],
+            )
+            self._last_stale_warning = now
+            return
+
+        # Find the most recent window event
+        most_recent = max(
+            window_events,
+            key=lambda e: normalize_timestamp(e["timestamp"]) + normalize_duration(e["duration"]),
+        )
+        most_recent_end = normalize_timestamp(most_recent["timestamp"]) + normalize_duration(
+            most_recent["duration"]
+        )
+
+        staleness = now - most_recent_end
+        if staleness > DEFAULT_STALE_EVENTS_THRESHOLD:
+            minutes_stale = staleness.total_seconds() / 60
+            logger.error(
+                f"Window events are stale (last event ended {minutes_stale:.1f} minutes ago). "
+                "Is aw-watcher-window running?"
+            )
+            user_output(
+                f"ERROR: Window events are stale (last event {minutes_stale:.1f} min ago). "
+                "Is aw-watcher-window running?",
+                color="red",
+                attrs=["bold"],
+            )
+            self._last_stale_warning = now
 
     def _apply_afk_gap_workaround(self, afk_events: list) -> list:
         """Apply workaround for aw-watcher-window-wayland issue #41.
