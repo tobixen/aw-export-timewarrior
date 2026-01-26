@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-01-27
+
+### Added
+- Add warning when aw-watcher-window is not running or has stale events (helps diagnose "stuck" sync)
+- Add "Waiting for new events..." message during sync sleep periods for better user feedback
+- Add `UNHANDLED` result type to track events with specialized context (browser/editor/terminal) but no matching rules
+
+### Fixed
+- Fix `analyze` command undercounting unmatched events - now includes events where specialized watchers found data but no rules matched (e.g., Emacs files without editor rules)
+- Fix editor file paths not showing in `report` output (was calling wrong method)
+
 ## [0.5.0] - 2026-01-12
 
 ### Added
