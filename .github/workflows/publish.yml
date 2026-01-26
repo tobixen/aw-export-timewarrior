@@ -27,8 +27,8 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
 
-      - name: Install poetry-dynamic-versioning
-        run: pip install poetry-dynamic-versioning
+      - name: Install poetry-dynamic-versioning plugin
+        run: poetry self add poetry-dynamic-versioning
 
       - name: Build package
         run: poetry build
