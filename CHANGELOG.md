@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix tmux event matching for 0-second window events that occur just before tmux activity begins (fallback now looks forward as well as backward)
+
 ## [0.6.5] - 2026-01-27
 
 ### Fixed

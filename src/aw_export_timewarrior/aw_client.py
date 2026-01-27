@@ -225,21 +225,24 @@ class EventFetcher:
                 + timedelta(seconds=EVENT_MATCHING_BUFFER_SECONDS),
             )
 
-        # Fallback: use most recent event before the window event
-        # Useful for tmux where state persists between recorded events
+        # Fallback: find nearest event around the window event
+        # Useful for tmux where state persists between recorded events,
+        # and where the tmux event may start slightly after the window event
+        # (e.g., 0-second window events just before tmux activity begins)
         if not ret and fallback_to_recent:
-            # Look for events in a reasonable window before the window event
-            # Use 10 minutes as the max lookback - state older than that is likely stale
             lookback = timedelta(minutes=10)
-            recent_events = self.get_events(
+            lookahead = timedelta(seconds=EVENT_MATCHING_BUFFER_SECONDS)
+            nearby_events = self.get_events(
                 bucket_id,
                 start=window_event["timestamp"] - lookback,
-                end=window_event["timestamp"],
+                end=window_event["timestamp"] + lookahead,
             )
-            if recent_events:
-                # Sort by timestamp (most recent first) and return the most recent
-                recent_events.sort(key=lambda x: x["timestamp"], reverse=True)
-                ret = [recent_events[0]]
+            if nearby_events:
+                # Prefer the nearest event by timestamp proximity
+                nearby_events.sort(
+                    key=lambda x: abs((x["timestamp"] - window_event["timestamp"]).total_seconds())
+                )
+                ret = [nearby_events[0]]
 
         # Log if nothing found (unless ignorable or very short event)
         if not ret:

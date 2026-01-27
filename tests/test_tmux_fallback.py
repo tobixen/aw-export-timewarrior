@@ -174,3 +174,61 @@ class TestTmuxFallback:
         # Should return the overlapping event (11:39:03, 6s duration overlaps 11:39:05)
         assert result is not None
         assert result["timestamp"] == datetime(2025, 12, 30, 11, 39, 3, tzinfo=UTC)
+
+    def test_fallback_finds_event_slightly_after_window(self, mock_event_fetcher):
+        """Fallback should find tmux events that start slightly after the window event.
+
+        Real-world scenario: 0-second window events at 19:04:08 just before
+        tmux activity starts at 19:04:10. The fallback should look forward
+        (within EVENT_MATCHING_BUFFER_SECONDS) as well as backward.
+        """
+        # A 0-second window event just before tmux activity starts
+        window_event_before_tmux = {
+            "id": 500001,
+            "timestamp": datetime(2025, 12, 30, 19, 4, 8, tzinfo=UTC),
+            "duration": timedelta(seconds=0),
+            "data": {"app": "foot", "title": "aw-export-timewarrior"},
+        }
+
+        # Tmux event starts 2 seconds after the window event
+        tmux_event_after = {
+            "id": 500010,
+            "timestamp": datetime(2025, 12, 30, 19, 4, 10, tzinfo=UTC),
+            "duration": timedelta(seconds=23.0),
+            "data": {
+                "pane_current_command": "claude",
+                "pane_current_path": "/home/tobias/puppet-atop",
+                "pane_title": "Forge Publishing",
+            },
+        }
+
+        def get_events_side_effect(bucket_id, start=None, end=None):
+            events = [tmux_event_after]
+            result = []
+            for e in events:
+                event_end = e["timestamp"] + e["duration"]
+                if not (start and end):
+                    continue
+                overlaps = e["timestamp"] < end and event_end > start
+                in_range = e["timestamp"] < end and e["timestamp"] >= start
+                if overlaps or in_range:
+                    result.append(e)
+            return result
+
+        mock_event_fetcher.get_events = MagicMock(side_effect=get_events_side_effect)
+
+        real_fetcher = EventFetcher.__new__(EventFetcher)
+        real_fetcher.get_events = mock_event_fetcher.get_events
+        real_fetcher.log_callback = lambda *args, **kwargs: None
+
+        # With fallback, should find the tmux event that starts 2s later
+        result = real_fetcher.get_corresponding_event(
+            window_event_before_tmux,
+            "aw-watcher-tmux",
+            ignorable=True,
+            fallback_to_recent=True,
+        )
+
+        assert result is not None
+        assert result["data"]["pane_current_path"] == "/home/tobias/puppet-atop"
+        assert result["timestamp"] == datetime(2025, 12, 30, 19, 4, 10, tzinfo=UTC)
