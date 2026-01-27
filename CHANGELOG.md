@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-01-27
+
+### Fixed
+- Fix version 0.0.0 in published packages: move version to `[tool.poetry]` and use `dynamic = ["version"]` in `[project]` for poetry-dynamic-versioning PEP 621 compatibility
+
 ## [0.6.4] - 2026-01-27
 
 ### Fixed
