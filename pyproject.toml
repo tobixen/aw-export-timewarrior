@@ -1,6 +1,6 @@
 [project]
 name = "aw-export-timewarrior"
-version = "0.0.0"  # Managed by poetry-dynamic-versioning from git tags
+dynamic = ["version"]
 description = "Export ActivityWatch data to TimeWarrior with rule-based tag categorization"
 authors = [
     {name = "Tobias Brox", email = "tobias@redpill-linpro.com"}
@@ -45,6 +45,7 @@ aw-export-timewarrior = "aw_export_timewarrior.cli:main"
 
 [tool.poetry]
 packages = [{include = "aw_export_timewarrior", from = "src"}]
+version = "0.0.0"  # Managed by poetry-dynamic-versioning from git tags
 
 [tool.poetry-dynamic-versioning]
 enable = true
