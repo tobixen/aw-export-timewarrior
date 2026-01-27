@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-01-27
+
+### Fixed
+- Fix CI publish workflow to use PEP 517 build with debug output (matches working plann/caldav-server-tester setup)
+- Update poetry-core requirement to >=2.0.0 for compatibility with poetry-dynamic-versioning
+
 ## [0.6.3] - 2026-01-27
 
 ### Fixed
