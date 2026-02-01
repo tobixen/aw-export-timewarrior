@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 # Magic number constants with explanations
 # Minimum ratio of known events to total tracked time.
 # If less than this ratio is accounted for, tag the interval as UNKNOWN.
-# For example, 0.3 means at least 30% of tracked time should be known events.
-MIN_KNOWN_ACTIVITY_RATIO = 0.3
+# For example, 0.2 means at least 20% of tracked time should be known events.
+MIN_KNOWN_ACTIVITY_RATIO = 0.2
 
 # Debug threshold: trigger breakpoint if skipping an event longer than this duration.
 # This helps catch unexpected behavior where significant events are being skipped.
@@ -407,6 +407,13 @@ class Exporter:
 
                 current_start = None
                 current_tags = set()
+
+        # Close any open interval at end_time (fixes issue where final interval is lost)
+        if current_start and self.end_time:
+            end = self.end_time
+            if end.tzinfo is None:
+                end = end.astimezone(UTC)
+            intervals.append(SuggestedInterval(start=current_start, end=end, tags=current_tags))
 
         return intervals
 

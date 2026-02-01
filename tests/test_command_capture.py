@@ -187,4 +187,63 @@ def test_command_format() -> None:
             "retag",
             "modify",
             "track",
+            "tag",
         ], f"Second element should be a timew command, got: {cmd[1]}"
+
+
+def test_get_suggested_intervals_includes_final_interval() -> None:
+    """Test that get_suggested_intervals includes the final interval even without a stop command.
+
+    This is a regression test for a bug where the final interval would be lost
+    because get_suggested_intervals() only closed intervals when it encountered
+    a subsequent 'start' or 'stop' command. If processing ended with an open
+    interval (no subsequent command), it would be excluded from the results.
+    """
+    data = (
+        FixtureDataBuilder()
+        .add_window_event("Code", "main.py - VS Code", duration=200)
+        .add_afk_event("not-afk", duration=200)
+        .build()
+    )
+
+    # Use explicit start/end times that cover the events
+    start_time = datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+    end_time = datetime(2025, 1, 1, 9, 10, 0, tzinfo=UTC)
+
+    exporter = Exporter(
+        test_data=data,
+        dry_run=True,
+        config_path="tests/fixtures/test_config.toml",
+        start_time=start_time,
+        end_time=end_time,
+    )
+
+    # Process all events
+    exporter.tick(process_all=True)
+
+    # Get captured commands and suggested intervals
+    commands = exporter.get_captured_commands()
+    intervals = exporter.get_suggested_intervals()
+
+    print(f"\nCaptured commands ({len(commands)}):")
+    for cmd in commands:
+        print(f"  {' '.join(cmd)}")
+
+    print(f"\nSuggested intervals ({len(intervals)}):")
+    for interval in intervals:
+        print(f"  {interval.start} - {interval.end}: {interval.tags}")
+
+    # If there's at least one start command, there should be a corresponding interval
+    start_commands = [cmd for cmd in commands if len(cmd) > 1 and cmd[1] == "start"]
+    if start_commands:
+        assert len(intervals) >= 1, (
+            f"With {len(start_commands)} start command(s), should have at least 1 interval. "
+            f"Commands: {commands}"
+        )
+
+        # The final interval should end at end_time (not be lost)
+        if len(intervals) > 0:
+            last_interval = intervals[-1]
+            assert last_interval.end == end_time, (
+                f"Final interval should end at end_time ({end_time}), but got {last_interval.end}"
+            )
