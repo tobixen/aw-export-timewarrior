@@ -46,10 +46,13 @@ def setup_tmux_test(config, tmux_event):
         tmux_event  # Singular, returns event or None
     )
 
+    # Use the tmux session name in the window title (as real tmux terminals do)
+    session_name = tmux_event["data"].get("session_name", "tmux")
     window_event = create_window_event(
         timestamp=datetime.now(UTC),
         duration=timedelta(minutes=5),
         app="foot",
+        title=session_name,
     )
 
     extractor = TagExtractor(config, mock_fetcher)
@@ -251,8 +254,12 @@ class TestTmuxTagExtraction:
         tags = extractor.get_tmux_tags(window_event)
         assert tags is False
 
-    def test_terminal_without_tmux_returns_empty(self) -> None:
-        """Test that terminal window without tmux activity returns empty list."""
+    def test_terminal_without_tmux_returns_false(self) -> None:
+        """Test that terminal window without tmux activity returns False.
+
+        When there are no tmux events, get_tmux_tags returns False so that
+        get_app_tags can handle the terminal window instead.
+        """
         config = {"rules": {}, "exclusive": {}, "tags": {}}
 
         mock_fetcher = Mock(spec=EventFetcher)
@@ -268,7 +275,7 @@ class TestTmuxTagExtraction:
         )
 
         tags = extractor.get_tmux_tags(window_event)
-        assert tags == []
+        assert tags is False
 
     def test_tmux_event_no_command_returns_empty(self) -> None:
         """Test tmux event without command returns empty list."""
@@ -347,3 +354,59 @@ class TestTmuxTagExtraction:
         assert "coding" in tags
         assert "org:github" in tags
         assert "project:aw-export-timewarrior" in tags
+
+    def test_non_tmux_terminal_ignores_tmux_events(self) -> None:
+        """Test that a terminal NOT running tmux doesn't pick up tmux events.
+
+        This is a regression test for a bug where non-tmux terminals would
+        incorrectly get tmux tags from other terminal windows running tmux.
+
+        The fix verifies that the window title indicates tmux is running
+        (contains 'tmux' or the session/window name) before using tmux events.
+
+        When the window title doesn't indicate tmux, get_tmux_tags returns False
+        so that get_app_tags can handle the terminal window instead.
+        """
+        config = {
+            "rules": {
+                "tmux": {
+                    "coding": {
+                        "command": r"vim",
+                        "tags": ["coding"],
+                    }
+                }
+            },
+            "exclusive": {},
+            "tags": {},
+        }
+
+        # Tmux event from another terminal running tmux
+        tmux_event = create_tmux_event(
+            timestamp=datetime.now(UTC),
+            duration=timedelta(minutes=5),
+            session_name="work",
+            window_name="editor",
+            pane_command="vim",
+            pane_path="/home/user",
+        )
+
+        mock_fetcher = Mock(spec=EventFetcher)
+        mock_fetcher.get_tmux_bucket.return_value = "aw-watcher-tmux"
+        mock_fetcher.get_corresponding_event.return_value = tmux_event
+
+        # Window event for a terminal NOT running tmux (title doesn't contain tmux info)
+        window_event = create_window_event(
+            timestamp=datetime.now(UTC),
+            duration=timedelta(minutes=5),
+            app="foot",
+            title="bash",  # Plain bash, not tmux
+        )
+
+        extractor = TagExtractor(config, mock_fetcher)
+        tags = extractor.get_tmux_tags(window_event)
+
+        # Should return False (not tmux context) so that get_app_tags can handle it
+        assert tags is False, (
+            f"Non-tmux terminal should return False to allow app rules fallback. "
+            f"Got: {tags}. Window title 'bash' doesn't indicate tmux is running."
+        )

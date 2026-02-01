@@ -147,7 +147,8 @@ class TagExtractor:
             window_event: The window event
 
         Returns:
-            Set of tags, empty list if no match, or False if wrong app type
+            Set of tags if matched, empty list if tmux context found but no rules match,
+            or False if not applicable (not a terminal, no tmux, or terminal not running tmux)
         """
         # Check if this is a terminal window
         terminal_apps = self.terminal_apps or {
@@ -169,7 +170,7 @@ class TagExtractor:
         # Get tmux bucket - there's only one tmux bucket (not per-app like browser/editor)
         tmux_bucket = self.event_fetcher.get_tmux_bucket()
         if not tmux_bucket:
-            return False
+            return False  # No tmux watcher, fall through to app rules
 
         # Get corresponding tmux event (handles picking the longest if multiple)
         # Use fallback_to_recent since tmux state persists between recorded events
@@ -182,7 +183,23 @@ class TagExtractor:
         )
 
         if not tmux_event:
-            return []  # Terminal window but no tmux activity
+            return False  # No tmux events, fall through to app rules
+
+        # Verify the window title indicates this terminal is actually running tmux.
+        # This prevents non-tmux terminals from incorrectly picking up tmux events
+        # from other terminal windows that are running tmux.
+        window_title = window_event["data"].get("title", "").lower()
+        tmux_session = tmux_event["data"].get("session_name", "").lower()
+        tmux_window = tmux_event["data"].get("window_name", "").lower()
+
+        title_indicates_tmux = (
+            "tmux" in window_title
+            or (tmux_session and tmux_session in window_title)
+            or (tmux_window and tmux_window in window_title)
+        )
+
+        if not title_indicates_tmux:
+            return False  # Terminal not running tmux, fall through to app rules
 
         # Use shared subevent tags logic with tmux matcher
         return self._get_subevent_tags(
@@ -624,13 +641,34 @@ class TagExtractor:
         if not tmux_bucket:
             return None
 
-        return self.event_fetcher.get_corresponding_event(
+        tmux_event = self.event_fetcher.get_corresponding_event(
             window_event,
             tmux_bucket,
             ignorable=True,
             fallback_to_recent=True,
             retry=self.default_retry,
         )
+
+        if not tmux_event:
+            return None
+
+        # Verify the window title indicates this terminal is actually running tmux.
+        # This prevents non-tmux terminals from incorrectly picking up tmux events
+        # from other terminal windows that are running tmux.
+        window_title = window_event["data"].get("title", "").lower()
+        tmux_session = tmux_event["data"].get("session_name", "").lower()
+        tmux_window = tmux_event["data"].get("window_name", "").lower()
+
+        title_indicates_tmux = (
+            "tmux" in window_title
+            or (tmux_session and tmux_session in window_title)
+            or (tmux_window and tmux_window in window_title)
+        )
+
+        if not title_indicates_tmux:
+            return None
+
+        return tmux_event
 
     def get_specialized_context(self, window_event: dict) -> dict[str, str | None]:
         """Get specialized context data for a window event (URL, path, tmux info).

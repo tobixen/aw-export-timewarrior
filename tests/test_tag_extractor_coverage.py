@@ -317,10 +317,11 @@ class TestFetchTmuxSubEvent:
             terminal_apps={"foot"},
         )
 
+        # Window title must contain "tmux" or the session name for validation to pass
         window_event = {
             "timestamp": datetime.now(UTC),
             "duration": timedelta(minutes=5),
-            "data": {"app": "foot", "title": "Terminal"},
+            "data": {"app": "foot", "title": "main"},  # Matches session_name
         }
 
         result = extractor._fetch_tmux_sub_event(window_event)
@@ -408,6 +409,8 @@ class TestGetSpecializedContext:
         mock_fetcher.get_tmux_bucket.return_value = "aw-watcher-tmux"
         tmux_event = {
             "data": {
+                "session_name": "work",
+                "window_name": "editor",
                 "pane_current_command": "vim",
                 "pane_current_path": "/home/user/project",
                 "pane_title": "editor",
@@ -421,10 +424,11 @@ class TestGetSpecializedContext:
             terminal_apps={"foot"},
         )
 
+        # Window title must contain "tmux" or the session/window name for validation to pass
         window_event = {
             "timestamp": datetime.now(UTC),
             "duration": timedelta(minutes=5),
-            "data": {"app": "foot", "title": "Terminal"},
+            "data": {"app": "foot", "title": "work"},  # Matches session_name
         }
 
         result = extractor.get_specialized_context(window_event)
@@ -440,6 +444,8 @@ class TestGetSpecializedContext:
         mock_fetcher.get_tmux_bucket.return_value = "aw-watcher-tmux"
         tmux_event = {
             "data": {
+                "session_name": "dev",
+                "window_name": "shell",
                 "pane_current_command": "bash",
                 "pane_current_path": "/home/tobias/projects/myapp",
                 "pane_title": "",
@@ -453,10 +459,11 @@ class TestGetSpecializedContext:
             terminal_apps={"foot"},
         )
 
+        # Window title must contain "tmux" or the session/window name for validation to pass
         window_event = {
             "timestamp": datetime.now(UTC),
             "duration": timedelta(minutes=5),
-            "data": {"app": "foot", "title": "Terminal"},
+            "data": {"app": "foot", "title": "dev"},  # Matches session_name
         }
 
         result = extractor.get_specialized_context(window_event)
