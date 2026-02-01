@@ -72,6 +72,7 @@ def add_timespan_arguments(parser):
     end_group.add_argument(
         "--to",
         "--until",
+        "--stop",
         "--end",
         dest="end",
         metavar="DATETIME",
