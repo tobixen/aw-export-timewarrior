@@ -320,8 +320,19 @@ class EventPipeline:
         # Resolve conflicts: lid events override conflicting AFK events
         resolved_afk_events = self._resolve_event_conflicts(afk_events, converted_lid_events)
 
+        # Exclude boot_gap events from the final merged list.
+        # Boot gaps represent "unknown" periods (system wasn't running), not confirmed AFK.
+        # If there are window events during a boot_gap, we should trust those instead.
+        # Note: boot_gaps are still passed to _split_window_events_by_afk for awareness,
+        # but that function also excludes them (see the filter there).
+        non_boot_gap_lid_events = [
+            e
+            for e in converted_lid_events
+            if not e["data"].get("original_data", {}).get("boot_gap", False)
+        ]
+
         # Merge and sort
-        merged = resolved_afk_events + converted_lid_events
+        merged = resolved_afk_events + non_boot_gap_lid_events
         merged.sort(key=lambda e: normalize_timestamp(e["timestamp"]))
 
         return merged
@@ -414,10 +425,13 @@ class EventPipeline:
             window_end = window_start + normalize_duration(window_event["duration"])
 
             # Find overlapping AFK events
+            # Exclude boot_gap events - they represent "unknown" periods, not confirmed AFK.
+            # If we have actual window activity during a boot_gap, trust the window events.
             overlapping_afk = [
                 afk
                 for afk in afk_events
                 if afk["data"].get("status") == "afk"
+                and not afk["data"].get("original_data", {}).get("boot_gap", False)
                 and normalize_timestamp(afk["timestamp"]) < window_end
                 and (normalize_timestamp(afk["timestamp"]) + normalize_duration(afk["duration"]))
                 > window_start
