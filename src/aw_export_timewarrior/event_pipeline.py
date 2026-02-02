@@ -97,6 +97,11 @@ class EventPipeline:
         if self.pipeline_config.enable_afk_gap_workaround:
             afk_events = self._apply_afk_gap_workaround(afk_events)
 
+        # Merge consecutive AFK events with the same status
+        # This combines many short heartbeat events into longer events
+        # so they pass the duration filter below
+        afk_events = self._merge_consecutive_afk_events(afk_events)
+
         # Filter out short AFK events
         afk_events = [
             x
@@ -272,6 +277,69 @@ class EventPipeline:
 
         # Combine original and synthetic events
         return afk_events + synthetic_afk_events
+
+    def _merge_consecutive_afk_events(self, afk_events: list) -> list:
+        """Merge consecutive AFK events with the same status into single events.
+
+        The AFK watcher sends heartbeat events that can result in many short
+        events with the same status. This merges them so that long continuous
+        AFK periods are represented as single events (which pass the filter).
+
+        Args:
+            afk_events: List of AFK events
+
+        Returns:
+            List of merged AFK events
+        """
+        if len(afk_events) <= 1:
+            return afk_events
+
+        # Sort by timestamp
+        sorted_events = sorted(afk_events, key=lambda x: normalize_timestamp(x["timestamp"]))
+
+        merged = []
+        current = None
+
+        for event in sorted_events:
+            event_start = normalize_timestamp(event["timestamp"])
+            event_end = event_start + normalize_duration(event["duration"])
+            event_status = event["data"].get("status")
+
+            if current is None:
+                current = {
+                    "timestamp": event["timestamp"],
+                    "duration": event["duration"],
+                    "data": event["data"].copy(),
+                    "_end": event_end,
+                }
+                continue
+
+            current_end = current["_end"]
+            current_status = current["data"].get("status")
+
+            # Check if this event is consecutive (within 5 minutes) and same status
+            gap = (event_start - current_end).total_seconds()
+            if gap <= 300 and event_status == current_status:
+                # Extend current event
+                current["_end"] = event_end
+                current["duration"] = current["_end"] - normalize_timestamp(current["timestamp"])
+            else:
+                # Start new event
+                del current["_end"]
+                merged.append(current)
+                current = {
+                    "timestamp": event["timestamp"],
+                    "duration": event["duration"],
+                    "data": event["data"].copy(),
+                    "_end": event_end,
+                }
+
+        # Don't forget the last event
+        if current:
+            del current["_end"]
+            merged.append(current)
+
+        return merged
 
     def _merge_afk_and_lid_events(self, afk_events: list, lid_events: list) -> list:
         """Merge lid events with AFK events, giving lid events priority.
