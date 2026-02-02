@@ -832,3 +832,122 @@ class TestGenerateFixCommands:
             f"Should have an executable 'timew tag' command to add derived tag 4BREAK. "
             f"Executable commands: {executable_commands}"
         )
+
+
+class TestExclusiveGroupViolationHandling:
+    """Tests for graceful handling of exclusive group violations in compare functions."""
+
+    def test_compare_intervals_handles_exclusive_group_violation(self) -> None:
+        """Test that compare_intervals handles exclusive group violations gracefully.
+
+        When TimeWarrior intervals have tags that violate exclusive group rules
+        (e.g., multiple tags from the same exclusive group), the comparison should
+        still work using the original tags instead of raising an exception.
+        """
+        from unittest.mock import patch
+
+        from aw_export_timewarrior.tag_extractor import (
+            ExclusiveGroupError,
+            ExclusiveGroupViolation,
+        )
+
+        # TimeWarrior has an interval with conflicting exclusive group tags
+        timew_intervals = [
+            TimewInterval(
+                id=1,
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                # These tags would violate an exclusive group rule
+                tags={"4BREAK", "4CHORES", "afk", "~aw"},
+            )
+        ]
+        suggested_intervals = [
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                tags={"4BREAK", "afk", "~aw"},
+            )
+        ]
+
+        # Mock retag_by_rules to raise ExclusiveGroupError for conflicting tags
+        def mock_retag_by_rules(tags, config):
+            if "4BREAK" in tags and "4CHORES" in tags:
+                raise ExclusiveGroupError(
+                    tags,
+                    [
+                        ExclusiveGroupViolation(
+                            group_name="main_category",
+                            conflicting_tags={"4BREAK", "4CHORES"},
+                            group_tags={"4BREAK", "4CHORES", "4ME", "4WORK"},
+                        )
+                    ],
+                )
+            return tags
+
+        with patch("aw_export_timewarrior.main.retag_by_rules", side_effect=mock_retag_by_rules):
+            # This should NOT raise an exception - it should handle the error gracefully
+            result = compare_intervals(timew_intervals, suggested_intervals)
+
+        # The comparison should still work, using original tags when expansion fails
+        # Since original tags differ, this should result in different_tags
+        assert len(result["different_tags"]) == 1
+
+    def test_generate_fix_commands_handles_exclusive_group_violation(self) -> None:
+        """Test that generate_fix_commands handles exclusive group violations gracefully.
+
+        When tags violate exclusive group rules, the command generation should
+        continue using original tags instead of raising an exception.
+        """
+        from unittest.mock import patch
+
+        from aw_export_timewarrior.tag_extractor import (
+            ExclusiveGroupError,
+            ExclusiveGroupViolation,
+        )
+
+        comparison = {
+            "matching": [],
+            "different_tags": [
+                (
+                    TimewInterval(
+                        id=1,
+                        start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                        # Tags that violate exclusive group
+                        tags={"4BREAK", "4CHORES", "~aw"},
+                    ),
+                    SuggestedInterval(
+                        start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                        end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                        tags={"4BREAK", "~aw"},
+                    ),
+                )
+            ],
+            "missing": [],
+            "extra": [],
+        }
+
+        def mock_retag_by_rules(tags, config):
+            if "4BREAK" in tags and "4CHORES" in tags:
+                raise ExclusiveGroupError(
+                    tags,
+                    [
+                        ExclusiveGroupViolation(
+                            group_name="main_category",
+                            conflicting_tags={"4BREAK", "4CHORES"},
+                            group_tags={"4BREAK", "4CHORES", "4ME", "4WORK"},
+                        )
+                    ],
+                )
+            return tags
+
+        with patch("aw_export_timewarrior.main.retag_by_rules", side_effect=mock_retag_by_rules):
+            # This should NOT raise an exception
+            commands = generate_fix_commands(comparison)
+
+        # Should generate some commands (even if using original tags)
+        assert len(commands) > 0
+        # Should have a track command with the suggested tags
+        track_commands = [c for c in commands if c.startswith("timew track")]
+        assert len(track_commands) == 1
+        assert "4BREAK" in track_commands[0]
