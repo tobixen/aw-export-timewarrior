@@ -1,12 +1,113 @@
+import copy
 import logging
 import tomllib
 from pathlib import Path
+from typing import Any
 
 from aw_core.config import load_config_toml
 
 from .config_validation import validate_and_warn
 
 logger = logging.getLogger(__name__)
+
+
+class AppGroupExpansionError(Exception):
+    """Raised when app group expansion fails."""
+
+    pass
+
+
+def expand_app_groups(config: dict[str, Any]) -> dict[str, Any]:
+    """Expand @groupname references in app rules.
+
+    Args:
+        config: The configuration dictionary
+
+    Returns:
+        A new config dict with @references expanded in rules.app.*.app_names
+
+    Raises:
+        AppGroupExpansionError: If expansion fails (unknown group, circular ref)
+    """
+    app_groups = config.get("app_groups", {})
+    if not app_groups:
+        return config
+
+    # Build expanded groups (resolve nested references)
+    expanded_groups = _expand_all_groups(app_groups)
+
+    # Deep copy config to avoid mutating the original
+    config = copy.deepcopy(config)
+
+    # Expand references in rules.app.*.app_names
+    rules = config.get("rules", {})
+    app_rules = rules.get("app", {})
+
+    for rule_name, rule in app_rules.items():
+        if "app_names" not in rule:
+            continue
+
+        expanded_app_names = []
+        for item in rule["app_names"]:
+            if isinstance(item, str) and item.startswith("@"):
+                ref_name = item[1:]
+                if ref_name not in expanded_groups:
+                    raise AppGroupExpansionError(
+                        f"rules.app.{rule_name}.app_names references unknown group '@{ref_name}'"
+                    )
+                expanded_app_names.extend(expanded_groups[ref_name])
+            else:
+                expanded_app_names.append(item)
+
+        rule["app_names"] = expanded_app_names
+
+    return config
+
+
+def _expand_all_groups(app_groups: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Expand all groups, resolving nested references.
+
+    Args:
+        app_groups: The app_groups section from config
+
+    Returns:
+        Dict mapping group names to fully expanded lists of app names
+
+    Raises:
+        AppGroupExpansionError: If circular reference detected
+    """
+    expanded: dict[str, list[str]] = {}
+    expanding: set[str] = set()  # Track groups currently being expanded
+
+    def expand_group(name: str) -> list[str]:
+        if name in expanded:
+            return expanded[name]
+
+        if name in expanding:
+            raise AppGroupExpansionError(f"Circular reference in app_groups involving '{name}'")
+
+        if name not in app_groups:
+            raise AppGroupExpansionError(f"Unknown app_group: '{name}'")
+
+        expanding.add(name)
+
+        result = []
+        for item in app_groups[name]:
+            if isinstance(item, str) and item.startswith("@"):
+                ref_name = item[1:]
+                result.extend(expand_group(ref_name))
+            else:
+                result.append(item)
+
+        expanding.remove(name)
+        expanded[name] = result
+        return result
+
+    for group_name in app_groups:
+        expand_group(group_name)
+
+    return expanded
+
 
 default_config = """
 # Enable workaround for aw-watcher-window-wayland issue #41
@@ -114,7 +215,8 @@ tags = [ "4break", "4chores", "4work", "4me" ]
 
 config = load_config_toml("aw-export-timewarrior", default_config)
 
-# Validate default config on module load
+# Expand app_groups and validate default config on module load
+config = expand_app_groups(config)
 validate_and_warn(config)
 
 
@@ -130,7 +232,9 @@ def load_custom_config(config_path, validate: bool = True):
         config_path = Path(config_path)
         if config_path.exists():
             with open(config_path, "rb") as f:
-                config = tomllib.load(f)
+                loaded_config = tomllib.load(f)
+            # Expand app_groups before validation
+            config = expand_app_groups(loaded_config)
             if validate:
                 validate_and_warn(config)
         else:

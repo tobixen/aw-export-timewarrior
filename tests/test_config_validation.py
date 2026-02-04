@@ -300,6 +300,123 @@ class TestExclusiveValidation:
         assert any("fewer than 2" in w for w in warnings)
 
 
+class TestAppGroupsValidation:
+    """Tests for app_groups section validation."""
+
+    def test_valid_app_groups(self) -> None:
+        """Valid app_groups should pass validation."""
+        config = {
+            "app_groups": {
+                "terminals": ["foot", "xterm", "terminology"],
+            }
+        }
+        errors, warnings = validate_config(config)
+        assert len(errors) == 0
+
+    def test_app_groups_must_be_dict(self) -> None:
+        """app_groups must be a dictionary."""
+        config = {"app_groups": ["foot", "xterm"]}
+        errors, warnings = validate_config(config)
+        assert any("app_groups" in e and "dictionary" in e for e in errors)
+
+    def test_app_group_must_be_list(self) -> None:
+        """Each app group must be a list."""
+        config = {"app_groups": {"terminals": "foot"}}
+        errors, warnings = validate_config(config)
+        assert any("terminals" in e and "list" in e for e in errors)
+
+    def test_app_group_items_must_be_strings(self) -> None:
+        """Items in app groups must be strings."""
+        config = {"app_groups": {"terminals": ["foot", 123, "xterm"]}}
+        errors, warnings = validate_config(config)
+        assert any("terminals" in e and "string" in e for e in errors)
+
+    def test_empty_app_group_warns(self) -> None:
+        """Empty app groups should produce a warning."""
+        config = {"app_groups": {"terminals": []}}
+        errors, warnings = validate_config(config)
+        assert any("terminals" in w and "empty" in w for w in warnings)
+
+    def test_unknown_group_reference_errors(self) -> None:
+        """Reference to unknown group should error."""
+        config = {
+            "app_groups": {
+                "combined": ["@terminals", "@browsers"],
+                "browsers": ["chromium"],
+            }
+        }
+        errors, warnings = validate_config(config)
+        assert any("@terminals" in e for e in errors)
+
+    def test_valid_group_reference(self) -> None:
+        """Valid @group references should pass validation."""
+        config = {
+            "app_groups": {
+                "base": ["foot", "xterm"],
+                "extended": ["@base", "alacritty"],
+            }
+        }
+        errors, warnings = validate_config(config)
+        assert len(errors) == 0
+
+    def test_circular_reference_errors(self) -> None:
+        """Circular references should error."""
+        config = {
+            "app_groups": {
+                "group_a": ["@group_b"],
+                "group_b": ["@group_a"],
+            }
+        }
+        errors, warnings = validate_config(config)
+        assert any("circular" in e.lower() for e in errors)
+
+    def test_self_reference_errors(self) -> None:
+        """Self-referencing groups should error."""
+        config = {
+            "app_groups": {
+                "recursive": ["@recursive", "foot"],
+            }
+        }
+        errors, warnings = validate_config(config)
+        assert any("circular" in e.lower() for e in errors)
+
+    def test_app_rule_unknown_group_reference_errors(self) -> None:
+        """App rule referencing unknown group should error."""
+        config = {
+            "app_groups": {
+                "terminals": ["foot", "xterm"],
+            },
+            "rules": {
+                "app": {
+                    "test": {
+                        "app_names": ["@unknown"],
+                        "tags": ["test"],
+                    }
+                }
+            },
+        }
+        errors, warnings = validate_config(config)
+        assert any("@unknown" in e for e in errors)
+
+    def test_app_rule_valid_group_reference(self) -> None:
+        """App rule referencing existing group should pass."""
+        config = {
+            "app_groups": {
+                "terminals": ["foot", "xterm"],
+            },
+            "rules": {
+                "app": {
+                    "test": {
+                        "app_names": ["@terminals"],
+                        "tags": ["test"],
+                    }
+                }
+            },
+        }
+        errors, warnings = validate_config(config)
+        assert len(errors) == 0
+
+
 class TestLegacyFieldSupport:
     """Tests for legacy field names (timew_tags, prepend)."""
 

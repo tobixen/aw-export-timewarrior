@@ -28,6 +28,7 @@ class ConfigValidator:
         "tags",
         "rules",
         "exclusive",
+        "app_groups",
     }
 
     # Known tuning parameters with their types and optional ranges
@@ -87,9 +88,10 @@ class ConfigValidator:
         self.warnings = []
 
         self._validate_top_level(config)
+        self._validate_app_groups(config.get("app_groups", {}))
         self._validate_tuning(config.get("tuning", {}))
         self._validate_tags(config.get("tags", {}))
-        self._validate_rules(config.get("rules", {}))
+        self._validate_rules(config.get("rules", {}), config.get("app_groups", {}))
         self._validate_exclusive(config.get("exclusive", {}))
 
         return self.errors, self.warnings
@@ -114,6 +116,64 @@ class ConfigValidator:
                 self.errors.append("'terminal_apps' must be a list")
             elif not all(isinstance(app, str) for app in config["terminal_apps"]):
                 self.errors.append("'terminal_apps' must be a list of strings")
+
+    def _validate_app_groups(self, app_groups: dict) -> None:
+        """Validate app_groups section."""
+        if not isinstance(app_groups, dict):
+            self.errors.append("'app_groups' section must be a dictionary")
+            return
+
+        for group_name, group_apps in app_groups.items():
+            prefix = f"app_groups.{group_name}"
+
+            if not isinstance(group_apps, list):
+                self.errors.append(f"{prefix} must be a list of strings")
+                continue
+
+            for i, item in enumerate(group_apps):
+                if not isinstance(item, str):
+                    self.errors.append(f"{prefix}[{i}] must be a string, got {type(item).__name__}")
+                elif item.startswith("@"):
+                    # Validate @reference points to existing group
+                    ref_name = item[1:]
+                    if ref_name not in app_groups:
+                        self.errors.append(f"{prefix} references unknown group '@{ref_name}'")
+
+            if len(group_apps) == 0:
+                self.warnings.append(f"{prefix} is empty")
+
+        # Check for circular references
+        self._check_circular_app_group_refs(app_groups)
+
+    def _check_circular_app_group_refs(self, app_groups: dict) -> None:
+        """Check for circular references in app_groups."""
+
+        def find_cycle(group_name: str, visited: set, path: list) -> list | None:
+            if group_name in path:
+                return path[path.index(group_name) :] + [group_name]
+            if group_name in visited:
+                return None
+            if group_name not in app_groups:
+                return None
+
+            visited.add(group_name)
+            path = path + [group_name]
+
+            for item in app_groups[group_name]:
+                if isinstance(item, str) and item.startswith("@"):
+                    ref_name = item[1:]
+                    cycle = find_cycle(ref_name, visited, path)
+                    if cycle:
+                        return cycle
+            return None
+
+        visited: set[str] = set()
+        for group_name in app_groups:
+            cycle = find_cycle(group_name, visited, [])
+            if cycle:
+                cycle_str = " -> ".join(cycle)
+                self.errors.append(f"Circular reference in app_groups: {cycle_str}")
+                break  # Report only the first cycle found
 
     def _validate_tuning(self, tuning: dict) -> None:
         """Validate tuning parameters."""
@@ -181,11 +241,14 @@ class ConfigValidator:
             if not has_action:
                 self.warnings.append(f"tags.{tag_name} has no action (add/remove/replace)")
 
-    def _validate_rules(self, rules: dict) -> None:
+    def _validate_rules(self, rules: dict, app_groups: dict | None = None) -> None:
         """Validate matching rules."""
         if not isinstance(rules, dict):
             self.errors.append("'rules' section must be a dictionary")
             return
+
+        if app_groups is None:
+            app_groups = {}
 
         for rule_type, type_rules in rules.items():
             if rule_type not in self.RULE_TYPES:
@@ -197,11 +260,16 @@ class ConfigValidator:
                 continue
 
             for rule_name, rule in type_rules.items():
-                self._validate_single_rule(rule_type, rule_name, rule)
+                self._validate_single_rule(rule_type, rule_name, rule, app_groups)
 
-    def _validate_single_rule(self, rule_type: str, rule_name: str, rule: dict) -> None:
+    def _validate_single_rule(
+        self, rule_type: str, rule_name: str, rule: dict, app_groups: dict | None = None
+    ) -> None:
         """Validate a single matching rule."""
         prefix = f"rules.{rule_type}.{rule_name}"
+
+        if app_groups is None:
+            app_groups = {}
 
         if not isinstance(rule, dict):
             self.errors.append(f"{prefix} must be a dictionary")
@@ -223,7 +291,7 @@ class ConfigValidator:
         if rule_type == "browser":
             self._validate_browser_rule(prefix, rule)
         elif rule_type == "app":
-            self._validate_app_rule(prefix, rule)
+            self._validate_app_rule(prefix, rule, app_groups)
         elif rule_type == "editor":
             self._validate_editor_rule(prefix, rule)
         elif rule_type == "tmux":
@@ -236,14 +304,26 @@ class ConfigValidator:
         else:
             self._validate_regexp(prefix, "url_regexp", rule["url_regexp"])
 
-    def _validate_app_rule(self, prefix: str, rule: dict) -> None:
+    def _validate_app_rule(self, prefix: str, rule: dict, app_groups: dict | None = None) -> None:
         """Validate an app rule."""
+        if app_groups is None:
+            app_groups = {}
+
         if "app_names" not in rule:
             self.errors.append(f"{prefix} is missing 'app_names'")
         elif not isinstance(rule["app_names"], list):
             self.errors.append(f"{prefix}.app_names must be a list")
         elif len(rule["app_names"]) == 0:
             self.warnings.append(f"{prefix}.app_names is empty")
+        else:
+            # Validate @references in app_names
+            for item in rule["app_names"]:
+                if isinstance(item, str) and item.startswith("@"):
+                    ref_name = item[1:]
+                    if ref_name not in app_groups:
+                        self.errors.append(
+                            f"{prefix}.app_names references unknown group '@{ref_name}'"
+                        )
 
         if "title_regexp" in rule:
             self._validate_regexp(prefix, "title_regexp", rule["title_regexp"])
