@@ -199,8 +199,23 @@ class Exporter:
 
         ## Initialize EventFetcher for all ActivityWatch data access
         client_name = "timewarrior_test_export" if self.dry_run else "timewarrior_export"
+        # Enable event caching for batch/historical processing (start_time + end_time both set,
+        # no test data). This avoids repeated HTTP requests to ActivityWatch for the same data,
+        # reducing get_events() calls from O(N events) to O(number of buckets).
+        # Extend the cache range by a small buffer to catch events that start just before
+        # start_time (e.g. browser events from get_corresponding_event lookback).
+        aw_cache_range = None
+        if self.start_time and self.end_time and not self.test_data:
+            _cache_buffer = timedelta(minutes=11)  # covers fallback_to_recent (10 min) + margin
+            aw_cache_range = (
+                self.start_time - _cache_buffer,
+                self.end_time + timedelta(seconds=16),
+            )
         self.event_fetcher = EventFetcher(
-            test_data=self.test_data, client_name=client_name, log_callback=self.log
+            test_data=self.test_data,
+            client_name=client_name,
+            log_callback=self.log,
+            cache_range=aw_cache_range,
         )
 
         # Initialize TagExtractor for all tag matching logic

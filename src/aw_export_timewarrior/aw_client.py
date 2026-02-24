@@ -52,6 +52,7 @@ class EventFetcher:
         test_data: dict[str, Any] | None = None,
         client_name: str = "aw-export",
         log_callback: Callable | None = None,
+        cache_range: tuple[datetime, datetime] | None = None,
     ) -> None:
         """Initialize event fetcher.
 
@@ -59,6 +60,10 @@ class EventFetcher:
             test_data: Optional test data dict (avoids AW connection)
             client_name: ActivityWatch client name
             log_callback: Optional callback for logging (signature: log(msg, event=None))
+            cache_range: If set, events for each bucket are fetched once from AW for this
+                full time range and cached in memory. Subsequent get_events() calls within
+                this range are served from the cache, avoiding repeated HTTP requests.
+                Use this for batch/historical processing when start and end times are fixed.
         """
         self.log_callback = log_callback or (lambda msg, **kwargs: logger.info(msg))
 
@@ -72,6 +77,11 @@ class EventFetcher:
             self.aw = ActivityWatchClient(client_name=client_name)
             self.buckets = self.aw.get_buckets()
             self.test_data = None
+
+        # Event cache for batch processing: bucket_id -> list of events
+        # Populated lazily on first get_events() call per bucket.
+        self._cache_range = cache_range
+        self._events_cache: dict[str, list] = {} if cache_range else {}
 
         self._init_bucket_mappings()
 
@@ -115,10 +125,45 @@ class EventFetcher:
             List of events (dicts with timestamp, duration, data)
         """
         if self.aw:
+            if self._cache_range is not None:
+                cache_start, cache_end = self._cache_range
+                if bucket_id not in self._events_cache:
+                    # Fetch the full cache range once and store
+                    logger.debug(
+                        "Cache miss for bucket %s, fetching [%s, %s]",
+                        bucket_id,
+                        cache_start,
+                        cache_end,
+                    )
+                    self._events_cache[bucket_id] = self.aw.get_events(
+                        bucket_id, start=cache_start, end=cache_end
+                    )
+                return self._filter_events_in_range(self._events_cache[bucket_id], start, end)
             return self.aw.get_events(bucket_id, start=start, end=end)
         else:
             # Test data path
             return self._get_events_from_test_data(bucket_id, start, end)
+
+    def _filter_events_in_range(
+        self, events: list, start: datetime | None, end: datetime | None
+    ) -> list:
+        """Filter cached events to those overlapping [start, end].
+
+        Matches the semantics of _get_events_from_test_data(): includes events where
+        event_end >= start AND event_start <= end (i.e. any overlap with the window).
+        """
+        from .utils import normalize_duration, normalize_timestamp
+
+        result = []
+        for event in events:
+            event_start = normalize_timestamp(event["timestamp"])
+            event_end = event_start + normalize_duration(event["duration"])
+            if start and event_end < start:
+                continue
+            if end and event_start > end:
+                continue
+            result.append(event)
+        return result
 
     def _get_events_from_test_data(
         self, bucket_id: str, start: datetime | None, end: datetime | None

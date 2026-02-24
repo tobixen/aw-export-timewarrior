@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fix tmux event matching for 0-second window events that occur just before tmux activity begins (fallback now looks forward as well as backward)
 
+### Performance
+- Batch processing commands (`diff`, `report`, `analyze`, `sync --once`) now cache ActivityWatch events per bucket for the full requested time range. This reduces HTTP requests to ActivityWatch from O(N events) to O(number of buckets), dramatically speeding up processing of historical time ranges (e.g. a 3-hour `diff` that previously took ~12 s now completes in under 1 s).
+
 ## [0.6.5] - 2026-01-27
 
 ### Fixed

@@ -705,5 +705,189 @@ class TestAfkPromptBucketDetection:
         assert fetcher.get_ask_away_bucket() == "aw-watcher-afk-prompt_test"
 
 
+class TestEventCache:
+    """Tests for event caching in batch processing mode."""
+
+    def _make_fetcher_with_aw(
+        self,
+        events: list,
+        cache_range: tuple[datetime, datetime] | None = None,
+    ) -> tuple["EventFetcher", Mock]:
+        """Create an EventFetcher backed by a mock AW client."""
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = events
+            mock_aw_class.return_value = mock_client
+            fetcher = EventFetcher(cache_range=cache_range)
+            # Store the mock so callers can inspect it
+            fetcher._mock_aw = mock_client
+            return fetcher, mock_client
+
+    def test_no_cache_by_default(self) -> None:
+        """Without cache_range, every get_events call goes to AW."""
+        base = datetime(2026, 2, 9, 11, 0, 0, tzinfo=UTC)
+        event = {"timestamp": base, "duration": timedelta(seconds=60), "data": {}}
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = [event]
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher()
+
+            start = base
+            end = base + timedelta(hours=3)
+            fetcher.get_events("bucket-a", start=start, end=end)
+            fetcher.get_events("bucket-a", start=start, end=end)
+
+            # Both calls should hit AW (no caching)
+            assert mock_client.get_events.call_count == 2
+
+    def test_cache_enabled_fetches_once_per_bucket(self) -> None:
+        """With cache_range, each bucket is fetched from AW exactly once."""
+        base = datetime(2026, 2, 9, 11, 0, 0, tzinfo=UTC)
+        cache_start = base
+        cache_end = base + timedelta(hours=3)
+        event = {
+            "timestamp": base + timedelta(minutes=30),
+            "duration": timedelta(seconds=60),
+            "data": {},
+        }
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = [event]
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher(cache_range=(cache_start, cache_end))
+
+            # First call fetches from AW and caches
+            fetcher.get_events("bucket-a", start=cache_start, end=cache_end)
+            assert mock_client.get_events.call_count == 1
+
+            # Second call with same range is served from cache
+            fetcher.get_events("bucket-a", start=cache_start, end=cache_end)
+            assert mock_client.get_events.call_count == 1
+
+            # Third call with a sub-range is also served from cache
+            fetcher.get_events("bucket-a", start=base + timedelta(hours=1), end=cache_end)
+            assert mock_client.get_events.call_count == 1
+
+    def test_cache_fetches_full_range_not_sub_range(self) -> None:
+        """The first fetch uses the full cache_range, not the requested sub-range."""
+        base = datetime(2026, 2, 9, 11, 0, 0, tzinfo=UTC)
+        cache_start = base
+        cache_end = base + timedelta(hours=3)
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = []
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher(cache_range=(cache_start, cache_end))
+
+            # Request only middle 1 hour
+            fetcher.get_events(
+                "bucket-a", start=base + timedelta(hours=1), end=base + timedelta(hours=2)
+            )
+
+            # AW should have been called with the FULL cache range
+            mock_client.get_events.assert_called_once_with(
+                "bucket-a", start=cache_start, end=cache_end
+            )
+
+    def test_cache_filters_events_by_requested_range(self) -> None:
+        """Cached events are correctly filtered by the requested time range."""
+        base = datetime(2026, 2, 9, 11, 0, 0, tzinfo=UTC)
+        cache_start = base
+        cache_end = base + timedelta(hours=3)
+
+        events = [
+            {
+                "timestamp": base + timedelta(minutes=10),
+                "duration": timedelta(seconds=60),
+                "data": {"n": 1},
+            },
+            {
+                "timestamp": base + timedelta(minutes=90),
+                "duration": timedelta(seconds=60),
+                "data": {"n": 2},
+            },
+            {
+                "timestamp": base + timedelta(minutes=150),
+                "duration": timedelta(seconds=60),
+                "data": {"n": 3},
+            },
+        ]
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = events
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher(cache_range=(cache_start, cache_end))
+
+            # Request only the middle portion
+            result = fetcher.get_events(
+                "bucket-a",
+                start=base + timedelta(minutes=60),
+                end=base + timedelta(minutes=120),
+            )
+
+            assert len(result) == 1
+            assert result[0]["data"]["n"] == 2
+
+    def test_cache_each_bucket_fetched_independently(self) -> None:
+        """Each bucket has its own cache entry; different buckets are fetched independently."""
+        base = datetime(2026, 2, 9, 11, 0, 0, tzinfo=UTC)
+        cache_start = base
+        cache_end = base + timedelta(hours=3)
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = []
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher(cache_range=(cache_start, cache_end))
+
+            fetcher.get_events("bucket-a", start=cache_start, end=cache_end)
+            fetcher.get_events("bucket-b", start=cache_start, end=cache_end)
+            fetcher.get_events("bucket-a", start=cache_start, end=cache_end)  # cached
+            fetcher.get_events("bucket-b", start=cache_start, end=cache_end)  # cached
+
+            # Each bucket fetched once from AW
+            assert mock_client.get_events.call_count == 2
+
+    def test_cache_disabled_for_test_data(self) -> None:
+        """Test data path is unaffected by cache_range (always reads from test_data dict)."""
+        base = datetime(2026, 2, 9, 11, 0, 0, tzinfo=UTC)
+        cache_start = base
+        cache_end = base + timedelta(hours=3)
+
+        test_data = {
+            "buckets": {
+                "aw-watcher-window_test": create_test_bucket(
+                    "aw-watcher-window_test", "aw-watcher-window"
+                )
+            },
+            "events": {
+                "aw-watcher-window_test": [
+                    create_test_event(base + timedelta(minutes=30), 60, {"title": "Test"})
+                ]
+            },
+        }
+
+        # cache_range should have no negative effect on test data path
+        fetcher = EventFetcher(test_data=test_data, cache_range=(cache_start, cache_end))
+        events = fetcher.get_events("aw-watcher-window_test")
+        assert len(events) == 1
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
