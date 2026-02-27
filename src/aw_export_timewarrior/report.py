@@ -268,6 +268,31 @@ def show_unmatched_events_report(
     print("\n" + "=" * 80 + "\n")
 
 
+def filter_by_min_duration(
+    data: list[dict[str, Any]],
+    min_duration_seconds: float | None,
+) -> list[dict[str, Any]]:
+    """Filter out events shorter than min_duration_seconds.
+
+    Non-event rows (export markers) are always kept regardless of duration.
+
+    Args:
+        data: List of report data rows (events and optional export markers)
+        min_duration_seconds: Minimum duration in seconds; None means no filtering
+
+    Returns:
+        Filtered list (same object if no filtering applied)
+    """
+    if min_duration_seconds is None:
+        return data
+    return [
+        row
+        for row in data
+        if row.get("row_type", "event") != "event"
+        or row["duration"].total_seconds() >= min_duration_seconds
+    ]
+
+
 def truncate_string(s: str, max_length: int = 50) -> str:
     """Truncate a string to max_length, adding ellipsis if needed."""
     if len(s) <= max_length:
@@ -903,6 +928,7 @@ def generate_activity_report(
     truncate: bool = True,
     show_rule: bool = False,
     show_exports: bool = False,
+    min_duration_seconds: float | None = None,
 ) -> None:
     """Generate and display an activity report.
 
@@ -913,6 +939,7 @@ def generate_activity_report(
         truncate: Whether to truncate long values (table mode only)
         show_rule: Whether to show which rule matched each event
         show_exports: Whether to show export decisions interleaved with events
+        min_duration_seconds: If set, filter out events shorter than this many seconds
     """
     # Include rule data if explicitly requested OR if showing all columns
     include_rule = show_rule or all_columns
@@ -921,6 +948,9 @@ def generate_activity_report(
     data = collect_report_data(
         exporter, exporter.start_time, exporter.end_time, include_rule=include_rule
     )
+
+    # Apply minimum duration filter before interleaving exports
+    data = filter_by_min_duration(data, min_duration_seconds)
 
     # If showing exports, run the exporter to track export decisions
     exports = []

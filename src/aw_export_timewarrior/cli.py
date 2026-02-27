@@ -370,6 +370,12 @@ Examples:
         action="store_true",
         help="Show export decisions interleaved with events (colored in terminal)",
     )
+    report_parser.add_argument(
+        "--min-duration",
+        type=float,
+        metavar="SECONDS",
+        help="Exclude events shorter than SECONDS (e.g. 2 to hide sub-2-second window flickers)",
+    )
 
     # ===== VALIDATE subcommand =====
     subparsers.add_parser(
@@ -682,6 +688,7 @@ def run_report(args: argparse.Namespace) -> int:
         truncate=not args.no_truncate,
         show_rule=args.show_rule,
         show_exports=args.show_exports,
+        min_duration_seconds=args.min_duration,
     )
 
     return 0

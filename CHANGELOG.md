@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `report --min-duration SECONDS`: filter out events shorter than the given duration (e.g. `--min-duration 2` hides sub-2-second window flickers)
+
 ### Fixed
 - Fix tmux event matching for 0-second window events that occur just before tmux activity begins (fallback now looks forward as well as backward)
 

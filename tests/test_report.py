@@ -1,6 +1,6 @@
 """Tests for the report generation functionality."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -8,6 +8,7 @@ from src.aw_export_timewarrior.main import Exporter
 from src.aw_export_timewarrior.report import (
     collect_report_data,
     extract_specialized_data,
+    filter_by_min_duration,
     format_duration,
     truncate_string,
 )
@@ -136,3 +137,57 @@ def test_report_includes_tags(exporter_with_report_data: Exporter) -> None:
     for row in data:
         assert isinstance(row["tags"], set)
         assert len(row["tags"]) > 0
+
+
+class TestFilterByMinDuration:
+    """Tests for filter_by_min_duration helper."""
+
+    def _make_row(self, seconds: float) -> dict:
+        return {
+            "timestamp": datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
+            "duration": timedelta(seconds=seconds),
+            "window_title": "Test",
+            "app": "test",
+            "specialized_type": None,
+            "specialized_data": "",
+            "afk_status": "not-afk",
+            "tags": {"test"},
+        }
+
+    def test_no_filter_returns_all(self) -> None:
+        data = [self._make_row(1), self._make_row(5), self._make_row(0.5)]
+        result = filter_by_min_duration(data, min_duration_seconds=None)
+        assert result is data  # No copy when no filter
+
+    def test_filters_short_events(self) -> None:
+        data = [self._make_row(1), self._make_row(5), self._make_row(0.5)]
+        result = filter_by_min_duration(data, min_duration_seconds=2.0)
+        assert len(result) == 1
+        assert result[0]["duration"].total_seconds() == 5
+
+    def test_boundary_inclusive(self) -> None:
+        """Events exactly at the boundary should be included (>=)."""
+        data = [self._make_row(2.0), self._make_row(1.999)]
+        result = filter_by_min_duration(data, min_duration_seconds=2.0)
+        assert len(result) == 1
+        assert result[0]["duration"].total_seconds() == pytest.approx(2.0)
+
+    def test_zero_min_duration_passes_all(self) -> None:
+        data = [self._make_row(0.001), self._make_row(5)]
+        result = filter_by_min_duration(data, min_duration_seconds=0.0)
+        assert len(result) == 2
+
+    def test_export_rows_unaffected(self) -> None:
+        """Export marker rows (row_type != 'event') should not be filtered."""
+        export_row = {
+            "timestamp": datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
+            "duration": timedelta(seconds=0.5),
+            "tags": {"test"},
+            "row_type": "export_start",
+        }
+        short_event = self._make_row(0.5)
+        data = [export_row, short_event]
+        result = filter_by_min_duration(data, min_duration_seconds=2.0)
+        # Export row should remain; short event row should be filtered
+        assert len(result) == 1
+        assert result[0]["row_type"] == "export_start"
