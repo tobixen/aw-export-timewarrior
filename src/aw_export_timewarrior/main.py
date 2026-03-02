@@ -1466,6 +1466,30 @@ class Exporter:
             if self._should_skip_event(event):
                 continue
 
+            # In batch/diff mode the pipeline returns events that overlap with
+            # last_tick — including window events that STARTED before
+            # last_known_tick but end after it (e.g. when the AFK heartbeat
+            # that was used to split them is too short to pass the
+            # max_mixed_interval filter on the next pipeline call).
+            # Clip such events so every downstream calculation (known_events_time,
+            # tag accumulation, long-event export, export `since` timestamp) only
+            # counts the portion that falls within the current tracking interval.
+            if (
+                "status" not in event["data"]  # window events only, not AFK
+                and self.state.last_known_tick is not None
+                and event["timestamp"] < self.state.last_known_tick
+            ):
+                clipped_end = event["timestamp"] + event["duration"]
+                if clipped_end <= self.state.last_known_tick:
+                    # Entirely before last_known_tick — nothing new to process
+                    continue
+                event = {
+                    **event,
+                    "timestamp": self.state.last_known_tick,
+                    "duration": clipped_end - self.state.last_known_tick,
+                }
+                event_end = clipped_end  # already computed above
+
             tag_result = self.find_tags_from_event(event)
 
             ## Handling afk/not-afk
