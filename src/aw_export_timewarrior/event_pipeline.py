@@ -160,6 +160,13 @@ class EventPipeline:
         # Sort by timestamp
         afk_window_events.sort(key=lambda e: normalize_timestamp(e["timestamp"]))
 
+        # Extend AFK events back to ask-away start before splitting, so that
+        # window heartbeats during the idle-timeout countdown are removed correctly.
+        if self._ask_away_events:
+            merged_afk_events = self._extend_afk_events_to_ask_away_start(
+                merged_afk_events, self._ask_away_events
+            )
+
         # Split window events that overlap with AFK periods
         afk_window_events = self._split_window_events_by_afk(afk_window_events, merged_afk_events)
 
@@ -450,6 +457,53 @@ class EventPipeline:
 
             if not conflicting:
                 result.append(afk_event)
+
+        return result
+
+    def _extend_afk_events_to_ask_away_start(
+        self, afk_events: list[dict], ask_away_events: list[dict]
+    ) -> list[dict]:
+        """Extend AFK events backwards to the start of the matching ask-away event.
+
+        During the idle-timeout countdown (~2 min) the window watcher keeps
+        sending heartbeats while the user is already effectively AFK.  The AFK
+        bucket event only starts when the idle protocol fires, but ask-away
+        records the gap from the last not-afk heartbeat — i.e. 2 minutes
+        earlier.
+
+        By extending each AFK event back to the corresponding ask-away start,
+        ``_split_window_events_by_afk`` will naturally remove the window events
+        that fell in the countdown window, giving ask-away events correct
+        precedence.
+
+        Only "afk"-status events are extended; "not-afk" events are untouched.
+        An AFK event is matched to an ask-away event when the ask-away start is
+        strictly before the AFK event start AND the two intervals overlap.
+        """
+        if not ask_away_events:
+            return afk_events
+
+        result = list(afk_events)
+        for ask_event in ask_away_events:
+            ask_start = normalize_timestamp(ask_event["timestamp"])
+            ask_end = ask_start + normalize_duration(ask_event["duration"])
+
+            for i, afk_event in enumerate(result):
+                if afk_event["data"].get("status") != "afk":
+                    continue
+
+                afk_start = normalize_timestamp(afk_event["timestamp"])
+                afk_end = afk_start + normalize_duration(afk_event["duration"])
+
+                # ask-away must start before the AFK event and the two must overlap
+                if ask_start < afk_start and afk_end > ask_start:
+                    new_duration = afk_end - ask_start
+                    result[i] = {**afk_event, "timestamp": ask_start, "duration": new_duration}
+                    logger.debug(
+                        f"Extended AFK event from {afk_start} back to {ask_start} "
+                        f"(ask-away: {ask_start}–{ask_end})"
+                    )
+                    break  # one ask-away event matches at most one AFK event
 
         return result
 
