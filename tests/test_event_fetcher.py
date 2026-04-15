@@ -889,5 +889,95 @@ class TestEventCache:
         assert len(events) == 1
 
 
+class TestResetCache:
+    """Tests for reset_cache method (rolling cache support for sync mode)."""
+
+    def test_reset_cache_clears_entries_and_disables_range(self) -> None:
+        """reset_cache() with no args clears cached data and sets _cache_range to None."""
+        base = datetime(2026, 4, 15, 10, 0, 0, tzinfo=UTC)
+        cache_range = (base, base + timedelta(hours=3))
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = []
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher(cache_range=cache_range)
+            fetcher.get_events("bucket-a")  # populate cache
+            assert "bucket-a" in fetcher._events_cache
+            assert fetcher._cache_range is not None
+
+            fetcher.reset_cache()
+
+            assert fetcher._cache_range is None
+            assert fetcher._events_cache == {}
+
+    def test_reset_cache_with_new_range_sets_range(self) -> None:
+        """reset_cache(new_range) clears cached data and activates the new window."""
+        base = datetime(2026, 4, 15, 10, 0, 0, tzinfo=UTC)
+        old_range = (base, base + timedelta(hours=1))
+        new_range = (base + timedelta(hours=1), base + timedelta(hours=2))
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = []
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher(cache_range=old_range)
+            fetcher.get_events("bucket-a")  # populate cache
+
+            fetcher.reset_cache(new_range=new_range)
+
+            assert fetcher._cache_range == new_range
+            assert fetcher._events_cache == {}
+
+    def test_reset_cache_causes_refetch(self) -> None:
+        """After reset_cache(new_range), the next get_events hits AW again."""
+        base = datetime(2026, 4, 15, 10, 0, 0, tzinfo=UTC)
+        cache_range = (base, base + timedelta(hours=3))
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = []
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher(cache_range=cache_range)
+            fetcher.get_events("bucket-a")  # cache miss → fetch #1
+            assert mock_client.get_events.call_count == 1
+
+            fetcher.get_events("bucket-a")  # cache hit → no new fetch
+            assert mock_client.get_events.call_count == 1
+
+            new_range = (base + timedelta(hours=3), base + timedelta(hours=6))
+            fetcher.reset_cache(new_range=new_range)
+
+            fetcher.get_events("bucket-a")  # cache miss after reset → fetch #2
+            assert mock_client.get_events.call_count == 2
+
+    def test_reset_cache_no_range_causes_direct_fetches(self) -> None:
+        """After reset_cache() with no range, get_events bypasses cache entirely."""
+        base = datetime(2026, 4, 15, 10, 0, 0, tzinfo=UTC)
+        cache_range = (base, base + timedelta(hours=3))
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = []
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher(cache_range=cache_range)
+            fetcher.get_events("bucket-a")  # fetch #1 (with cache)
+            assert mock_client.get_events.call_count == 1
+
+            fetcher.reset_cache()  # disable cache
+
+            fetcher.get_events("bucket-a")  # fetch #2 (no cache)
+            fetcher.get_events("bucket-a")  # fetch #3 (no cache)
+            assert mock_client.get_events.call_count == 3
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

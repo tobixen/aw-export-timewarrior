@@ -1698,6 +1698,26 @@ class Exporter:
             self.state.last_known_tick = self.state.last_tick
             self.state.last_start_time = self.state.last_tick
 
+        # In sync mode (no end_time, not test data), enable a rolling event cache
+        # to avoid O(N²) fetching.  Without caching, every tick re-fetches all
+        # events from last_tick to "now" for every bucket; as last_tick advances
+        # the total data fetched grows quadratically with the number of events.
+        #
+        # Strategy: set the cache once at the start of each "burst" (first tick
+        # after sleep or after init) covering [last_tick - buffer, now + margin].
+        # The cache is reused for all ticks within the burst, then cleared after
+        # the sleep so the next burst gets fresh data.
+        #
+        # _cache_range being None serves as the "needs refresh" sentinel: it is
+        # None initially and is reset to None again after each sleep cycle.
+        if not self.end_time and not self.test_data and self.event_fetcher._cache_range is None:
+            _cache_buffer = timedelta(minutes=11)  # covers fallback_to_recent (10 min) + margin
+            _cache_margin = timedelta(seconds=16)
+            _cache_start = (self.state.last_tick or datetime.now(UTC)) - _cache_buffer
+            self.event_fetcher.reset_cache(
+                new_range=(_cache_start, datetime.now(UTC) + _cache_margin)
+            )
+
         # If process_all is True, keep finding activity until there's none left
         if process_all:
             iterations = 0
@@ -1756,6 +1776,9 @@ class Exporter:
                         attrs=["dark"],
                     )
                     sleep(self.sleep_interval)
+                # Invalidate rolling cache so the next burst re-fetches fresh data
+                if not self.end_time and not self.test_data:
+                    self.event_fetcher.reset_cache()
 
             return True
 

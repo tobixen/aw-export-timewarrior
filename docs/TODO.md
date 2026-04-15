@@ -1,5 +1,44 @@
 # TODO - aw-export-timewarrior
 
+## High priority
+
+### ~~Fix O(N²) event fetching in continuous sync mode (major CPU hog on aw-server)~~
+
+**Root cause:** In continuous `sync` mode (`end_time` is None), the `aw_cache_range` in
+`main.py` is never set (see line 208: `if self.start_time and self.end_time`). Without a
+cache range, `EventFetcher.get_events()` goes directly to the AW HTTP API on **every tick**.
+
+The event pipeline fetches ALL events from `last_tick` to "now" for every bucket on every
+tick. As `last_tick` advances through hours of history, each tick re-fetches a slightly
+shorter tail of the same data — classic O(N²) behaviour for N events processed.
+
+**Observed impact (2026-04-15):** aw-server-rust DB worker was consuming ~20% CPU
+continuously, driven entirely by `GetEvents` requests from aw-export-timewarrior:
+- ~2 requests/second cycling through all 11 buckets
+- Window bucket (5000+ events/day) took 140–175 ms per fetch (full JSON scan)
+- AFk/small buckets took 7–30 ms per fetch
+- Total: ~200 ms of DB worker CPU per second = 20% baseline CPU load
+
+**Fix options:**
+1. **Preferred:** Enable the existing `_events_cache` for sync mode by setting a rolling
+   cache window, e.g. cache events for `[last_tick - buffer, now + margin]` and invalidate
+   after each sleep cycle. This matches what batch mode already does.
+2. **Alternative:** After fetching events for a tick, advance `last_tick` and only fetch
+   *new* events (delta fetch) rather than re-fetching from `last_tick` each time.
+3. **Workaround (server-side):** The aw-server could add read-only query concurrency so
+   GetEvents doesn't block heartbeat processing, but this doesn't fix the O(N²) fetching.
+
+**Relevant code:**
+- `main.py` lines 207–218: cache_range only set when `end_time` is known
+- `aw_client.py` line 128–142: `get_events()` bypasses cache when `_cache_range` is None
+- `event_pipeline.py` lines 94, 117, 138, 150: all fetch with `start=self.last_tick, end=self.end_time`
+
+**Fixed (2026-04-15):** Added `EventFetcher.reset_cache(new_range)` and a rolling cache in
+`tick()`: cache window `[last_tick - 11min, now + 16s]` is set at the start of each burst
+(first tick after sleep) and cleared after each sleep cycle via `reset_cache()`.  This
+reuses the existing `_events_cache` / `_filter_events_in_range` machinery already used by
+batch mode.  Option 1 was implemented.
+
 ## Medium priority
 
 ### Think more about the config file

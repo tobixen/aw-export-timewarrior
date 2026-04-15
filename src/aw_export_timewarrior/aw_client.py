@@ -85,6 +85,21 @@ class EventFetcher:
 
         self._init_bucket_mappings()
 
+    def reset_cache(self, new_range: tuple[datetime, datetime] | None = None) -> None:
+        """Clear the event cache and optionally set a new cache range.
+
+        Use this to invalidate cached data (e.g. after a sleep cycle in rolling
+        sync mode) and optionally activate a fresh cache window.  After calling
+        with ``new_range=None`` the fetcher behaves as if ``cache_range`` was
+        never supplied: every ``get_events()`` call goes directly to AW.
+
+        Args:
+            new_range: Optional new (start, end) cache window.  If None, caching
+                is disabled until ``reset_cache`` is called again with a range.
+        """
+        self._events_cache.clear()
+        self._cache_range = new_range
+
     def _init_bucket_mappings(self) -> None:
         """Create lookup structures for bucket access."""
         self.bucket_by_client: dict[str, list[str]] = defaultdict(list)

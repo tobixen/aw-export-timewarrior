@@ -26,3 +26,17 @@ repos:
       - id: check-toml
       - id: mixed-line-ending
         args: ['--fix=lf']
+
+  # AI prompt auto-commit: records prompts used during development and appends
+  # them to commit messages automatically (via Claude Code UserPromptSubmit hook).
+  # Run once manually to set up: pre-commit run --hook-stage manual prepare-ai-repository
+  - repo: https://github.com/pycalendar/ai-prompt-auto-commit
+    rev: v0.0.5
+    hooks:
+      - id: unstage-ai-prompts
+      - id: append-ai-prompts
+        stages: [prepare-commit-msg]
+      - id: archive-ai-prompts
+        stages: [post-commit]
+      - id: prepare-ai-repository
+        stages: [manual]

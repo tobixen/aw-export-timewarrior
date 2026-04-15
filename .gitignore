@@ -148,3 +148,9 @@ cython_debug/
 
 # Local configuration
 config.local.toml
+
+# Claude Code local settings (user-specific, not for sharing)
+.claude/settings.local.json
+
+# AI prompt recording (runtime data, not for the repo)
+.prompts/
