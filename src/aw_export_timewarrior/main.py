@@ -1703,14 +1703,15 @@ class Exporter:
         # events from last_tick to "now" for every bucket; as last_tick advances
         # the total data fetched grows quadratically with the number of events.
         #
-        # Strategy: set the cache once at the start of each "burst" (first tick
-        # after sleep or after init) covering [last_tick - buffer, now + margin].
-        # The cache is reused for all ticks within the burst, then cleared after
-        # the sleep so the next burst gets fresh data.
-        #
-        # _cache_range being None serves as the "needs refresh" sentinel: it is
-        # None initially and is reset to None again after each sleep cycle.
-        if not self.end_time and not self.test_data and self.event_fetcher._cache_range is None:
+        # Rebuild the cache on every tick so the data is always fresh.  Within a
+        # single tick, all get_events() calls (including get_corresponding_event
+        # for browser/editor/tmux) are served from the in-memory cache, giving
+        # the O(buckets) per-tick cost instead of O(events).  Rebuilding once per
+        # tick (rather than once per burst) avoids the staleness problem: without
+        # a per-tick rebuild the cache could become arbitrarily stale when an
+        # ongoing AFK event keeps find_next_activity() returning True indefinitely,
+        # preventing the sleep-triggered reset from ever firing.
+        if not self.end_time and not self.test_data:
             _cache_buffer = timedelta(minutes=11)  # covers fallback_to_recent (10 min) + margin
             _cache_margin = timedelta(seconds=16)
             _cache_start = (self.state.last_tick or datetime.now(UTC)) - _cache_buffer
