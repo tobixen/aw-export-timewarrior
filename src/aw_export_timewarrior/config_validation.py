@@ -29,6 +29,7 @@ class ConfigValidator:
         "rules",
         "exclusive",
         "app_groups",
+        "lists",
     }
 
     # Known tuning parameters with their types and optional ranges
@@ -89,6 +90,7 @@ class ConfigValidator:
 
         self._validate_top_level(config)
         self._validate_app_groups(config.get("app_groups", {}))
+        self._validate_lists(config.get("lists", {}))
         self._validate_tuning(config.get("tuning", {}))
         self._validate_tags(config.get("tags", {}))
         self._validate_rules(config.get("rules", {}), config.get("app_groups", {}))
@@ -174,6 +176,26 @@ class ConfigValidator:
                 cycle_str = " -> ".join(cycle)
                 self.errors.append(f"Circular reference in app_groups: {cycle_str}")
                 break  # Report only the first cycle found
+
+    def _validate_lists(self, lists: dict) -> None:
+        """Validate [lists] section."""
+        if not isinstance(lists, dict):
+            self.errors.append("'lists' section must be a dictionary")
+            return
+
+        for list_name, list_items in lists.items():
+            prefix = f"lists.{list_name}"
+
+            if not isinstance(list_items, list):
+                self.errors.append(f"{prefix} must be a list of strings")
+                continue
+
+            for i, item in enumerate(list_items):
+                if not isinstance(item, str):
+                    self.errors.append(f"{prefix}[{i}] must be a string, got {type(item).__name__}")
+
+            if len(list_items) == 0:
+                self.warnings.append(f"{prefix} is empty")
 
     def _validate_tuning(self, tuning: dict) -> None:
         """Validate tuning parameters."""

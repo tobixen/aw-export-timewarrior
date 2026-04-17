@@ -10,92 +10,104 @@ from .config_validation import validate_and_warn
 
 logger = logging.getLogger(__name__)
 
+_LIST_FIELDS_IN_TAG_RULES = ["source_tags", "add", "prepend", "remove", "replace"]
 
-class AppGroupExpansionError(Exception):
-    """Raised when app group expansion fails."""
+
+class ListExpansionError(Exception):
+    """Raised when list/group reference expansion fails."""
 
     pass
 
 
-def expand_app_groups(config: dict[str, Any]) -> dict[str, Any]:
-    """Expand @groupname references in app rules.
+# Backward-compat alias
+AppGroupExpansionError = ListExpansionError
 
-    Args:
-        config: The configuration dictionary
 
-    Returns:
-        A new config dict with @references expanded in rules.app.*.app_names
+def expand_list_references(config: dict[str, Any]) -> dict[str, Any]:
+    """Expand @name references in list fields throughout the config.
 
-    Raises:
-        AppGroupExpansionError: If expansion fails (unknown group, circular ref)
+    Resolves names from both [lists] and [app_groups] sections.
+    Expands refs in: tags.*.{source_tags,add,prepend,remove,replace},
+    rules.*.*.{tags,timew_tags}, rules.app.*.app_names, exclusive.*.tags.
     """
-    app_groups = config.get("app_groups", {})
-    if not app_groups:
+    all_lists: dict[str, list[str]] = {
+        **config.get("app_groups", {}),
+        **config.get("lists", {}),
+    }
+    if not all_lists:
         return config
 
-    # Build expanded groups (resolve nested references)
-    expanded_groups = _expand_all_groups(app_groups)
-
-    # Deep copy config to avoid mutating the original
+    expanded_lists = _expand_all_groups(all_lists)
     config = copy.deepcopy(config)
 
-    # Expand references in rules.app.*.app_names
-    rules = config.get("rules", {})
-    app_rules = rules.get("app", {})
-
-    for rule_name, rule in app_rules.items():
-        if "app_names" not in rule:
-            continue
-
-        expanded_app_names = []
-        for item in rule["app_names"]:
+    def expand(lst: list) -> list:
+        result = []
+        for item in lst:
             if isinstance(item, str) and item.startswith("@"):
-                ref_name = item[1:]
-                if ref_name not in expanded_groups:
-                    raise AppGroupExpansionError(
-                        f"rules.app.{rule_name}.app_names references unknown group '@{ref_name}'"
-                    )
-                expanded_app_names.extend(expanded_groups[ref_name])
+                ref = item[1:]
+                if ref not in expanded_lists:
+                    raise ListExpansionError(f"References unknown group/list '@{ref}'")
+                result.extend(expanded_lists[ref])
             else:
-                expanded_app_names.append(item)
+                result.append(item)
+        return result
 
-        rule["app_names"] = expanded_app_names
+    for tag_rule in config.get("tags", {}).values():
+        if not isinstance(tag_rule, dict):
+            continue
+        for field in _LIST_FIELDS_IN_TAG_RULES:
+            if field in tag_rule and isinstance(tag_rule[field], list):
+                tag_rule[field] = expand(tag_rule[field])
+
+    for rule_type, type_rules in config.get("rules", {}).items():
+        if not isinstance(type_rules, dict):
+            continue
+        for rule in type_rules.values():
+            if not isinstance(rule, dict):
+                continue
+            for field in ["tags", "timew_tags"]:
+                if field in rule and isinstance(rule[field], list):
+                    rule[field] = expand(rule[field])
+            if rule_type == "app" and "app_names" in rule and isinstance(rule["app_names"], list):
+                rule["app_names"] = expand(rule["app_names"])
+
+    for group in config.get("exclusive", {}).values():
+        if isinstance(group, dict) and "tags" in group and isinstance(group["tags"], list):
+            group["tags"] = expand(group["tags"])
 
     return config
 
 
-def _expand_all_groups(app_groups: dict[str, list[str]]) -> dict[str, list[str]]:
-    """Expand all groups, resolving nested references.
+def expand_app_groups(config: dict[str, Any]) -> dict[str, Any]:
+    """Expand @groupname references throughout config. Backward-compat wrapper."""
+    return expand_list_references(config)
 
-    Args:
-        app_groups: The app_groups section from config
 
-    Returns:
-        Dict mapping group names to fully expanded lists of app names
+def _expand_all_groups(all_lists: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Expand all lists, resolving nested @references.
 
     Raises:
-        AppGroupExpansionError: If circular reference detected
+        ListExpansionError: If circular reference detected or unknown group
     """
     expanded: dict[str, list[str]] = {}
-    expanding: set[str] = set()  # Track groups currently being expanded
+    expanding: set[str] = set()
 
     def expand_group(name: str) -> list[str]:
         if name in expanded:
             return expanded[name]
 
         if name in expanding:
-            raise AppGroupExpansionError(f"Circular reference in app_groups involving '{name}'")
+            raise ListExpansionError(f"Circular reference in lists involving '{name}'")
 
-        if name not in app_groups:
-            raise AppGroupExpansionError(f"Unknown app_group: '{name}'")
+        if name not in all_lists:
+            raise ListExpansionError(f"Unknown list/group: '{name}'")
 
         expanding.add(name)
 
         result = []
-        for item in app_groups[name]:
+        for item in all_lists[name]:
             if isinstance(item, str) and item.startswith("@"):
-                ref_name = item[1:]
-                result.extend(expand_group(ref_name))
+                result.extend(expand_group(item[1:]))
             else:
                 result.append(item)
 
@@ -103,7 +115,7 @@ def _expand_all_groups(app_groups: dict[str, list[str]]) -> dict[str, list[str]]
         expanded[name] = result
         return result
 
-    for group_name in app_groups:
+    for group_name in all_lists:
         expand_group(group_name)
 
     return expanded
@@ -215,8 +227,8 @@ tags = [ "4break", "4chores", "4work", "4me" ]
 
 config = load_config_toml("aw-export-timewarrior", default_config)
 
-# Expand app_groups and validate default config on module load
-config = expand_app_groups(config)
+# Expand list references and validate on module load
+config = expand_list_references(config)
 validate_and_warn(config)
 
 
@@ -233,8 +245,7 @@ def load_custom_config(config_path, validate: bool = True):
         if config_path.exists():
             with open(config_path, "rb") as f:
                 loaded_config = tomllib.load(f)
-            # Expand app_groups before validation
-            config = expand_app_groups(loaded_config)
+            config = expand_list_references(loaded_config)
             if validate:
                 validate_and_warn(config)
         else:
