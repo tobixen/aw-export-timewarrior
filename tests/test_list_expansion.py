@@ -311,3 +311,200 @@ class TestListsValidation:
         assert AppGroupExpansionError is ListExpansionError or issubclass(
             AppGroupExpansionError, ListExpansionError
         )
+
+
+class TestRegexpExpansion:
+    """Tests for @ref expansion in regexp string fields."""
+
+    def test_ref_in_title_regexp(self) -> None:
+        config = {
+            "lists": {"customers": ["acme", "emca"]},
+            "rules": {
+                "app": {
+                    "cust": {
+                        "app_names": ["foot"],
+                        "title_regexp": "(@customers)",
+                        "tags": ["customer"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["app"]["cust"]["title_regexp"] == "(acme|emca)"
+
+    def test_ref_in_url_regexp(self) -> None:
+        config = {
+            "lists": {"customers": ["acme", "emca"]},
+            "rules": {
+                "browser": {
+                    "cust": {
+                        "url_regexp": "^https://(@customers)\\.com/",
+                        "tags": ["customer"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["browser"]["cust"]["url_regexp"] == "^https://(acme|emca)\\.com/"
+
+    def test_ref_in_path_regexp(self) -> None:
+        config = {
+            "lists": {"customers": ["acme", "emca"]},
+            "rules": {
+                "editor": {
+                    "cust": {
+                        "path_regexp": "^/home/user/(@customers)/",
+                        "tags": ["customer"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["editor"]["cust"]["path_regexp"] == "^/home/user/(acme|emca)/"
+
+    def test_ref_in_project_regexp(self) -> None:
+        config = {
+            "lists": {"customers": ["acme", "emca"]},
+            "rules": {
+                "editor": {
+                    "cust": {
+                        "project_regexp": "@customers",
+                        "tags": ["customer"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["editor"]["cust"]["project_regexp"] == "acme|emca"
+
+    def test_ref_in_tmux_command(self) -> None:
+        config = {
+            "lists": {"tools": ["vim", "nvim"]},
+            "rules": {
+                "tmux": {
+                    "editors": {
+                        "command": "(@tools)",
+                        "tags": ["editing"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["tmux"]["editors"]["command"] == "(vim|nvim)"
+
+    def test_ref_in_tmux_path(self) -> None:
+        config = {
+            "lists": {"customers": ["acme", "emca"]},
+            "rules": {
+                "tmux": {
+                    "cust": {
+                        "path": "/home/user/(@customers)/",
+                        "tags": ["customer"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["tmux"]["cust"]["path"] == "/home/user/(acme|emca)/"
+
+    def test_multiple_refs_in_one_regexp(self) -> None:
+        config = {
+            "lists": {
+                "customers": ["acme", "emca"],
+                "envs": ["prod", "staging"],
+            },
+            "rules": {
+                "browser": {
+                    "cust": {
+                        "url_regexp": "^https://(@customers)-(@envs)\\.com/",
+                        "tags": ["customer"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert (
+            result["rules"]["browser"]["cust"]["url_regexp"]
+            == "^https://(acme|emca)-(prod|staging)\\.com/"
+        )
+
+    def test_bare_ref_without_parens(self) -> None:
+        config = {
+            "lists": {"customers": ["acme", "emca"]},
+            "rules": {
+                "editor": {
+                    "cust": {
+                        "path_regexp": "@customers",
+                        "tags": ["customer"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["editor"]["cust"]["path_regexp"] == "acme|emca"
+
+    def test_unknown_ref_in_regexp_raises_error(self) -> None:
+        config = {
+            "lists": {"customers": ["acme"]},
+            "rules": {
+                "app": {
+                    "cust": {
+                        "app_names": ["foot"],
+                        "title_regexp": "(@nonexistent)",
+                        "tags": ["customer"],
+                    }
+                }
+            },
+        }
+        with pytest.raises(ListExpansionError):
+            expand_list_references(config)
+
+    def test_nested_list_ref_in_regexp(self) -> None:
+        config = {
+            "lists": {
+                "customers": ["acme", "emca"],
+                "all_projects": ["@customers", "oss"],
+            },
+            "rules": {
+                "editor": {
+                    "proj": {
+                        "path_regexp": "(@all_projects)",
+                        "tags": ["project"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["editor"]["proj"]["path_regexp"] == "(acme|emca|oss)"
+
+    def test_list_items_used_as_regexp_fragments(self) -> None:
+        """List items are not escaped — they can be regexp fragments themselves."""
+        config = {
+            "lists": {"patterns": ["foo.*bar", "baz\\d+"]},
+            "rules": {
+                "editor": {
+                    "pat": {
+                        "path_regexp": "(@patterns)",
+                        "tags": ["match"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["editor"]["pat"]["path_regexp"] == "(foo.*bar|baz\\d+)"
+
+    def test_app_groups_usable_in_regexp(self) -> None:
+        config = {
+            "app_groups": {"customers": ["acme", "emca"]},
+            "rules": {
+                "app": {
+                    "cust": {
+                        "app_names": ["foot"],
+                        "title_regexp": "(@customers)",
+                        "tags": ["customer"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["app"]["cust"]["title_regexp"] == "(acme|emca)"

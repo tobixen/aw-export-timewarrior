@@ -1,5 +1,6 @@
 import copy
 import logging
+import re
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,17 @@ from .config_validation import validate_and_warn
 logger = logging.getLogger(__name__)
 
 _LIST_FIELDS_IN_TAG_RULES = ["source_tags", "add", "prepend", "remove", "replace"]
+_REGEXP_FIELDS_IN_RULES = frozenset(
+    [
+        "url_regexp",
+        "title_regexp",
+        "path_regexp",
+        "project_regexp",
+        "file_regexp",
+        "command",
+        "path",
+    ]
+)
 
 
 class ListExpansionError(Exception):
@@ -24,11 +36,14 @@ AppGroupExpansionError = ListExpansionError
 
 
 def expand_list_references(config: dict[str, Any]) -> dict[str, Any]:
-    """Expand @name references in list fields throughout the config.
+    """Expand @name references in list and regexp fields throughout the config.
 
     Resolves names from both [lists] and [app_groups] sections.
-    Expands refs in: tags.*.{source_tags,add,prepend,remove,replace},
-    rules.*.*.{tags,timew_tags}, rules.app.*.app_names, exclusive.*.tags.
+    In list fields (tags.*.{source_tags,add,prepend,remove,replace},
+    rules.*.*.{tags,timew_tags}, rules.app.*.app_names, exclusive.*.tags),
+    @name is replaced by the list items inline.
+    In regexp fields (url_regexp, title_regexp, path_regexp, etc.),
+    @name is replaced by a pipe-joined alternation of the list items.
     """
     all_lists: dict[str, list[str]] = {
         **config.get("app_groups", {}),
@@ -52,6 +67,15 @@ def expand_list_references(config: dict[str, Any]) -> dict[str, Any]:
                 result.append(item)
         return result
 
+    def expand_regexp(pattern: str) -> str:
+        def replace(m: re.Match) -> str:
+            ref = m.group(1)
+            if ref not in expanded_lists:
+                raise ListExpansionError(f"References unknown group/list '@{ref}'")
+            return "|".join(expanded_lists[ref])
+
+        return re.sub(r"@([A-Za-z_]\w*)", replace, pattern)
+
     for tag_rule in config.get("tags", {}).values():
         if not isinstance(tag_rule, dict):
             continue
@@ -70,6 +94,9 @@ def expand_list_references(config: dict[str, Any]) -> dict[str, Any]:
                     rule[field] = expand(rule[field])
             if rule_type == "app" and "app_names" in rule and isinstance(rule["app_names"], list):
                 rule["app_names"] = expand(rule["app_names"])
+            for field in _REGEXP_FIELDS_IN_RULES:
+                if field in rule and isinstance(rule[field], str):
+                    rule[field] = expand_regexp(rule[field])
 
     for group in config.get("exclusive", {}).values():
         if isinstance(group, dict) and "tags" in group and isinstance(group["tags"], list):
