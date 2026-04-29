@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fix tmux event matching for 0-second window events that occur just before tmux activity begins (fallback now looks forward as well as backward)
+- Fix `_extend_afk_events_to_ask_away_start`: an ask-away event that starts *within* an AFK period was incorrectly matched to a later, unrelated AFK event, extending it backwards by hours and causing all window activity between the two AFK periods to be silently discarded
 
 ### Performance
 - Batch processing commands (`diff`, `report`, `analyze`, `sync --once`) now cache ActivityWatch events per bucket for the full requested time range. This reduces HTTP requests to ActivityWatch from O(N events) to O(number of buckets), dramatically speeding up processing of historical time ranges (e.g. a 3-hour `diff` that previously took ~12 s now completes in under 1 s).

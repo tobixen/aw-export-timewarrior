@@ -495,8 +495,12 @@ class EventPipeline:
                 afk_start = normalize_timestamp(afk_event["timestamp"])
                 afk_end = afk_start + normalize_duration(afk_event["duration"])
 
-                # ask-away must start before the AFK event and the two must overlap
-                if ask_start < afk_start and afk_end > ask_start:
+                # ask-away must start before the AFK event AND actually overlap
+                # with it (ask_end > afk_start, standard half-open interval
+                # overlap).  Without the third condition a far-future AFK event
+                # satisfies ask_start < afk_start trivially and gets extended
+                # backwards by hours, swallowing all window events in between.
+                if ask_start < afk_start and afk_end > ask_start and ask_end > afk_start:
                     new_duration = afk_end - ask_start
                     result[i] = {**afk_event, "timestamp": ask_start, "duration": new_duration}
                     logger.debug(
