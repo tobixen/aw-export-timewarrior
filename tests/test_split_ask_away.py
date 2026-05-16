@@ -1,6 +1,6 @@
 """Integration tests for split ask-away event handling."""
 
-from datetime import timedelta
+from datetime import UTC, timedelta
 
 from aw_export_timewarrior.main import Exporter
 from tests.conftest import FixtureDataBuilder
@@ -285,3 +285,59 @@ def test_empty_split_message_skipped() -> None:
 
     assert first_found, f"Expected 'first' activity: {start_commands}"
     assert third_found, f"Expected 'third' activity: {start_commands}"
+
+
+def test_split_events_after_short_afk_same_tags() -> None:
+    """Regression test: split ask-away events skipped when preceding short AFK leaves
+    timew_info tagged as {afk, ~aw} and the big AFK's final_tags matches.
+
+    The bug: ensure_tag_exported returned early when final_tags == timew_info["tags"],
+    skipping the split-event handling block.  This happens when a short AFK sets
+    timew_info to {afk, ~aw}, a brief not-afk event is too short to create new
+    tracking (so timew_info stays {afk, ~aw}), and then the big AFK with split
+    events arrives with the same plain {afk, ~aw} final_tags.
+    """
+    from datetime import datetime
+
+    t0 = datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+    td = timedelta
+
+    # Work period: t0+0 to t0+300
+    builder = FixtureDataBuilder(start_time=t0)
+    builder.add_window_event("vscode", "work.py", 300)  # t0+0 .. t0+300
+    builder.add_afk_event("not-afk", 300)  # overlaps window
+
+    # Short AFK: t0+300 .. t0+600  (300 s, explicit timestamp)
+    builder.add_afk_event("afk", 300, timestamp=t0 + td(seconds=300))
+
+    # Brief not-afk return: t0+600 .. t0+610 (10 s — too short to produce new tracking)
+    builder.add_window_event("vscode", "brief.py", 10, timestamp=t0 + td(seconds=600))
+    builder.add_afk_event("not-afk", 10, timestamp=t0 + td(seconds=600))
+
+    # Big AFK with split ask-away events: t0+610 .. t0+2410 (1800 s)
+    big_afk_start = t0 + td(seconds=610)
+    builder.add_afk_event("afk", 1800, timestamp=big_afk_start)
+    builder.add_split_ask_away_events(
+        [("dinner", 900), ("dishwash", 900)],
+        timestamp=big_afk_start,
+    )
+
+    # Return to work after big AFK: t0+2410 .. t0+2710
+    builder.add_window_event("vscode", "work.py", 300, timestamp=t0 + td(seconds=2410))
+    builder.add_afk_event("not-afk", 300, timestamp=t0 + td(seconds=2410))
+
+    data = builder.build()
+
+    exporter = Exporter(test_data=data, dry_run=True, enable_assert=False)
+    exporter.tick(process_all=True)
+
+    commands = exporter.get_captured_commands()
+    start_commands = [cmd for cmd in commands if len(cmd) > 1 and cmd[1] == "start"]
+    all_tags_in_commands = [tag for cmd in start_commands for tag in cmd]
+
+    assert "dinner" in all_tags_in_commands, (
+        f"Expected 'dinner' tag from split ask-away in commands: {start_commands}"
+    )
+    assert "dishwash" in all_tags_in_commands, (
+        f"Expected 'dishwash' tag from split ask-away in commands: {start_commands}"
+    )

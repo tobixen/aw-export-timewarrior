@@ -786,7 +786,28 @@ class Exporter:
                 record_export_history=True,
             )
 
-        if self.timew_info is not None and final_tags == self.timew_info["tags"]:
+        # Skip early return if there are overlapping split ask-away events that need
+        # their own intervals — the split handler below must run even when final_tags
+        # happens to equal timew_info["tags"] (e.g. both are {afk, ~aw}).
+        has_overlapping_split_events = False
+        if "afk" in tags and hasattr(self, "_ask_away_events") and self._ask_away_events:
+            ev_start = event["timestamp"]
+            ev_end = ev_start + event["duration"]
+            for _ask in self._ask_away_events:
+                _ask_start = _ask["timestamp"]
+                if (
+                    _ask["data"].get("split")
+                    and _ask_start < ev_end
+                    and _ask_start + _ask["duration"] > ev_start
+                ):
+                    has_overlapping_split_events = True
+                    break
+
+        if (
+            self.timew_info is not None
+            and final_tags == self.timew_info["tags"]
+            and not has_overlapping_split_events
+        ):
             return
 
         # Handle split ask-away events (these need special processing with multiple intervals)
@@ -1513,6 +1534,19 @@ class Exporter:
                 )
 
                 if self.state.is_afk():
+                    # Before returning, check for overlapping split ask-away events.
+                    # The normal ensure_tag_exported path is bypassed when we're already
+                    # in AFK state — we need to handle split events here explicitly.
+                    if hasattr(self, "_ask_away_events") and self._ask_away_events:
+                        ev_start = event["timestamp"]
+                        ev_end = ev_start + event["duration"]
+                        if any(
+                            ask["data"].get("split")
+                            and ask["timestamp"] < ev_end
+                            and ask["timestamp"] + ask["duration"] > ev_start
+                            for ask in self._ask_away_events
+                        ):
+                            self.ensure_tag_exported(tag_result.tags, event)
                     return True
                 continue
 
