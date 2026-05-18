@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `report --min-duration SECONDS`: filter out events shorter than the given duration (e.g. `--min-duration 2` hides sub-2-second window flickers)
 
 ### Fixed
+- Fix double-export of split ask-away events: the outer loop in `find_next_activity()` was calling `ensure_tag_exported` a second time for ACTIVE→AFK transitions where split ask-away events overlapped, even though `check_and_handle_afk_state_change` had already called it. This caused duplicate `timew start` commands and reset `last_known_tick` to the AFK start time, causing subsequent work events to be incorrectly tagged as UNKNOWN.
 - Fix tmux event matching for 0-second window events that occur just before tmux activity begins (fallback now looks forward as well as backward)
 - Fix `_extend_afk_events_to_ask_away_start`: an ask-away event that starts *within* an AFK period was incorrectly matched to a later, unrelated AFK event, extending it backwards by hours and causing all window activity between the two AFK periods to be silently discarded
 

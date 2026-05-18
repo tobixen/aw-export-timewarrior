@@ -1,9 +1,110 @@
 """Integration tests for split ask-away event handling."""
 
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 
 from aw_export_timewarrior.main import Exporter
 from tests.conftest import FixtureDataBuilder
+
+
+def test_split_events_not_duplicated_in_captured_commands() -> None:
+    """Regression test (dcdce6e): split ask-away events are double-exported.
+
+    Bug: the outer loop in find_next_activity() calls ensure_tag_exported a SECOND
+    time when an AFK event enters AFK state AND split events overlap — even though
+    ensure_tag_exported was already called inside check_and_handle_afk_state_change.
+    This causes duplicate timew start commands for the split intervals, and resets
+    last_known_tick to the morning AFK start so subsequent work events may be
+    incorrectly tagged as UNKNOWN.
+
+    Verify each split activity appears exactly once in the exported commands.
+    """
+    t0 = datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+    td = timedelta
+
+    builder = FixtureDataBuilder(start_time=t0)
+    builder.add_window_event("vscode", "work.py", 300)
+    builder.add_afk_event("not-afk", 300)
+
+    # AFK with split events: t0+300 .. t0+900
+    afk_start = t0 + td(seconds=300)
+    builder.add_afk_event("afk", 600, timestamp=afk_start)
+    builder.add_split_ask_away_events([("epoxy", 300), ("tea", 300)], timestamp=afk_start)
+
+    # Return to work: t0+900 .. t0+1500
+    builder.add_window_event("vscode", "work.py", 600, timestamp=t0 + td(seconds=900))
+    builder.add_afk_event("not-afk", 600, timestamp=t0 + td(seconds=900))
+
+    data = builder.build()
+
+    exporter = Exporter(test_data=data, dry_run=True, enable_assert=False)
+    exporter.tick(process_all=True)
+
+    commands = exporter.get_captured_commands()
+    start_commands = [cmd for cmd in commands if len(cmd) > 1 and cmd[1] == "start"]
+    all_tags = [tag for cmd in start_commands for tag in cmd]
+
+    epoxy_count = all_tags.count("epoxy")
+    tea_count = all_tags.count("tea")
+    assert epoxy_count == 1, f"Expected 'epoxy' exactly once, got {epoxy_count}: {start_commands}"
+    assert tea_count == 1, f"Expected 'tea' exactly once, got {tea_count}: {start_commands}"
+
+
+def test_non_split_ask_away_exported_when_afk2_extended_past_gap() -> None:
+    """Regression test (dcdce6e): non-split ask-away activity is silently dropped when
+    _extend_afk_events_to_ask_away_start extends AFK2 backwards past a >5-min gap,
+    causing AFK2 to be processed via the 'already AFK' path without calling
+    ensure_tag_exported.
+
+    The outer loop only calls ensure_tag_exported when SPLIT events overlap; for
+    non-split events it is never called in the 'already AFK' branch.
+
+    Scenario:
+      work → AFK1 (short, no ask-away) → [>5 min gap] → AFK2 (with non-split "ror"
+      ask-away that starts in the gap) → work.
+
+    _extend_afk_events_to_ask_away_start extends AFK2 backwards to the ask-away start,
+    creating a gap of >300 s from AFK1 so the two AFKs are NOT merged by
+    _merge_consecutive_afk_events.  In the next pipeline call (still in AFK state from
+    AFK1), the extended AFK2 arrives and the 'already AFK' handler skips 'ror'.
+    """
+    t0 = datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+    td = timedelta
+
+    builder = FixtureDataBuilder(start_time=t0)
+    builder.add_window_event("vscode", "work.py", 300)
+    builder.add_afk_event("not-afk", 300)
+
+    # AFK1: t0+300 .. t0+600  (no ask-away overlapping)
+    afk1_start = t0 + td(seconds=300)
+    builder.add_afk_event("afk", 300, timestamp=afk1_start)
+
+    # Ask-away "ror" starts at t0+910, inside the gap between AFK1 and AFK2.
+    # _extend_afk_events_to_ask_away_start will extend AFK2 backwards to t0+910.
+    # Gap from AFK1.end (t0+600) to AFK2-extended.start (t0+910) = 310s > 300s (5 min)
+    # → the two AFK events are NOT merged by _merge_consecutive_afk_events.
+    ask_away_start = t0 + td(seconds=910)
+    builder.add_ask_away_event("ror", 300, timestamp=ask_away_start)
+
+    # AFK2: t0+1200 .. t0+1500  (original start; extended back to t0+910 by pipeline)
+    afk2_start = t0 + td(seconds=1200)
+    builder.add_afk_event("afk", 300, timestamp=afk2_start)
+
+    # Return to work after AFK2: t0+1500 .. t0+1800
+    builder.add_window_event("vscode", "work.py", 300, timestamp=t0 + td(seconds=1500))
+    builder.add_afk_event("not-afk", 300, timestamp=t0 + td(seconds=1500))
+
+    data = builder.build()
+
+    exporter = Exporter(test_data=data, dry_run=True, enable_assert=False)
+    exporter.tick(process_all=True)
+
+    commands = exporter.get_captured_commands()
+    start_commands = [cmd for cmd in commands if len(cmd) > 1 and cmd[1] == "start"]
+    all_tags = [tag for cmd in start_commands for tag in cmd]
+
+    assert "ror" in all_tags, (
+        f"Expected 'ror' tag from non-split ask-away in commands: {start_commands}"
+    )
 
 
 def test_split_events_exported_in_order() -> None:

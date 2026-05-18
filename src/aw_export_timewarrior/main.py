@@ -1514,6 +1514,7 @@ class Exporter:
             tag_result = self.find_tags_from_event(event)
 
             ## Handling afk/not-afk
+            was_afk_before = self.state.is_afk()
             if self.check_and_handle_afk_state_change(tag_result.tags, event):
                 ## TODO:
                 ## Doh!  Some of the point of moving things to a separate
@@ -1534,15 +1535,19 @@ class Exporter:
                 )
 
                 if self.state.is_afk():
-                    # Before returning, check for overlapping split ask-away events.
-                    # The normal ensure_tag_exported path is bypassed when we're already
-                    # in AFK state — we need to handle split events here explicitly.
-                    if hasattr(self, "_ask_away_events") and self._ask_away_events:
+                    # When already in AFK state (not a fresh ACTIVE→AFK transition),
+                    # check for overlapping ask-away events that need exporting.
+                    # The ACTIVE→AFK case is handled inside check_and_handle_afk_state_change;
+                    # calling ensure_tag_exported again there would double-export.
+                    if (
+                        was_afk_before
+                        and hasattr(self, "_ask_away_events")
+                        and self._ask_away_events
+                    ):
                         ev_start = event["timestamp"]
                         ev_end = ev_start + event["duration"]
                         if any(
-                            ask["data"].get("split")
-                            and ask["timestamp"] < ev_end
+                            ask["timestamp"] < ev_end
                             and ask["timestamp"] + ask["duration"] > ev_start
                             for ask in self._ask_away_events
                         ):
