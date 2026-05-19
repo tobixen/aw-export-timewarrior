@@ -222,6 +222,7 @@ class FixtureDataBuilder:
         duration: int | timedelta,
         timestamp: datetime | None = None,
         suspend_state: str | None = None,
+        boot_gap: bool = False,
     ) -> "FixtureDataBuilder":
         """
         Add a lid event.
@@ -251,7 +252,7 @@ class FixtureDataBuilder:
                 "status": status,
                 "lid_state": lid_state,
                 "suspend_state": suspend_state,
-                "boot_gap": False,
+                "boot_gap": boot_gap,
                 "event_source": "lid",
             },
         }

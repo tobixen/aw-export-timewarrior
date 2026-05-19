@@ -390,6 +390,31 @@ class EventPipeline:
                     "original_data": data,
                 },
             }
+
+            # Boot-gap events are "unknown" placeholders: the LID watcher sets
+            # their duration to (current_time - last_seen), which heartbeats keep
+            # extending all day.  Once the AFK watcher has real data the boot-gap
+            # is over, so clip it to end at the first AFK watcher event that starts
+            # within the boot-gap window.  This prevents a bedtime boot-gap from
+            # swallowing an entire following day of activity.
+            if data.get("boot_gap", False):
+                boot_start = normalize_timestamp(converted_event["timestamp"])
+                boot_end = boot_start + normalize_duration(converted_event["duration"])
+                first_afk_start = min(
+                    (
+                        normalize_timestamp(e["timestamp"])
+                        for e in afk_events
+                        if normalize_timestamp(e["timestamp"]) > boot_start
+                        and normalize_timestamp(e["timestamp"]) < boot_end
+                    ),
+                    default=None,
+                )
+                if first_afk_start is not None:
+                    converted_event = {
+                        **converted_event,
+                        "duration": first_afk_start - boot_start,
+                    }
+
             converted_lid_events.append(converted_event)
 
         # Resolve conflicts: lid events override conflicting AFK events
