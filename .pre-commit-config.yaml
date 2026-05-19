@@ -41,6 +41,21 @@ repos:
       - id: prepare-ai-repository
         stages: [manual]
 
+  # Conventional Commits enforcement on commit-msg
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  # Link checker (cached for speed)
+  - repo: https://github.com/lycheeverse/lychee
+    rev: lychee-v0.24.2
+    hooks:
+      - id: lychee
+        args: ["--no-progress", "--timeout", "10", "--cache", "--max-cache-age", "1d", "."]
+        stages: [pre-push]
+
   # PRE-PUSH: verify lint and format before pushing (mirrors CI checks)
   - repo: local
     hooks:

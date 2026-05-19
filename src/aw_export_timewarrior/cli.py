@@ -6,6 +6,7 @@ Provides subcommands for different operational modes: sync, diff, analyze, expor
 """
 
 import argparse
+import importlib.metadata
 import logging
 import sys
 import time
@@ -151,6 +152,12 @@ Examples:
     )
     parser.add_argument(
         "--no-log-json", action="store_true", help="Do not output logs in JSON format"
+    )
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"%(prog)s {importlib.metadata.version('aw-export-timewarrior')}",
     )
     debug_group = parser.add_mutually_exclusive_group()
     debug_group.add_argument(
