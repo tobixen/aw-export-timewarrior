@@ -388,6 +388,60 @@ def test_empty_split_message_skipped() -> None:
     assert third_found, f"Expected 'third' activity: {start_commands}"
 
 
+def test_non_split_ask_away_exported_in_already_afk_path() -> None:
+    """Regression test: non-split ask-away tag silently dropped when AFK2 arrives
+    while already in AFK state with no not-afk period between.
+
+    Scenario:
+      - Long bedtime AFK (no ask-away)
+      - Gap > 5 min (simulating suspension — no events)
+      - Tea AFK period (AFK state never cleared; arrives via 'already AFK' path)
+      - Tea non-split ask-away overlapping the tea AFK
+      - Return to work
+
+    The outer loop in find_next_activity() must call ensure_tag_exported for
+    non-split ask-away events that overlap an AFK heartbeat in the 'already AFK'
+    path, just as it does for split events after a merged short+big AFK.
+    """
+    t0 = datetime(2025, 1, 1, 22, 0, 0, tzinfo=UTC)
+    td = timedelta
+
+    builder = FixtureDataBuilder(start_time=t0)
+
+    # Initial work: t0 .. t0+300
+    builder.add_window_event("vscode", "work.py", 300)
+    builder.add_afk_event("not-afk", 300)
+
+    # Bedtime AFK: t0+300 .. t0+300+28800 (8 hours, no ask-away)
+    bedtime_start = t0 + td(seconds=300)
+    builder.add_afk_event("afk", 28800, timestamp=bedtime_start)
+
+    # Gap >300s (no events — simulates suspension); we just don't add any events.
+    # Tea AFK starts 600s after bedtime ends (gap = 600s > 300s → not merged)
+    tea_start = bedtime_start + td(seconds=28800 + 600)
+    builder.add_afk_event("afk", 360, timestamp=tea_start)
+    builder.add_ask_away_event("tea", 360, timestamp=tea_start)
+
+    # Return to work after tea
+    work_start = tea_start + td(seconds=360)
+    builder.add_window_event("chrome", "windy.com", 600, timestamp=work_start)
+    builder.add_afk_event("not-afk", 600, timestamp=work_start)
+
+    data = builder.build()
+
+    exporter = Exporter(test_data=data, dry_run=True, enable_assert=False)
+    exporter.tick(process_all=True)
+
+    commands = exporter.get_captured_commands()
+    start_commands = [cmd for cmd in commands if len(cmd) > 1 and cmd[1] == "start"]
+    all_tags = [tag for cmd in start_commands for tag in cmd]
+
+    tea_count = all_tags.count("tea")
+    assert tea_count == 1, (
+        f"Expected 'tea' exactly once in commands, got {tea_count}: {start_commands}"
+    )
+
+
 def test_split_events_after_short_afk_same_tags() -> None:
     """Regression test: split ask-away events skipped when preceding short AFK leaves
     timew_info tagged as {afk, ~aw} and the big AFK's final_tags matches.

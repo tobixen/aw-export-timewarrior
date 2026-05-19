@@ -15,6 +15,7 @@ True continuous-sync vs diff equivalence (with a real TimeWarrior installation)
 is covered by tests/test_functional.py::TestSyncWithRealDataHS.
 """
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from aw_export_timewarrior.compare import SuggestedInterval, TimewInterval, compare_intervals
@@ -65,6 +66,14 @@ def _suggested_to_timew(intervals: list[SuggestedInterval]) -> list[TimewInterva
     ]
 
 
+def _assert_intervals_valid(intervals: list[SuggestedInterval], label: str) -> None:
+    """Assert all intervals have start < end (catches out-of-order captured commands)."""
+    for iv in intervals:
+        assert iv.start < iv.end, (
+            f"{label}: invalid interval with start >= end: start={iv.start} end={iv.end} tags={iv.tags}"
+        )
+
+
 def _assert_no_differences(sync_intervals: list, diff_intervals: list) -> None:
     """Assert sync and diff agree: no missing, extra, tag-mismatches, or orphaned intervals."""
     # Treat sync output as the simulated TimeWarrior state; diff output as suggestions.
@@ -92,6 +101,8 @@ def _assert_sync_diff_equivalent(test_data: dict) -> None:
     """Run both modes on the same test data and assert they agree."""
     sync = _run_sync_style(test_data)
     diff = _run_diff_style(test_data)
+    _assert_intervals_valid(sync, "sync")
+    _assert_intervals_valid(diff, "diff")
     _assert_no_differences(sync, diff)
 
 
@@ -153,6 +164,37 @@ def _long_afk_then_work() -> dict:
     return builder.build()
 
 
+def _bedtime_then_tea() -> dict:
+    """Long overnight AFK with no ask-away, gap > 5 min, then tea AFK with non-split
+    ask-away while still in AFK state (no not-afk between bedtime and tea).
+
+    Exercises the 'already AFK' path in find_next_activity() for non-split ask-away
+    events.  Captured commands must be in chronological order (tea after bedtime),
+    otherwise get_suggested_intervals() produces inverted intervals (start > end).
+    """
+    t0 = datetime(2025, 1, 1, 22, 0, 0, tzinfo=UTC)
+    td = timedelta
+
+    builder = FixtureDataBuilder(start_time=t0)
+    builder.add_window_event("vscode", "work.py", 300)
+    builder.add_afk_event("not-afk", 300)
+
+    bedtime_start = t0 + td(seconds=300)
+    builder.add_afk_event("afk", 28800, timestamp=bedtime_start)  # 8-hour sleep
+
+    # Tea break: starts 600 s after bedtime ends (gap > 300 s → not merged by
+    # _merge_consecutive_afk_events), so tea AFK arrives via 'already AFK' path
+    tea_start = bedtime_start + td(seconds=28800 + 600)
+    builder.add_afk_event("afk", 360, timestamp=tea_start)
+    builder.add_ask_away_event("tea", 360, timestamp=tea_start)
+
+    work_start = tea_start + td(seconds=360)
+    builder.add_window_event("chrome", "windy.com", 600, timestamp=work_start)
+    builder.add_afk_event("not-afk", 600, timestamp=work_start)
+
+    return builder.build()
+
+
 def _consecutive_afk_blocks() -> dict:
     """Multiple back-to-back AFK periods stress-tests AFK state machine."""
     builder = FixtureDataBuilder()
@@ -193,6 +235,24 @@ class TestSyncDiffEquivalence:
 
     def test_consecutive_afk_blocks(self) -> None:
         _assert_sync_diff_equivalent(_consecutive_afk_blocks())
+
+    def test_bedtime_then_tea(self) -> None:
+        """Long overnight AFK then tea ask-away while still in AFK state.
+
+        Catches out-of-order captured_commands (which produce inverted intervals)
+        and verifies tea is exported exactly once.
+        """
+        data = _bedtime_then_tea()
+        _assert_sync_diff_equivalent(data)
+
+        # Additionally verify tea appears exactly once
+        exporter = Exporter(dry_run=True, test_data=data, config_path=CONFIG_FILE)
+        exporter.tick(process_all=True)
+        commands = exporter.get_captured_commands()
+        start_cmds = [c for c in commands if len(c) > 1 and c[1] == "start"]
+        all_tags = [tag for c in start_cmds for tag in c]
+        tea_count = all_tags.count("tea")
+        assert tea_count == 1, f"Expected 'tea' exactly once, got {tea_count}: {start_cmds}"
 
     def test_from_existing_sample_fixture(self) -> None:
         """Use the 15-minute sample fixture to cover realistic event patterns."""

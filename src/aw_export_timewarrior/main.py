@@ -168,6 +168,9 @@ class Exporter:
     _ask_away_messages: dict = field(
         default_factory=dict, init=False, repr=False
     )  # Maps (timestamp, duration) to ask-away messages
+    _exported_ask_away_timestamps: set = field(
+        default_factory=set, init=False, repr=False
+    )  # Timestamps of ask-away events already exported (prevents duplicate exports)
 
     # Short event accumulation tracking - prevents ignoring rapid activity in same app/rule
     # Example: flipping through photos in feh creates many <3s events, but total time is significant
@@ -769,6 +772,9 @@ class Exporter:
                                 ask_away_tags = message_tags
                             else:
                                 ask_away_tags = set(message_tags)
+                    # Mark this ask-away event as exported so the outer loop
+                    # does not re-export it in a subsequent "already AFK" call.
+                    self._exported_ask_away_timestamps.add(ask_event["timestamp"])
 
         # Check if tags are exactly the same as current tags (after rule application)
         # This prevents redundant timew start commands when tags haven't changed
@@ -869,6 +875,7 @@ class Exporter:
                             f"at {split_since} ({split_event['duration']})"
                         )
                         self.tracker.start_tracking(split_tags, split_since)
+                        self._exported_ask_away_timestamps.add(split_event["timestamp"])
 
                         # Update state after each split (simulate sequential tracking)
                         if not self.dry_run:
@@ -1535,10 +1542,10 @@ class Exporter:
                 )
 
                 if self.state.is_afk():
-                    # When already in AFK state (not a fresh ACTIVE→AFK transition),
-                    # check for overlapping ask-away events that need exporting.
-                    # The ACTIVE→AFK case is handled inside check_and_handle_afk_state_change;
-                    # calling ensure_tag_exported again there would double-export.
+                    # For the "already AFK" path (was_afk_before=True), check for
+                    # overlapping ask-away events not yet exported.  The ACTIVE→AFK
+                    # path (was_afk_before=False) is already handled inside
+                    # check_and_handle_afk_state_change — calling again would double-export.
                     if (
                         was_afk_before
                         and hasattr(self, "_ask_away_events")
@@ -1546,12 +1553,17 @@ class Exporter:
                     ):
                         ev_start = event["timestamp"]
                         ev_end = ev_start + event["duration"]
-                        if any(
-                            ask["timestamp"] < ev_end
-                            and ask["timestamp"] + ask["duration"] > ev_start
+                        new_overlapping = [
+                            ask
                             for ask in self._ask_away_events
-                        ):
+                            if ask["timestamp"] < ev_end
+                            and ask["timestamp"] + ask["duration"] > ev_start
+                            and ask["timestamp"] not in self._exported_ask_away_timestamps
+                        ]
+                        if new_overlapping:
                             self.ensure_tag_exported(tag_result.tags, event)
+                            for ask in new_overlapping:
+                                self._exported_ask_away_timestamps.add(ask["timestamp"])
                     return True
                 continue
 
