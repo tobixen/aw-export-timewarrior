@@ -40,3 +40,32 @@ repos:
         stages: [post-commit]
       - id: prepare-ai-repository
         stages: [manual]
+
+  # PRE-PUSH: verify lint and format before pushing (mirrors CI checks)
+  - repo: local
+    hooks:
+      - id: ruff-check-push
+        name: ruff lint (pre-push)
+        entry: ruff check .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: ruff-format-check-push
+        name: ruff format check (pre-push)
+        entry: ruff format --check .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+  # PRE-PUSH: run test suite before pushing
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

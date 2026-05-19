@@ -321,8 +321,9 @@ class TagExtractor:
             matchers=[
                 ("url_regexp", self._match_url_regexp),
             ],
-            skip_if=lambda sub_event: sub_event["data"].get("url")
-            in ("chrome://newtab/", "about:newtab"),
+            skip_if=lambda sub_event: (
+                sub_event["data"].get("url") in ("chrome://newtab/", "about:newtab")
+            ),
         )
 
     def get_editor_tags(self, window_event: dict) -> set[str] | list | bool:
