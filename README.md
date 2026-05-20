@@ -61,7 +61,7 @@ For richer tag extraction, install additional watchers:
 - [activity-watch-mode](https://github.com/pauldub/activity-watch-mode) - Extract tags from Emacs file paths
 - [aw-watcher-tmux](https://github.com/akohlbecker/aw-watcher-tmux) - Extract tags from tmux sessions
 - [aw-watcher-afk-prompt](https://github.com/tobixen/aw-watcher-afk-prompt) - Prompt for activity description after AFK periods (legacy name: aw-watcher-ask-away)
-- [aw-watcher-lid](https://github.com/tobixen/aw-watcher-afk-lid) - Track AFK based on laptop lid state
+- [aw-watcher-lid](https://github.com/tobixen/aw-watcher-lid) - Track AFK based on laptop lid state
 
 Support for other watchers may be considered, reach out by email or add an issue or pull request for it.
 
