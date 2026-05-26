@@ -1648,6 +1648,8 @@ class Exporter:
         if current_event:
             self._process_current_event_incrementally(current_event)
 
+        # Track whether completed events were processed (used to rate-limit cache rebuilds)
+        self._last_tick_had_completed_events: bool = cnt > 0
         # Return True if we processed any events (cnt > 0) or have a current event
         return cnt > 0 or current_event is not None
 
@@ -1762,13 +1764,22 @@ class Exporter:
         # a per-tick rebuild the cache could become arbitrarily stale when an
         # ongoing AFK event keeps find_next_activity() returning True indefinitely,
         # preventing the sleep-triggered reset from ever firing.
+        #
+        # Rate-limit: when only tracking an ongoing event (no completed events last
+        # tick), rebuilding 10× per second is wasteful — the cache is good for 10s.
+        # Always rebuild immediately after processing completed events so that the
+        # next tick sees up-to-date data.
         if not self.end_time and not self.test_data:
-            _cache_buffer = timedelta(minutes=11)  # covers fallback_to_recent (10 min) + margin
-            _cache_margin = timedelta(seconds=16)
-            _cache_start = (self.state.last_tick or datetime.now(UTC)) - _cache_buffer
-            self.event_fetcher.reset_cache(
-                new_range=(_cache_start, datetime.now(UTC) + _cache_margin)
-            )
+            _now = datetime.now(UTC)
+            _last_rebuild: datetime | None = getattr(self, "_last_cache_rebuild", None)
+            _elapsed = (_now - _last_rebuild).total_seconds() if _last_rebuild else float("inf")
+            _had_completed = getattr(self, "_last_tick_had_completed_events", True)
+            if _elapsed >= 10.0 or _had_completed:
+                _cache_buffer = timedelta(minutes=11)  # covers fallback_to_recent (10 min) + margin
+                _cache_margin = timedelta(seconds=16)
+                _cache_start = (self.state.last_tick or _now) - _cache_buffer
+                self.event_fetcher.reset_cache(new_range=(_cache_start, _now + _cache_margin))
+                self._last_cache_rebuild: datetime = _now
 
         # If process_all is True, keep finding activity until there's none left
         if process_all:
