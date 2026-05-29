@@ -315,9 +315,11 @@ class TagExtractor:
         return self._get_subevent_tags(
             window_event=window_event,
             subtype="browser",
-            apps=("chromium", "chrome", "firefox"),
+            apps=("chromium", "chrome", "firefox", "org.chromium.chromium"),
             bucket_pattern="aw-watcher-web-{app}",
-            app_normalizer=lambda app: "chrome" if app == "chromium" else app,
+            app_normalizer=lambda app: "chrome"
+            if app in ("chromium", "org.chromium.chromium")
+            else app,
             matchers=[
                 ("url_regexp", self._match_url_regexp),
             ],
@@ -687,9 +689,11 @@ class TagExtractor:
         # Try browser - same parameters as get_browser_tags()
         sub_event, _ = self._fetch_sub_event(
             window_event,
-            apps=("chromium", "chrome", "firefox"),
+            apps=("chromium", "chrome", "firefox", "org.chromium.chromium"),
             bucket_pattern="aw-watcher-web-{app}",
-            app_normalizer=lambda app: "chrome" if app == "chromium" else app,
+            app_normalizer=lambda app: "chrome"
+            if app in ("chromium", "org.chromium.chromium")
+            else app,
             skip_if=lambda e: e["data"].get("url") in ("chrome://newtab/", "about:newtab"),
         )
         if sub_event:
