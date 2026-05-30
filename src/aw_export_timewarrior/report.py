@@ -357,11 +357,11 @@ def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[s
             logger.debug("Failed to get editor sub-event for %s: %s", app, e)
 
     # Check for browser events - mirrors logic from get_browser_tags()
-    elif app in ("chromium", "chrome", "firefox"):
+    elif app in ("chromium", "chrome", "firefox", "org.chromium.chromium"):
         result["specialized_type"] = "browser"
         try:
             # Normalize app name as done in get_browser_tags()
-            app_normalized = "chrome" if app == "chromium" else app
+            app_normalized = "chrome" if app in ("chromium", "org.chromium.chromium") else app
             bucket_key = f"aw-watcher-web-{app_normalized}"
 
             if bucket_key in exporter.event_fetcher.bucket_short:
