@@ -33,10 +33,8 @@ def test_collect_report_data_does_not_sleep(exporter_with_report_data):
     assert len(data) > 0
 
 
-def test_extract_specialized_data_does_not_sleep(exporter_with_report_data):
-    """Test that extract_specialized_data doesn't call time.sleep for browser events."""
-    from src.aw_export_timewarrior.report import extract_specialized_data
-
+def test_get_specialized_context_does_not_sleep(exporter_with_report_data):
+    """Test that get_specialized_context doesn't call time.sleep for browser events."""
     # Create a browser window event that should trigger get_corresponding_event
     browser_event = {
         "timestamp": datetime(2025, 12, 11, 9, 4, 43, tzinfo=UTC),
@@ -45,7 +43,7 @@ def test_extract_specialized_data_does_not_sleep(exporter_with_report_data):
     }
 
     with patch("time.sleep") as mock_sleep:
-        extract_specialized_data(exporter_with_report_data, browser_event)
+        exporter_with_report_data.tag_extractor.get_specialized_context(browser_event)
 
         # Assert sleep was never called
         mock_sleep.assert_not_called()
@@ -198,39 +196,28 @@ def test_get_corresponding_event_with_retry_zero_does_not_sleep():
         mock_sleep.assert_not_called()
 
 
-def test_extract_specialized_data_with_recent_browser_event_does_not_sleep():
-    """Test that extract_specialized_data does NOT sleep for recent browser events.
+def test_get_specialized_context_with_recent_browser_event_does_not_sleep():
+    """Test that get_specialized_context does NOT sleep for recent browser events.
 
-    This test verifies the fix: extract_specialized_data now calls
-    get_corresponding_event with retry=0, so it never sleeps even for
-    recent events without matching sub-events.
+    Guaranteed by dry_run=True → default_retry=0 on the TagExtractor.
     """
     from src.aw_export_timewarrior.export import load_test_data
     from src.aw_export_timewarrior.main import Exporter
-    from src.aw_export_timewarrior.report import extract_specialized_data
 
-    # Create an exporter with test data
     test_data_path = Path(__file__).parent / "fixtures" / "report_test_data.json"
     test_data = load_test_data(test_data_path)
     exporter = Exporter(dry_run=True, test_data=test_data)
 
-    # Create a recent browser event that WON'T have a matching web event
-    # (because it's at a timestamp our test data doesn't cover)
     now = datetime.now(UTC)
     recent_browser_event = {
-        "timestamp": now - timedelta(seconds=60),  # 1 minute ago
+        "timestamp": now - timedelta(seconds=60),
         "duration": timedelta(seconds=10),
         "data": {"app": "chromium", "title": "Recent Browser Page - Chromium"},
     }
 
     with patch("time.sleep") as mock_sleep:
-        result = extract_specialized_data(exporter, recent_browser_event)
+        result = exporter.tag_extractor.get_specialized_context(recent_browser_event)
 
-        # Verify sleep was never called - this is the key assertion
         mock_sleep.assert_not_called()
 
-        # Result should still be valid, just without specialized data
-        assert result["app"] == "chromium"
-        assert result["specialized_type"] == "browser"
-        # specialized_data may or may not be None depending on whether there's
-        # a matching browser event in our test data
+        assert result["type"] in ("browser", None)

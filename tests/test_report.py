@@ -7,7 +7,6 @@ import pytest
 from src.aw_export_timewarrior.main import Exporter
 from src.aw_export_timewarrior.report import (
     collect_report_data,
-    extract_specialized_data,
     filter_by_min_duration,
     format_duration,
     truncate_string,
@@ -35,38 +34,35 @@ def test_truncate_string() -> None:
     assert len(truncate_string("x" * 100, 50)) == 50
 
 
-def test_extract_specialized_data_browser(exporter_with_report_data: Exporter) -> None:
-    """Test extraction of browser URL data."""
-    # Create a test window event with chromium
+def test_get_specialized_context_browser(exporter_with_report_data: Exporter) -> None:
+    """Test extraction of browser URL data via tag_extractor."""
     window_event = {
         "timestamp": datetime(2025, 12, 11, 9, 4, 43, tzinfo=UTC),
-        "duration": pytest.approx(0.0),
+        "duration": timedelta(seconds=0),
         "data": {"app": "chromium", "title": "Chat - Test Chat - Chromium"},
     }
 
-    result = extract_specialized_data(exporter_with_report_data, window_event)
+    result = exporter_with_report_data.tag_extractor.get_specialized_context(window_event)
 
-    assert result["app"] == "chromium"
-    assert result["specialized_type"] == "browser"
     # May or may not find a matching browser event depending on timing
     # Just verify the structure is correct
-    if result["specialized_data"]:
-        assert "https://" in result["specialized_data"]
+    assert result["type"] in ("browser", None)
+    if result["data"]:
+        assert "https://" in result["data"]
 
 
-def test_extract_specialized_data_non_browser(exporter_with_report_data: Exporter) -> None:
+def test_get_specialized_context_non_browser(exporter_with_report_data: Exporter) -> None:
     """Test that non-browser/editor/terminal apps return no specialized data."""
     window_event = {
         "timestamp": datetime(2025, 12, 11, 9, 0, 1, tzinfo=UTC),
-        "duration": pytest.approx(0.0),
+        "duration": timedelta(seconds=0),
         "data": {"app": "feh", "title": "photo.jpg"},
     }
 
-    result = extract_specialized_data(exporter_with_report_data, window_event)
+    result = exporter_with_report_data.tag_extractor.get_specialized_context(window_event)
 
-    assert result["app"] == "feh"
-    assert result["specialized_type"] is None
-    assert result["specialized_data"] is None
+    assert result["type"] is None
+    assert result["data"] is None
 
 
 def test_collect_report_data(exporter_with_report_data: Exporter) -> None:

@@ -12,6 +12,15 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Browser app names as reported by the window watcher (lowercased).
+# Includes flatpak app-ids (e.g. org.chromium.Chromium → org.chromium.chromium).
+BROWSER_APPS: tuple[str, ...] = ("chromium", "chrome", "firefox", "org.chromium.chromium")
+
+
+def normalize_browser_app(app: str) -> str:
+    """Map a browser app name to its aw-watcher-web-<name> bucket suffix."""
+    return "chrome" if app in ("chromium", "org.chromium.chromium") else app
+
 
 @dataclass
 class ExclusiveGroupViolation:
@@ -315,11 +324,9 @@ class TagExtractor:
         return self._get_subevent_tags(
             window_event=window_event,
             subtype="browser",
-            apps=("chromium", "chrome", "firefox", "org.chromium.chromium"),
+            apps=BROWSER_APPS,
             bucket_pattern="aw-watcher-web-{app}",
-            app_normalizer=lambda app: "chrome"
-            if app in ("chromium", "org.chromium.chromium")
-            else app,
+            app_normalizer=normalize_browser_app,
             matchers=[
                 ("url_regexp", self._match_url_regexp),
             ],
@@ -689,11 +696,9 @@ class TagExtractor:
         # Try browser - same parameters as get_browser_tags()
         sub_event, _ = self._fetch_sub_event(
             window_event,
-            apps=("chromium", "chrome", "firefox", "org.chromium.chromium"),
+            apps=BROWSER_APPS,
             bucket_pattern="aw-watcher-web-{app}",
-            app_normalizer=lambda app: "chrome"
-            if app in ("chromium", "org.chromium.chromium")
-            else app,
+            app_normalizer=normalize_browser_app,
             skip_if=lambda e: e["data"].get("url") in ("chrome://newtab/", "about:newtab"),
         )
         if sub_event:

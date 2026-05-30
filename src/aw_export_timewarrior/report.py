@@ -309,110 +309,6 @@ def format_duration(duration: timedelta) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
-def extract_specialized_data(exporter: "Exporter", window_event: dict) -> dict[str, Any]:
-    """Extract specialized watcher data (file path for editors, URL for browsers).
-
-    Uses the exporter's existing get_corresponding_event() method which already
-    handles all the logic of finding specialized watcher events (browsers, editors).
-    This mirrors the same approach used in get_browser_tags() and get_editor_tags().
-
-    Args:
-        exporter: The Exporter instance with access to buckets
-        window_event: The window event to analyze
-
-    Returns:
-        Dictionary with keys: app, specialized_type, specialized_data
-    """
-    result = {
-        "app": window_event["data"].get("app", ""),
-        "specialized_type": None,
-        "specialized_data": None,
-    }
-
-    app = result["app"].lower()
-
-    # Check for editor events - mirrors logic from get_editor_tags()
-    if app in ("emacs", "vi", "vim"):
-        result["specialized_type"] = "editor"
-        try:
-            # Use same bucket pattern as get_editor_tags()
-            bucket_key = f"aw-watcher-{app}"
-            if bucket_key in exporter.event_fetcher.bucket_short:
-                bucket_id = exporter.event_fetcher.bucket_short[bucket_key]["id"]
-                ignorable = exporter.tag_extractor._is_ignorable_event(app, window_event)
-                # Use the public get_corresponding_event() method
-                # retry=0: Don't sleep waiting for events - we're just reading history
-                sub_event = exporter.event_fetcher.get_corresponding_event(
-                    window_event, bucket_id, ignorable=ignorable, retry=0
-                )
-
-                if sub_event:
-                    file_path = sub_event["data"].get("file", "")
-                    project = sub_event["data"].get("project", "")
-                    if file_path:
-                        result["specialized_data"] = file_path
-                    elif project:
-                        result["specialized_data"] = f"project:{project}"
-        except Exception as e:
-            logger.debug("Failed to get editor sub-event for %s: %s", app, e)
-
-    # Check for browser events - mirrors logic from get_browser_tags()
-    elif app in ("chromium", "chrome", "firefox", "org.chromium.chromium"):
-        result["specialized_type"] = "browser"
-        try:
-            # Normalize app name as done in get_browser_tags()
-            app_normalized = "chrome" if app in ("chromium", "org.chromium.chromium") else app
-            bucket_key = f"aw-watcher-web-{app_normalized}"
-
-            if bucket_key in exporter.event_fetcher.bucket_short:
-                bucket_id = exporter.event_fetcher.bucket_short[bucket_key]["id"]
-                # Use the public get_corresponding_event() method
-                # retry=0: Don't sleep waiting for events - we're just reading history
-                sub_event = exporter.event_fetcher.get_corresponding_event(
-                    window_event, bucket_id, retry=0
-                )
-
-                if sub_event:
-                    url = sub_event["data"].get("url", "")
-                    # Skip internal pages (same check as in get_browser_tags())
-                    if url and url not in ("chrome://newtab/", "about:newtab"):
-                        result["specialized_data"] = url
-        except Exception as e:
-            logger.debug("Failed to get browser sub-event for %s: %s", app, e)
-
-    # Check for terminal apps that might have tmux data
-    elif app in exporter.config.get("terminal_apps", []):
-        result["specialized_type"] = "terminal"
-        try:
-            tmux_bucket = exporter.event_fetcher.get_tmux_bucket()
-            if tmux_bucket:
-                # retry=0: Don't sleep waiting for events - we're just reading history
-                sub_event = exporter.event_fetcher.get_corresponding_event(
-                    window_event, tmux_bucket, retry=0
-                )
-                if sub_event:
-                    # Build tmux info string
-                    cmd = sub_event["data"].get("pane_current_command", "")
-                    path = sub_event["data"].get("pane_current_path", "")
-                    pane_title = sub_event["data"].get("pane_title", "")
-                    if cmd or path:
-                        parts = []
-                        if cmd:
-                            parts.append(f"cmd:{cmd}")
-                        if path:
-                            # Shorten home directory
-                            if path.startswith("/home/"):
-                                path = "~/" + "/".join(path.split("/")[3:])
-                            parts.append(f"path:{path}")
-                        if pane_title and pane_title not in (cmd, path):
-                            parts.append(f"title:{pane_title}")
-                        result["specialized_data"] = " | ".join(parts)
-        except Exception as e:
-            logger.debug("Failed to get tmux sub-event for %s: %s", app, e)
-
-    return result
-
-
 def collect_report_data(
     exporter: "Exporter",
     start_time: datetime,
@@ -469,8 +365,8 @@ def collect_report_data(
                 afk_status = status
                 break
 
-        # Extract specialized data
-        specialized = extract_specialized_data(exporter, window_event)
+        # Extract specialized data (URL for browsers, file path for editors, etc.)
+        specialized = exporter.tag_extractor.get_specialized_context(window_event)
 
         # Determine tags using exporter's tag_extractor
         result_tags = exporter.tag_extractor.get_tags(window_event)
@@ -482,9 +378,9 @@ def collect_report_data(
             "timestamp": event_start,
             "duration": window_event["duration"],
             "window_title": window_event["data"].get("title", ""),
-            "app": specialized["app"],
-            "specialized_type": specialized["specialized_type"],
-            "specialized_data": specialized["specialized_data"] or "",
+            "app": window_event["data"].get("app", ""),
+            "specialized_type": specialized["type"],
+            "specialized_data": specialized["data"] or "",
             "afk_status": afk_status,
             "tags": tags,
         }
