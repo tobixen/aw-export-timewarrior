@@ -5,7 +5,7 @@
 repos:
   # Ruff - An extremely fast Python linter and formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.10
+    rev: v0.15.20
     hooks:
       # Run the linter
       - id: ruff
@@ -31,7 +31,7 @@ repos:
   # them to commit messages automatically (via Claude Code UserPromptSubmit hook).
   # Run once manually to set up: pre-commit run --hook-stage manual prepare-ai-repository
   - repo: https://github.com/pycalendar/ai-prompt-auto-commit
-    rev: v0.0.5
+    rev: v0.0.8
     hooks:
       - id: unstage-ai-prompts
       - id: append-ai-prompts
@@ -43,7 +43,7 @@ repos:
 
   # Conventional Commits enforcement on commit-msg
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v3.4.0
+    rev: v4.4.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
