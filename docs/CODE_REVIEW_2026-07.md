@@ -12,7 +12,7 @@ cross-file contract tracing, reuse/simplification/efficiency/altitude/convention
 See also `CODE_REVIEW.md` (December 2025 review, separate effort).
 
 **Fix status:** findings are marked ✅ FIXED inline as they're resolved (with a
-regression test in each case). As of 2026-07-09: #1-#4 fixed.
+regression test in each case). As of 2026-07-09: #1-#5, #9 fixed.
 
 ---
 
@@ -67,7 +67,7 @@ The manual-`timew start` detection path calls
 survives, so at the next export `tracked_gap < known_events_time` →
 `ensure_tag_exported`'s breakpoint/`AssertionError` fires.
 
-### 5. 🔴 AFK merge can shrink the merged event — `event_pipeline.py:331` (CONFIRMED)
+### 5. ✅ FIXED — 🔴 AFK merge can shrink the merged event — `event_pipeline.py:331` (CONFIRMED)
 
 `_merge_consecutive_afk_events` extends the merged event with
 `current["_end"] = event_end` instead of `max(current_end, event_end)`, so a
@@ -119,7 +119,7 @@ for the last hour: the open interval is invisible to the overlap search, the
 whole span lands in `result["missing"]`, and `generate_fix_commands` emits a
 `timew track <start> - <end> :adjust` that truncates/splits the live interval.
 
-### 9. 🟠 AFK gap workaround manufactures false gaps — `event_pipeline.py:275` (CONFIRMED)
+### 9. ✅ FIXED — 🟠 AFK gap workaround manufactures false gaps — `event_pipeline.py:275` (CONFIRMED)
 
 `_apply_afk_gap_workaround` measures gaps from the *previous* event's end
 (events sorted by start only), not the max end seen so far, so an event

@@ -265,14 +265,17 @@ class EventPipeline:
         # Sort events by timestamp to find gaps
         sorted_events = sorted(afk_events, key=lambda x: x["timestamp"])
 
-        # Find gaps between consecutive events and fill with synthetic AFK events
+        # Find gaps between consecutive events and fill with synthetic AFK events.
+        # Track the max end seen so far (not just the previous event's end) since
+        # events are sorted by start only - a short event nested inside a longer
+        # one would otherwise manufacture a false gap from its own (earlier) end.
         synthetic_afk_events = []
+        max_end_so_far = sorted_events[0]["timestamp"] + sorted_events[0]["duration"]
         for i in range(1, len(sorted_events)):
-            prev_event = sorted_events[i - 1]
             curr_event = sorted_events[i]
 
-            # Calculate gap between end of previous event and start of current
-            gap_start = prev_event["timestamp"] + prev_event["duration"]
+            # Calculate gap between the max end seen so far and start of current
+            gap_start = max_end_so_far
             gap_end = curr_event["timestamp"]
             gap_duration = gap_end - gap_start
 
@@ -281,6 +284,8 @@ class EventPipeline:
                 synthetic_afk_events.append(
                     {"data": {"status": "afk"}, "timestamp": gap_start, "duration": gap_duration}
                 )
+
+            max_end_so_far = max(max_end_so_far, curr_event["timestamp"] + curr_event["duration"])
 
         # Combine original and synthetic events
         return afk_events + synthetic_afk_events
@@ -327,8 +332,10 @@ class EventPipeline:
             # Check if this event is consecutive (within 5 minutes) and same status
             gap = (event_start - current_end).total_seconds()
             if gap <= 300 and event_status == current_status:
-                # Extend current event
-                current["_end"] = event_end
+                # Extend current event - use max() since events are sorted by
+                # start only, so a same-status event nested inside a longer one
+                # (event_end < current_end) must not rewind the merged end.
+                current["_end"] = max(current_end, event_end)
                 current["duration"] = current["_end"] - normalize_timestamp(current["timestamp"])
             else:
                 # Start new event
