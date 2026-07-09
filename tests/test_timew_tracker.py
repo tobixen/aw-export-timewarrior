@@ -346,6 +346,38 @@ class TestGetIntervals:
         assert len(intervals) == 1
         assert intervals[0]["end"] is None
 
+    def test_get_intervals_ongoing_interval_started_before_range(self) -> None:
+        """Regression test for CODE_REVIEW_2026-07.md #8.
+
+        An ongoing interval (no 'end') that started BEFORE the query range was
+        previously invisible: all three in-range branches required
+        `interval_end` truthy, so `start <= interval_start <= end` failed (it
+        started earlier) and the two `interval_end and ...` branches short
+        circuited on the missing end. The interval is still overlapping the
+        query range (it's still running), so it must be included.
+        """
+        tracker = TimewTracker(grace_time=0)
+        query_start = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+        query_end = datetime(2025, 1, 1, 18, 0, 0, tzinfo=UTC)
+
+        mock_data = [
+            {
+                "id": 1,
+                "start": "20250101T100000Z",  # started 2 hours before query_start
+                # No 'end' field - still ongoing
+                "tags": ["work", "coding"],
+            }
+        ]
+
+        mock_result = Mock()
+        mock_result.stdout = json.dumps(mock_data)
+
+        with patch("subprocess.run", return_value=mock_result):
+            intervals = tracker.get_intervals(query_start, query_end)
+
+        assert len(intervals) == 1, f"Expected ongoing interval to be included, got: {intervals}"
+        assert intervals[0]["end"] is None
+
     def test_get_intervals_command_failure(self) -> None:
         """Test handling of timew export failure."""
         tracker = TimewTracker(grace_time=0)

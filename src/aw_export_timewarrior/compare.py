@@ -10,6 +10,11 @@ from datetime import UTC, datetime, timedelta
 from termcolor import colored
 
 
+def _effective_end(interval) -> datetime:
+    """End time to use in overlap math; open (ongoing) intervals have no end yet."""
+    return interval.end if interval.end else datetime.max.replace(tzinfo=UTC)
+
+
 class TimewInterval:
     """Represents a time interval in TimeWarrior."""
 
@@ -157,7 +162,7 @@ def compare_intervals(
         overlapping = [
             tw
             for tw in timew_intervals
-            if tw.end and tw.start < suggested.end and suggested.start < tw.end
+            if tw.start < suggested.end and suggested.start < _effective_end(tw)
         ]
 
         if not overlapping:
@@ -188,7 +193,7 @@ def compare_intervals(
 
             # Calculate overlap between suggested and this timew interval
             overlap_start = max(current_pos, tw.start)
-            overlap_end = min(suggested.end, tw.end)
+            overlap_end = min(suggested.end, _effective_end(tw))
 
             if overlap_start < overlap_end:
                 # There's actual overlap - check if tags match
@@ -646,7 +651,7 @@ def format_timeline(
 
     # Add all timew interval boundaries that overlap with or extend into the display window
     for interval in timew_intervals:
-        interval_end = interval.end if interval.end else datetime.max.replace(tzinfo=UTC)
+        interval_end = _effective_end(interval)
         # Skip intervals that end before the window starts
         if interval_end <= start_time:
             continue
@@ -696,7 +701,7 @@ def format_timeline(
         timew_active = []
         for interval in timew_intervals:
             # Check if interval overlaps with [time_point, next_point)
-            interval_end = interval.end if interval.end else datetime.max.replace(tzinfo=UTC)
+            interval_end = _effective_end(interval)
             if interval.start < next_point and interval_end > time_point:
                 timew_active.append(interval)
 

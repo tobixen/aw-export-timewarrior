@@ -231,6 +231,36 @@ class TestCompareIntervals:
         assert len(result["missing"]) == 0
         assert len(result["extra"]) == 0
 
+    def test_ongoing_open_interval_is_visible_to_overlap_search(self) -> None:
+        """Regression test for CODE_REVIEW_2026-07.md #8.
+
+        compare_intervals' overlap search required tw.end truthy, so a
+        currently-open TimeWarrior interval (end=None, still being tracked)
+        was invisible: correctly-tagged live tracking would be reported as
+        entirely "missing", and generate_fix_commands would then emit a
+        `timew track ... :adjust` that truncates/splits the live interval.
+        """
+        timew_intervals = [
+            TimewInterval(
+                id=1,
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=None,  # still actively tracking
+                tags={"4work", "python"},
+            )
+        ]
+        suggested_intervals = [
+            SuggestedInterval(
+                start=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+                end=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+                tags={"4work", "python"},
+            )
+        ]
+
+        result = compare_intervals(timew_intervals, suggested_intervals)
+
+        assert len(result["matching"]) == 1, f"Expected the open interval to match, got: {result}"
+        assert len(result["missing"]) == 0
+
     def test_different_tags(self) -> None:
         """Test intervals with different tags."""
         timew_intervals = [

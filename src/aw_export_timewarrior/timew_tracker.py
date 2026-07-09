@@ -213,14 +213,16 @@ class TimewTracker(TimeTracker):
                     interval_end = datetime.strptime(entry["end"], "%Y%m%dT%H%M%SZ")
                     interval_end = interval_end.replace(tzinfo=UTC)
 
-                # Filter by date range
-                # Include if: interval_start is in range OR interval_end is in range OR interval spans the entire range
-                in_range = False
-                if start <= interval_start <= end or interval_end and start <= interval_end <= end:
-                    in_range = True
-                elif interval_end and interval_start < start and interval_end > end:
-                    # Interval spans the entire range
-                    in_range = True
+                # Filter by date range: standard overlap test (interval_start <= end
+                # AND interval_end >= start). An ongoing interval (interval_end is
+                # None) has no upper bound yet, so treat it as unbounded rather than
+                # requiring interval_end to exist - otherwise an ongoing interval
+                # that started before `start` is invisible even though it's still
+                # running and clearly overlaps the query range.
+                effective_end = (
+                    interval_end if interval_end is not None else datetime.max.replace(tzinfo=UTC)
+                )
+                in_range = interval_start <= end and effective_end >= start
 
                 if in_range:
                     intervals.append(

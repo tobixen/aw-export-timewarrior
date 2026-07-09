@@ -12,7 +12,7 @@ cross-file contract tracing, reuse/simplification/efficiency/altitude/convention
 See also `CODE_REVIEW.md` (December 2025 review, separate effort).
 
 **Fix status:** findings are marked ✅ FIXED inline as they're resolved (with a
-regression test in each case). As of 2026-07-09: #1-#7, #9 fixed.
+regression test in each case). As of 2026-07-09: #1-#9 fixed.
 
 ---
 
@@ -106,7 +106,7 @@ permanently exported without URL-based tags — a silent regression versus the
 pre-cache behavior where each retry hit AW directly. Fix direction: evict the
 bucket from `_events_cache` (or bypass the cache) on the retry path.
 
-### 8. 🟠 Ongoing TimeWarrior intervals invisible to diff — `compare.py:159` (CONFIRMED)
+### 8. ✅ FIXED — 🟠 Ongoing TimeWarrior intervals invisible to diff — `compare.py:159` (CONFIRMED)
 
 `compare_intervals` requires `tw.end` when searching overlapping intervals,
 so the currently-open interval is excluded and its time is classified as
