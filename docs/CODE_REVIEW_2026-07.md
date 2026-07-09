@@ -12,7 +12,7 @@ cross-file contract tracing, reuse/simplification/efficiency/altitude/convention
 See also `CODE_REVIEW.md` (December 2025 review, separate effort).
 
 **Fix status:** findings are marked ✅ FIXED inline as they're resolved (with a
-regression test in each case). As of 2026-07-09: #1-#5, #9 fixed.
+regression test in each case). As of 2026-07-09: #1-#6, #9 fixed.
 
 ---
 
@@ -80,7 +80,7 @@ then fall under the `max_mixed_interval` filter, and window "ghost" events in
 that period are no longer split away. Overlapping AFK periods are explicitly
 acknowledged as occurring (`main.py:1035`).
 
-### 6. 🔴 Multi-word tags corrupted by fix commands — `compare.py:525` + `main.py:504` (CONFIRMED)
+### 6. ✅ FIXED — 🔴 Multi-word tags corrupted by fix commands — `compare.py:525` + `main.py:504` (CONFIRMED)
 
 `generate_fix_commands` joins tags space-separated with no quoting, and
 `run_comparison` applies commands via `command_part.split()`.

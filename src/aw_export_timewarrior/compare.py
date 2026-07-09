@@ -3,6 +3,7 @@ Comparison module for comparing TimeWarrior database with ActivityWatch suggesti
 """
 
 import json
+import shlex
 import subprocess
 from datetime import UTC, datetime, timedelta
 
@@ -521,7 +522,7 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
         # Apply recursive tag rules before generating command
         final_tags = safe_retag_by_rules(suggested.tags)
-        tags = " ".join(sorted(final_tags))
+        tags = " ".join(shlex.quote(t) for t in sorted(final_tags))
         commands.append(f"timew track {start_str} - {end_str} {tags} :adjust")
 
     # For manually edited entries (no ~aw tag), we:
@@ -537,7 +538,7 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
             start_str = suggested.start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
             end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
             final_tags = safe_retag_by_rules(suggested.tags)
-            tags = " ".join(sorted(final_tags))
+            tags = " ".join(shlex.quote(t) for t in sorted(final_tags))
             old_tags = " ".join(sorted(timew_int.tags))
             commands.append(f"# timew track {start_str} - {end_str} {tags} :adjust")
             commands.append(f"#   (current: {old_tags})")
@@ -550,7 +551,7 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
             derived_tags = expanded_tags - current_tags
             if derived_tags:
                 # Generate command to add derived tags
-                tags_to_add = " ".join(sorted(derived_tags))
+                tags_to_add = " ".join(shlex.quote(t) for t in sorted(derived_tags))
                 retag_commands.append(f"timew tag @{timew_int.id} {tags_to_add}")
 
     # Add retag commands for derived tags from manual entries
@@ -581,7 +582,7 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
 
             if derived_tags:
                 # Generate command to add derived tags
-                tags_to_add = " ".join(sorted(derived_tags))
+                tags_to_add = " ".join(shlex.quote(t) for t in sorted(derived_tags))
                 extra_retag_commands.append(f"timew tag @{timew_int.id} {tags_to_add}")
                 extra_info.append(
                     f"#   @{timew_int.id}: {timestamp_str} - {end_str} ({tags_str}) → +{', '.join(sorted(derived_tags))}"

@@ -500,8 +500,14 @@ class Exporter:
                         try:
                             # Remove comment part if present (e.g., "  # 2025-12-10 - old tags: ...")
                             command_part = cmd.split("  #")[0].strip()
+                            # shlex.split (not str.split): generate_fix_commands quotes
+                            # multi-word tags (e.g. "personal communication") so they must
+                            # be un-quoted back into a single argument, not torn apart.
                             result = subprocess.run(
-                                command_part.split(), capture_output=True, text=True, check=True
+                                shlex.split(command_part),
+                                capture_output=True,
+                                text=True,
+                                check=True,
                             )
                             print("  ✓ Success")
                             if result.stdout:

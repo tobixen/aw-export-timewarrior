@@ -435,6 +435,38 @@ class TestGenerateFixCommands:
         assert "~aw" in commands[0]
         assert ":adjust" in commands[0]
 
+    def test_multi_word_tag_survives_shlex_round_trip(self) -> None:
+        """Regression test for CODE_REVIEW_2026-07.md #6.
+
+        generate_fix_commands joined tags with plain spaces and main.py's apply
+        path split the command back apart with str.split(), so a multi-word tag
+        like the shipped default "personal communication" (config.py) was torn
+        into two separate tags on execution and diff never converged. The
+        command must survive a shlex round-trip with the multi-word tag intact.
+        """
+        import shlex
+
+        comparison = {
+            "matching": [],
+            "different_tags": [],
+            "missing": [
+                SuggestedInterval(
+                    start=datetime(2025, 12, 10, 10, 0, 0, tzinfo=UTC),
+                    end=datetime(2025, 12, 10, 11, 0, 0, tzinfo=UTC),
+                    tags={"4work", "personal communication", "~aw"},
+                )
+            ],
+            "extra": [],
+        }
+
+        commands = generate_fix_commands(comparison)
+
+        assert len(commands) == 1
+        parsed = shlex.split(commands[0])
+        assert "personal communication" in parsed, (
+            f"Expected 'personal communication' to survive as one token, got: {parsed}"
+        )
+
     def test_generate_track_adjust_for_different_tags(self) -> None:
         """Test that intervals with different tags use track :adjust instead of retag."""
         comparison = {
