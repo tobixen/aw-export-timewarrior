@@ -12,7 +12,7 @@ cross-file contract tracing, reuse/simplification/efficiency/altitude/convention
 See also `CODE_REVIEW.md` (December 2025 review, separate effort).
 
 **Fix status:** findings are marked ✅ FIXED inline as they're resolved (with a
-regression test in each case). As of 2026-07-09: #1-#6, #9 fixed.
+regression test in each case). As of 2026-07-09: #1-#7, #9 fixed.
 
 ---
 
@@ -91,7 +91,7 @@ acknowledged as occurring (`main.py:1035`).
 separate tags, so every subsequent diff sees `different_tags` again and never
 converges. Use `shlex` quoting/splitting or pass an args list.
 
-### 7. 🟠 Rolling event cache defeats the sub-event retry loop — `aw_client.py:156` (CONFIRMED)
+### 7. ✅ FIXED — 🟠 Rolling event cache defeats the sub-event retry loop — `aw_client.py:156` (CONFIRMED)
 
 With a `cache_range` active, `get_events` never refetches a cached bucket, so
 `get_corresponding_event`'s sleep-and-retry loop re-reads the same stale

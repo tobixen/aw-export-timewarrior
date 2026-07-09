@@ -273,6 +273,12 @@ class EventFetcher:
 
                 sleep(SLEEP_INTERVAL * 3 / retry + 0.2)
                 retry -= 1
+                # Evict this bucket from the cache before retrying: with cache_range
+                # active, get_events() would otherwise keep serving the same stale
+                # snapshot taken before this event's data reached AW, making the
+                # sleep-and-retry above a no-op.
+                if self._cache_range is not None:
+                    self._events_cache.pop(bucket_id, None)
                 return self.get_corresponding_event(window_event, bucket_id, ignorable, retry)
 
         # If still nothing found, try a wider window to account for timing differences
