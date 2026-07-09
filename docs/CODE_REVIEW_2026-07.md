@@ -11,11 +11,14 @@ cross-file contract tracing, reuse/simplification/efficiency/altitude/convention
 
 See also `CODE_REVIEW.md` (December 2025 review, separate effort).
 
+**Fix status:** findings are marked ✅ FIXED inline as they're resolved (with a
+regression test in each case). As of 2026-07-09: #1-#4 fixed.
+
 ---
 
 ## Top findings (ranked by severity)
 
-### 1. 🔴 None-deref crash in AFK state handling — `main.py:1044` (CONFIRMED)
+### 1. ✅ FIXED — 🔴 None-deref crash in AFK state handling — `main.py:1044` (CONFIRMED)
 
 `check_and_handle_afk_state_change` dereferences `self.timew_info["tags"]`
 without a None guard, and `timew_info` stays `None` in sync mode when
@@ -28,7 +31,7 @@ nothing is being tracked.
 line 1044 → `TypeError: 'NoneType' object is not subscriptable`, crashing the
 sync loop.
 
-### 2. 🔴 `retag()` only adds tags, never removes — `timew_tracker.py:155` (CONFIRMED)
+### 2. ✅ FIXED — 🔴 `retag()` only adds tags, never removes — `timew_tracker.py:155` (CONFIRMED)
 
 `TimewTracker.retag()` runs `timew tag @1 <tags>`, which only ADDS tags, while
 its docstring and callers assume the new set REPLACES existing tags.
@@ -40,7 +43,7 @@ without the removed tag, `timew tag` keeps it, then the assertion at
 and crashes live sync; with assertions off, tags silently never converge.
 Fix direction: diff old vs new sets and issue `timew untag` for removals.
 
-### 3. 🔴 Stale current-tracking cache hides manual `timew start` — `timew_tracker.py:106` (CONFIRMED)
+### 3. ✅ FIXED — 🔴 Stale current-tracking cache hides manual `timew start` — `timew_tracker.py:106` (CONFIRMED)
 
 `get_current_tracking()`'s `_current_cache` is only invalidated by the
 exporter's *own* `_run_timew` calls — there is no TTL — so a manual
@@ -52,7 +55,7 @@ cached interval, the manual-tracking guard in `set_timew_info`
 (`main.py:1674-1684`) never fires, and the next automatic export issues a
 `timew start <auto tags>` that truncates the user's manual interval.
 
-### 4. 🔴 Manual-start detection violates the accumulator invariant — `main.py:1682` (CONFIRMED)
+### 4. ✅ FIXED — 🔴 Manual-start detection violates the accumulator invariant — `main.py:1682` (CONFIRMED)
 
 The manual-`timew start` detection path calls
 `set_known_tick_stats(start=..., manual=True, tags=...)` with the default

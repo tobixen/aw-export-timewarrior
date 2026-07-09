@@ -1041,8 +1041,19 @@ class Exporter:
                 )
                 self._afk_change_stats("afk", tags, event)
                 return True
-            if "afk" not in self.timew_info["tags"]:
-                ## I'm apparently afk, but we're not tracking it in timew?
+            if self.timew_info is None:
+                ## Nothing is currently being tracked in TimeWarrior at all (e.g. right
+                ## after program startup, or after a manual `timew stop`). That's not
+                ## evidence of desync - there's no interval whose tags we could compare
+                ## against - so unlike the "tracking something, but missing afk tag"
+                ## case below, this is normal in sync mode too.
+                self.log(
+                    "Internal state shows AFK but TimeWarrior isn't tracking anything - normal after startup/timew stop",
+                    event=event,
+                    level=logging.DEBUG,
+                )
+            elif "afk" not in self.timew_info["tags"]:
+                ## I'm apparently afk, but we're tracking something else in timew?
                 ## In batch/diff mode with historical data, this can happen when:
                 ## - Processing events from the past and building up state
                 ## - TimeWarrior's current state doesn't match the historical timestamp
@@ -1679,8 +1690,15 @@ class Exporter:
                 not self.state.last_known_tick
                 or timew_info["start_dt"] > self.state.last_known_tick
             ):
+                # reset_accumulator=True: last_known_tick is jumping forward to the
+                # manually-started interval, so known_events_time must reset too, or
+                # it survives past the point it was measuring and violates the
+                # known_events_time <= tracked_gap invariant on the next export.
                 self.set_known_tick_stats(
-                    start=timew_info["start_dt"], manual=True, tags=timew_info["tags"]
+                    start=timew_info["start_dt"],
+                    manual=True,
+                    tags=timew_info["tags"],
+                    reset_accumulator=True,
                 )
 
     def tick(self, process_all: bool = False) -> bool:

@@ -119,6 +119,36 @@ class TestGetCurrentTracking:
             tracker.get_current_tracking()
             assert mock_check.call_count == 2
 
+    def test_get_current_tracking_cache_expires_after_ttl(self) -> None:
+        """Regression test for CODE_REVIEW_2026-07.md #3.
+
+        The cache was previously only invalidated by the tracker's own
+        `_run_timew` calls, with no TTL - so a manual `timew start` run by the
+        user in another terminal was invisible until the exporter itself next
+        ran a timew command. A TTL bounds how stale the cache can get.
+        """
+        tracker = TimewTracker(grace_time=0, cache_ttl=1.0)
+
+        first_data = {"id": 1, "start": "20250101T120000Z", "tags": ["auto"]}
+        second_data = {"id": 2, "start": "20250101T130000Z", "tags": ["manual", "override"]}
+
+        with patch("time.monotonic", side_effect=[100.0, 100.5, 102.0]):
+            with patch("subprocess.check_output", return_value=json.dumps(first_data).encode()):
+                result1 = tracker.get_current_tracking()
+                result2 = tracker.get_current_tracking()
+
+            assert result1["tags"] == {"auto"}
+            assert result2 is result1  # still within TTL
+
+            # Simulate a manual `timew start` happening externally, then TTL expiring
+            with patch(
+                "subprocess.check_output", return_value=json.dumps(second_data).encode()
+            ) as mock_check:
+                result3 = tracker.get_current_tracking()
+
+            assert mock_check.call_count == 1
+            assert result3["tags"] == {"manual", "override"}
+
 
 class TestStartTracking:
     """Test start_tracking method."""
@@ -161,13 +191,19 @@ class TestStopTracking:
 class TestRetag:
     """Test retag method."""
 
-    def test_retag(self) -> None:
-        """Test retagging current interval."""
+    def test_retag_adds_new_tags_when_nothing_currently_tracked(self) -> None:
+        """Test retagging when get_current_tracking finds no active interval."""
         captured = []
         tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
         tags = {"work", "meeting", "client"}
 
-        with patch("subprocess.run", return_value=Mock(returncode=0)):
+        with (
+            patch(
+                "subprocess.check_output",
+                side_effect=subprocess.CalledProcessError(1, "timew"),
+            ),
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+        ):
             tracker.retag(tags)
 
         assert len(captured) == 1
@@ -178,6 +214,59 @@ class TestRetag:
         assert "client" in cmd
         assert "meeting" in cmd
         assert "work" in cmd
+
+    def test_retag_removes_tags_no_longer_present(self) -> None:
+        """Regression test for CODE_REVIEW_2026-07.md #2: retag() only added tags.
+
+        `timew tag @1 <tags>` only ADDS tags - it never removes anything. retag()
+        must diff against the current tags and issue `timew untag` for removals,
+        or the interval's tag set never converges to what the caller asked for.
+        """
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+        current_data = {
+            "id": 1,
+            "start": "20250101T120000Z",
+            "tags": ["work", "personal"],
+        }
+        new_tags = {"work", "meeting"}
+
+        with (
+            patch("subprocess.check_output", return_value=json.dumps(current_data).encode()),
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+        ):
+            tracker.retag(new_tags)
+
+        # "personal" must be explicitly untagged; "meeting" must be added.
+        untag_cmds = [c for c in captured if len(c) > 1 and c[1] == "untag"]
+        tag_cmds = [c for c in captured if len(c) > 1 and c[1] == "tag"]
+
+        assert any("personal" in c for c in untag_cmds), (
+            f"Expected an untag command removing 'personal', got: {captured}"
+        )
+        assert any("meeting" in c for c in tag_cmds), (
+            f"Expected a tag command adding 'meeting', got: {captured}"
+        )
+        # 'work' is unchanged and should not need re-adding or removing.
+        assert not any("work" in c for c in untag_cmds)
+
+    def test_retag_noop_when_tags_unchanged(self) -> None:
+        """No timew command should be issued if the tag set is already correct."""
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+        current_data = {
+            "id": 1,
+            "start": "20250101T120000Z",
+            "tags": ["work", "meeting"],
+        }
+
+        with (
+            patch("subprocess.check_output", return_value=json.dumps(current_data).encode()),
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+        ):
+            tracker.retag({"work", "meeting"})
+
+        assert captured == []
 
 
 class TestGetIntervals:

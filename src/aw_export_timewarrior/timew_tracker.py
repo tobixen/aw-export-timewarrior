@@ -32,6 +32,7 @@ class TimewTracker(TimeTracker):
         grace_time: float | None = None,
         capture_commands: list | None = None,
         hide_output: bool = False,
+        cache_ttl: float | None = None,
     ) -> None:
         """Initialize TimeWarrior tracker.
 
@@ -39,13 +40,22 @@ class TimewTracker(TimeTracker):
             grace_time: Seconds to wait after timew commands (defaults to AW2TW_GRACE_TIME env var or 10)
             capture_commands: Optional list to capture commands for testing
             hide_output: If True, don't print "Running" messages
+            cache_ttl: Max age in seconds for the cached current-tracking state
+                before it's refetched, so a manual `timew start`/`timew stop` run
+                by the user in another terminal is eventually noticed even though
+                it doesn't go through `_run_timew` (defaults to AW2TW_CACHE_TTL env
+                var or 5)
         """
         if grace_time is None:
             grace_time = float(os.environ.get("AW2TW_GRACE_TIME", 10))
+        if cache_ttl is None:
+            cache_ttl = float(os.environ.get("AW2TW_CACHE_TTL", 5))
         self.grace_time = grace_time
+        self.cache_ttl = cache_ttl
         self.capture_commands = capture_commands
         self.hide_output = hide_output
         self._current_cache: dict[str, Any] | None = None
+        self._cache_time: float = 0.0
 
     def _run_timew(
         self, args: list[str], show_undo_message: bool = True
@@ -103,7 +113,8 @@ class TimewTracker(TimeTracker):
                 - 'tags': Set of tags
             Or None if nothing is being tracked
         """
-        if self._current_cache:
+        now = time.monotonic()
+        if self._current_cache is not None and (now - self._cache_time) < self.cache_ttl:
             return self._current_cache
 
         try:
@@ -125,6 +136,7 @@ class TimewTracker(TimeTracker):
             }
 
             self._current_cache = tracking
+            self._cache_time = now
             return tracking
 
         except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
@@ -149,11 +161,23 @@ class TimewTracker(TimeTracker):
     def retag(self, tags: set[str]) -> None:
         """Retag current TimeWarrior interval.
 
+        `timew tag` only adds tags and `timew untag` only removes them - neither
+        replaces the tag set - so this diffs against the currently tracked tags
+        and issues both commands as needed to converge on the requested set.
+
         Args:
             tags: New tags to apply (replaces all existing tags)
         """
-        args = ["tag", "@1"] + sorted(tags)
-        self._run_timew(args)
+        current = self.get_current_tracking()
+        current_tags = current["tags"] if current else set()
+
+        to_remove = current_tags - tags
+        to_add = tags - current_tags
+
+        if to_remove:
+            self._run_timew(["untag", "@1"] + sorted(to_remove), show_undo_message=not to_add)
+        if to_add:
+            self._run_timew(["tag", "@1"] + sorted(to_add))
 
     def get_intervals(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
         """Get TimeWarrior intervals in time range.

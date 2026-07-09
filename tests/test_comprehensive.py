@@ -479,6 +479,46 @@ class TestExporterCheckAndHandleAfkStateChange:
         # Accumulator should be reset
         assert len(exporter.state.stats.tags_accumulated_time) == 0
 
+    def test_afk_with_no_active_timew_tracking_does_not_crash(self, mock_aw_client: Mock) -> None:
+        """timew_info is None (e.g. after `timew stop`) while internal state is AFK.
+
+        Regression test for main.py:1044 None-deref crash (CODE_REVIEW_2026-07.md #1).
+        """
+
+        exporter = Exporter()
+        exporter.state.set_afk_state(AfkState.AFK)
+        exporter.timew_info = None
+        exporter.state.last_start_time = datetime.now(UTC) - timedelta(minutes=10)
+
+        tags = {"not-afk"}
+        event = {"timestamp": datetime.now(UTC), "duration": timedelta(seconds=1)}
+
+        # Should not raise TypeError: 'NoneType' object is not subscriptable
+        exporter.check_and_handle_afk_state_change(tags, event)
+
+
+class TestExporterSetTimewInfoManualDetection:
+    """Tests for the manual-`timew start` detection path in set_timew_info."""
+
+    def test_manual_start_resets_known_events_time_accumulator(self, mock_aw_client: Mock) -> None:
+        """Regression test for CODE_REVIEW_2026-07.md #4.
+
+        When set_timew_info notices timew was started manually (start_dt moved
+        past last_known_tick), it advances last_known_tick but previously left
+        known_events_time untouched. That breaks the known_events_time <=
+        tracked_gap invariant checked in ensure_tag_exported on the next export.
+        """
+        exporter = Exporter()
+        earlier = datetime.now(UTC) - timedelta(minutes=10)
+        exporter.state.last_known_tick = earlier
+        exporter.state.stats.known_events_time = timedelta(seconds=120)
+
+        manual_start = datetime.now(UTC)
+        exporter.set_timew_info({"start_dt": manual_start, "tags": {"manual", "override"}})
+
+        assert exporter.state.last_known_tick == manual_start
+        assert exporter.state.stats.known_events_time == timedelta(0)
+
 
 class TestExporterPrettyAccumulatorString:
     """Tests for pretty_accumulator_string method."""
