@@ -888,7 +888,10 @@ def generate_activity_report(
     # Print summary to stderr (skip for JSON/NDJSON formats to keep output clean)
     if format not in ("json", "ndjson"):
         event_count = sum(1 for row in data if row.get("row_type", "event") == "event")
-        export_count = sum(1 for row in data if row.get("row_type") == "export")
+        # interleave_exports emits one "export_start" row per export (plus
+        # "export_decision"/"export_end" rows for the same export), so count
+        # "export_start" rather than the never-produced bare "export".
+        export_count = sum(1 for row in data if row.get("row_type") == "export_start")
         print(f"\nTotal events: {event_count}", file=sys.stderr)
         if show_exports and export_count > 0:
             print(f"Total exports: {export_count}", file=sys.stderr)

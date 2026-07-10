@@ -355,3 +355,56 @@ class TestExportFormatting:
         result = format_accumulator({})
 
         assert result in ("-", "{}", "empty", "")
+
+
+class TestGenerateActivityReportSummary:
+    """Tests for the 'Total exports' summary line in generate_activity_report.
+
+    Regression test: interleave_exports only ever produces rows tagged
+    'export_start' / 'export_decision' / 'export_end' (never a bare
+    'export'), but the summary counted row_type == 'export', so it was
+    always 0 and "Total exports: N" never printed.
+    """
+
+    def test_total_exports_line_counts_export_start_rows(self, capsys) -> None:
+        from unittest.mock import Mock, patch
+
+        from src.aw_export_timewarrior.report import generate_activity_report
+        from src.aw_export_timewarrior.state import ExportRecord
+
+        events = [
+            {
+                "timestamp": datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC),
+                "duration": timedelta(minutes=5),
+                "window_title": "Test Window",
+                "app": "chromium",
+                "specialized_type": "browser",
+                "specialized_data": "https://example.com",
+                "afk_status": "not-afk",
+                "tags": {"work"},
+                "row_type": "event",
+            }
+        ]
+        export_record = ExportRecord(
+            timestamp=datetime(2025, 12, 11, 9, 2, 30, tzinfo=UTC),
+            duration=timedelta(minutes=2, seconds=30),
+            tags={"work"},
+            accumulator_before={"work": timedelta(minutes=2, seconds=30)},
+            accumulator_after={"work": timedelta(minutes=1, seconds=15)},
+        )
+
+        exporter = Mock()
+        exporter.start_time = datetime(2025, 12, 11, 9, 0, 0, tzinfo=UTC)
+        exporter.end_time = datetime(2025, 12, 11, 9, 5, 0, tzinfo=UTC)
+        exporter.state.get_exports_in_range.return_value = [export_record]
+
+        with patch("src.aw_export_timewarrior.report.collect_report_data", return_value=events):
+            generate_activity_report(
+                exporter=exporter,
+                format="table",
+                show_exports=True,
+            )
+
+        stderr = capsys.readouterr().err
+
+        assert "Total exports: 1" in stderr
