@@ -207,3 +207,55 @@ def test_window_events_in_countdown_excluded_from_ask_away_period():
     # Secondary assertion: terminal activity AFTER user returns (T=600+) is tracked
     terminal_after_return = [cmd for cmd in all_cmds_str if "terminal" in cmd]
     assert len(terminal_after_return) >= 1, "Expected terminal activity after user returned"
+
+
+def test_afk_event_in_pipeline_output_reflects_extended_span():
+    """The AFK event fetch_and_prepare_events() returns must be the extended one.
+
+    Regression test (CODE_REVIEW_2026-07.md #8, event_pipeline.py): in
+    fetch_and_prepare_events, `afk_window_events = window_events +
+    merged_afk_events` was built BEFORE `merged_afk_events` got reassigned to
+    the ask-away-extended version. `_split_window_events_by_afk` then used
+    the extended events only to decide where to cut window events, but
+    re-added the OLD (unextended, shorter) AFK events into its result. This
+    left a gap in the returned event stream between the extended start and
+    the original start: window events there were correctly removed by the
+    split, but nothing (afk or otherwise) covers that span, so TimeWarrior
+    just keeps tracking whatever tag was active before the gap until the
+    next (still unextended) AFK event arrives -- instead of switching to
+    afk/ask-away tags at the true (extended) start.
+    """
+    start = datetime(2025, 3, 26, 10, 0, 0, tzinfo=UTC)
+
+    builder = FixtureDataBuilder(start_time=start)
+    builder.add_afk_event("not-afk", 120, timestamp=start)
+    builder.add_window_event("foot", "bash", 300, timestamp=start)
+    builder.add_afk_event("afk", 300, timestamp=start + timedelta(seconds=300))
+    builder.add_ask_away_event("reading", 600, timestamp=start)
+    builder.add_afk_event("not-afk", 300, timestamp=start + timedelta(seconds=600))
+    builder.add_window_event("foot", "bash", 300, timestamp=start + timedelta(seconds=600))
+
+    test_data = builder.build()
+
+    from aw_export_timewarrior.main import Exporter
+
+    exporter = Exporter(
+        dry_run=True,
+        test_data=test_data,
+        start_time=start,
+        end_time=start + timedelta(seconds=900),
+        config={"exclusive": {}, "tags": {}, "terminal_apps": ["foot"]},
+    )
+
+    completed_events, current_event = exporter._pipeline.fetch_and_prepare_events()
+    all_events = completed_events + ([current_event] if current_event else [])
+
+    afk_events = [e for e in all_events if e["data"].get("status") == "afk"]
+    assert afk_events, "expected at least one afk-status event in the pipeline output"
+
+    afk_start = min(e["timestamp"] for e in afk_events)
+    assert afk_start <= start, (
+        f"AFK event in pipeline output starts at {afk_start}, but the ask-away "
+        f"event starts at {start} -- the AFK event should be extended back to "
+        "cover the countdown gap, not left at its original (shorter) span."
+    )

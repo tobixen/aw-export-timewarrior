@@ -146,6 +146,19 @@ class EventPipeline:
         else:
             self._ask_away_events = []
 
+        # Extend AFK events back to ask-away start before building the combined
+        # stream, so that (a) window heartbeats during the idle-timeout
+        # countdown are removed correctly by the split below, and (b) the AFK
+        # events re-added to the stream by that same split already reflect the
+        # extended span. Extending only *after* building afk_window_events
+        # would split window events against the extended boundary but re-add
+        # the original (shorter) AFK events, leaving the countdown gap
+        # uncovered by any event.
+        if self._ask_away_events:
+            merged_afk_events = self._extend_afk_events_to_ask_away_start(
+                merged_afk_events, self._ask_away_events
+            )
+
         # Fetch window events and merge with AFK events
         window_events = self.event_fetcher.get_events(
             window_id, start=self.last_tick, end=self.end_time
@@ -159,13 +172,6 @@ class EventPipeline:
 
         # Sort by timestamp
         afk_window_events.sort(key=lambda e: normalize_timestamp(e["timestamp"]))
-
-        # Extend AFK events back to ask-away start before splitting, so that
-        # window heartbeats during the idle-timeout countdown are removed correctly.
-        if self._ask_away_events:
-            merged_afk_events = self._extend_afk_events_to_ask_away_start(
-                merged_afk_events, self._ask_away_events
-            )
 
         # Split window events that overlap with AFK periods
         afk_window_events = self._split_window_events_by_afk(afk_window_events, merged_afk_events)
