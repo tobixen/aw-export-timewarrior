@@ -41,7 +41,7 @@ class EventPipelineConfig:
         return cls(
             enable_afk_gap_workaround=config.get("enable_afk_gap_workaround", True),
             enable_lid_events=config.get("enable_lid_events", True),
-            min_lid_duration=config.get("min_lid_duration", 10.0),
+            min_lid_duration=config.get("tuning", {}).get("min_lid_duration", 10.0),
             min_recording_interval=config.get("tuning", {}).get("min_recording_interval", 90.0),
             max_mixed_interval=config.get("tuning", {}).get("max_mixed_interval", 240.0),
         )
