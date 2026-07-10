@@ -1,7 +1,6 @@
 """Integration tests for the export workflow and timewarrior interaction."""
 
 import logging
-import shutil
 import subprocess
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
@@ -15,12 +14,6 @@ from aw_export_timewarrior.main import (
     timew_run,
 )
 from aw_export_timewarrior.state import AfkState
-
-# Helper to skip tests that require timew
-requires_timew = pytest.mark.skipif(
-    shutil.which("timew") is None,
-    reason="TimeWarrior (timew) is not installed",
-)
 
 
 def create_aw_event(timestamp, duration, data):
@@ -249,15 +242,17 @@ class TestEnsureTagExported:
         assert "programming" in tags_arg
         assert "~aw" in tags_arg
 
-    @requires_timew
     @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
-    @patch("aw_export_timewarrior.main.timew_run")
-    @patch("aw_export_timewarrior.main.get_timew_info")
-    @patch("aw_export_timewarrior.main.timew_retag")
-    def test_ensure_tag_exported_skips_if_override(
-        self, mock_retag: Mock, mock_get_info: Mock, mock_timew_run: Mock, mock_aw_client: Mock
-    ) -> None:
-        """Test that ensure_tag_exported skips when 'override' tag is present."""
+    def test_ensure_tag_exported_skips_if_override(self, mock_aw_client: Mock) -> None:
+        """Test that ensure_tag_exported skips when 'override' tag is present.
+
+        Mocks exporter.tracker directly (the real code path used by
+        ensure_tag_exported / retag_current_interval) rather than the
+        legacy main.timew_run/get_timew_info/timew_retag module functions,
+        which that code path doesn't call any more -- patching those was a
+        no-op that happened to also require a real (unmocked) `timew`
+        binary via exporter.tracker.
+        """
         exporter = Exporter()
         exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
         exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
@@ -269,7 +264,9 @@ class TestEnsureTagExported:
             "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             "tags": {"4work", "override"},  # Has override tag
         }
-        mock_retag.return_value = mock_timew_info
+        exporter.tracker.get_current_tracking = Mock(return_value=mock_timew_info)
+        exporter.tracker.start_tracking = Mock()
+        exporter.tracker.retag = Mock()
 
         event = {
             "timestamp": datetime(2025, 5, 28, 14, 2, 0, tzinfo=UTC),
@@ -279,18 +276,16 @@ class TestEnsureTagExported:
         tags = {"4break", "tea"}
         exporter.ensure_tag_exported(tags, event)
 
-        # Should not have called timew_run because of override
-        mock_timew_run.assert_not_called()
+        # Should not have started new tracking because of override
+        exporter.tracker.start_tracking.assert_not_called()
 
-    @requires_timew
     @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
-    @patch("aw_export_timewarrior.main.timew_run")
-    @patch("aw_export_timewarrior.main.get_timew_info")
-    @patch("aw_export_timewarrior.main.timew_retag")
-    def test_ensure_tag_exported_skips_if_tags_subset(
-        self, mock_retag: Mock, mock_get_info: Mock, mock_timew_run: Mock, mock_aw_client: Mock
-    ) -> None:
-        """Test that ensure_tag_exported skips when tags are already tracked."""
+    def test_ensure_tag_exported_skips_if_tags_subset(self, mock_aw_client: Mock) -> None:
+        """Test that ensure_tag_exported skips when tags are already tracked.
+
+        See test_ensure_tag_exported_skips_if_override for why this mocks
+        exporter.tracker directly instead of the unused legacy functions.
+        """
         exporter = Exporter()
         exporter.state.last_known_tick = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
         exporter.state.last_start_time = datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC)
@@ -302,7 +297,9 @@ class TestEnsureTagExported:
             "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             "tags": {"4work", "programming", "python"},
         }
-        mock_retag.return_value = mock_timew_info
+        exporter.tracker.get_current_tracking = Mock(return_value=mock_timew_info)
+        exporter.tracker.start_tracking = Mock()
+        exporter.tracker.retag = Mock()
 
         event = {
             "timestamp": datetime(2025, 5, 28, 14, 2, 0, tzinfo=UTC),
@@ -313,8 +310,8 @@ class TestEnsureTagExported:
         tags = {"4work", "programming"}
         exporter.ensure_tag_exported(tags, event)
 
-        # Should not have called timew_run because tags are already tracked
-        mock_timew_run.assert_not_called()
+        # Should not have started new tracking because tags are already tracked
+        exporter.tracker.start_tracking.assert_not_called()
 
 
 class TestExporterTick:
@@ -347,13 +344,13 @@ class TestExporterTick:
         assert exporter.state.last_tick == timew_info["start_dt"]
         assert exporter.state.last_known_tick == timew_info["start_dt"]
 
-    @requires_timew
-    @patch("aw_export_timewarrior.main.get_timew_info")
-    @patch("aw_export_timewarrior.main.timew_retag")
-    def test_tick_sleeps_when_no_events(
-        self, mock_retag: Mock, mock_get_info: Mock, mock_aw_client: Mock
-    ) -> None:
-        """Test that tick sleeps when no events are found."""
+    def test_tick_sleeps_when_no_events(self, mock_aw_client: Mock) -> None:
+        """Test that tick sleeps when no events are found.
+
+        Mocks exporter.retag_current_interval directly rather than the
+        unused legacy main.get_timew_info/timew_retag module functions, same
+        as test_tick_initializes_last_tick_from_timew above.
+        """
         import tests.conftest
 
         exporter = Exporter()
@@ -365,8 +362,8 @@ class TestExporterTick:
             "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
             "tags": {"4work"},
         }
-        mock_retag.return_value = timew_info
-        mock_get_info.return_value = timew_info
+        exporter.tracker.get_current_tracking = Mock(return_value=timew_info)
+        exporter.retag_current_interval = Mock(return_value=timew_info)
 
         # Mock find_next_activity to return False (no events)
         exporter.find_next_activity = Mock(return_value=False)

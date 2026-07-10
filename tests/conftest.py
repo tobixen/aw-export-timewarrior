@@ -5,6 +5,10 @@ This module provides a builder pattern for creating test scenarios
 and fixtures for aw-export-timewarrior.
 """
 
+import os
+import shutil
+import subprocess
+import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -12,6 +16,103 @@ from typing import Any
 import pytest
 
 sleep_counter = 0
+
+# Guard state for _guard_real_timew / timew_sandbox (see below). Only the
+# `timew_sandbox` fixture may set this True, and only for its own duration.
+_real_timew_calls_allowed = False
+
+
+def _is_timew_command(cmd: Any) -> bool:
+    return isinstance(cmd, (list, tuple)) and len(cmd) > 0 and cmd[0] == "timew"
+
+
+def _timew_env_is_isolated() -> bool:
+    """True if TIMEWARRIORDB or XDG_DATA_HOME points under the system temp dir.
+
+    Some pre-existing functional tests (test_functional.py,
+    test_functional_timew.py) isolate real timew calls this way already,
+    via pytest's tmp_path or tempfile.mkdtemp(), predating the
+    `timew_sandbox` fixture below -- recognize that pattern too rather than
+    requiring every real-timew test to switch to `timew_sandbox`.
+    """
+    tmp_root = os.path.realpath(tempfile.gettempdir())
+    for var in ("TIMEWARRIORDB", "XDG_DATA_HOME"):
+        value = os.environ.get(var)
+        if not value:
+            continue
+        real_value = os.path.realpath(value)
+        if real_value == tmp_root or real_value.startswith(tmp_root + os.sep):
+            return True
+    return False
+
+
+@pytest.fixture(autouse=True)
+def _guard_real_timew(monkeypatch):
+    """Fail hard on any unmocked subprocess call to the real 'timew' binary.
+
+    Every current use of subprocess.run/check_output in this codebase is a
+    timew invocation, so a call that reaches here means a test forgot to
+    mock subprocess -- without this guard it would silently execute against
+    the developer's real, live TimeWarrior database instead of failing the
+    test. Tests that genuinely need real TimeWarrior must use the
+    `timew_sandbox` fixture (or point TIMEWARRIORDB/XDG_DATA_HOME at a temp
+    dir themselves), which lifts this guard for their duration.
+    """
+    real_run = subprocess.run
+    real_check_output = subprocess.check_output
+
+    def is_blocked(cmd) -> bool:
+        return (
+            not _real_timew_calls_allowed
+            and not _timew_env_is_isolated()
+            and _is_timew_command(cmd)
+        )
+
+    def guarded_run(cmd, *args, **kwargs):
+        if is_blocked(cmd):
+            raise RuntimeError(
+                f"Blocked unmocked real 'timew' subprocess call: {cmd}. Mock "
+                "subprocess.run, or use the `timew_sandbox` fixture for a "
+                "real, isolated integration test."
+            )
+        return real_run(cmd, *args, **kwargs)
+
+    def guarded_check_output(cmd, *args, **kwargs):
+        if is_blocked(cmd):
+            raise RuntimeError(
+                f"Blocked unmocked real 'timew' subprocess call: {cmd}. Mock "
+                "subprocess.check_output, or use the `timew_sandbox` fixture "
+                "for a real, isolated integration test."
+            )
+        return real_check_output(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", guarded_run)
+    monkeypatch.setattr(subprocess, "check_output", guarded_check_output)
+
+
+@pytest.fixture
+def timew_sandbox(_guard_real_timew, monkeypatch):
+    """Provide a real, isolated TimeWarrior database for integration tests.
+
+    Points TIMEWARRIORDB at a fresh temp directory (auto-initialized by
+    timew on first use, no interactive prompts) and lifts the
+    `_guard_real_timew` safety net for the test's duration, so the test
+    exercises the real `timew` binary without ever touching the developer's
+    actual tracking data.
+    """
+    if shutil.which("timew") is None:
+        pytest.skip("TimeWarrior (timew) is not installed")
+
+    global _real_timew_calls_allowed
+
+    tmp_db = tempfile.mkdtemp(prefix="aw-export-timew-test-")
+    monkeypatch.setenv("TIMEWARRIORDB", tmp_db)
+
+    _real_timew_calls_allowed = True
+    try:
+        yield tmp_db
+    finally:
+        _real_timew_calls_allowed = False
 
 
 @pytest.fixture(autouse=True)  # Applies to all tests automatically
