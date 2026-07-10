@@ -111,30 +111,23 @@ class TestSyncWithRealDataHS:
         print(f"  Missing: {len(comparison['missing'])}")
         print(f"  Extra: {len(comparison['extra'])}")
 
-        # Verify the sync created at least one interval in TimeWarrior
-        # Note: sync mode creates ONE active interval that gets updated as activity changes,
-        # rather than multiple completed intervals. Intervals with ~aw tag will be marked as
-        # "previously_synced" when running diff on the same time range.
-
-        total_in_timew = (
-            len(comparison["matching"])
-            + len(comparison["different_tags"])
-            + len(comparison["extra"])
-            + len(comparison.get("previously_synced", []))
+        # Verify the sync created at least one interval in TimeWarrior.
+        # Note: sync mode creates ONE active (ongoing, end=None) interval that gets
+        # updated as activity changes, rather than multiple completed intervals.
+        # Since diff runs on the same time range with the same data, the ongoing
+        # interval overlaps the suggestion with identical tags and must be
+        # classified as "matching" — and nothing should be missing or extra.
+        assert len(comparison["matching"]) > 0, (
+            "Expected the synced (ongoing) interval to match the suggestion"
         )
-        assert total_in_timew > 0, "Expected at least one interval to be in TimeWarrior after sync"
-
-        # The key assertion: sync should have created at least one interval
-        # It will show as "previously_synced" (has ~aw tag from the sync)
-        assert len(comparison.get("previously_synced", [])) > 0, (
-            "Expected at least one synced interval in TimeWarrior (shown as 'previously_synced')"
-        )
+        assert comparison["missing"] == [], "Sync then diff on same data should leave no gaps"
+        assert comparison["extra"] == [], "Sync should not produce unexplained timew intervals"
+        assert comparison["different_tags"] == [], "Sync then diff should agree on tags"
 
         # Success: The test demonstrates that:
         # 1. Sync successfully processed the sample data
-        # 2. Created at least one active interval in TimeWarrior
-        # 3. Diff successfully compared TimeWarrior with the suggestions
-        # 4. The comparison logic is working (detecting extra/missing/matching)
+        # 2. Created an active interval in TimeWarrior
+        # 3. Diff sees the ongoing interval and reports no differences
 
     def test_diff_apply_convergence_with_rich_data(self, test_env) -> None:
         """Test that diff --apply converges and doesn't create an infinite loop.
