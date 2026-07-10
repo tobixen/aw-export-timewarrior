@@ -184,6 +184,30 @@ class TestCreateExporterFromArgs:
         # Exporter field is 'apply_fix', not 'apply'
         assert exporter.apply_fix is True
 
+    def test_arg_mapping_hide_report_to_hide_diff_report(self) -> None:
+        """Test that 'hide_report' arg maps to 'hide_diff_report' field.
+
+        Regression test: --hide-report's argparse dest defaults to
+        'hide_report', but the Exporter field is 'hide_diff_report', so
+        without an explicit mapping entry the flag was silently dropped.
+        """
+        args = argparse.Namespace(
+            hide_report=True,  # CLI arg is 'hide_report' (from --hide-report)
+            config=None,
+            enable_pdb=False,
+            enable_assert=False,
+            start=None,
+            end=None,
+            test_data={"buckets": {}},  # Provide test data
+            subcommand="diff",
+        )
+
+        with patch("aw_export_timewarrior.cli._handle_start_stop_testdata_from_args"):
+            exporter = create_exporter_from_args(args, "diff")
+
+        # Exporter field is 'hide_diff_report', not 'hide_report'
+        assert exporter.hide_diff_report is True
+
     def test_overrides_take_precedence(self) -> None:
         """Test that explicit overrides take precedence over args."""
         args = argparse.Namespace(

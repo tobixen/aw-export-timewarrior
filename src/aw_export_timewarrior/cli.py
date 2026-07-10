@@ -37,7 +37,12 @@ def create_exporter_from_args(args: argparse.Namespace, method: str, **overrides
     # Build kwargs from args
     kwargs = {}
 
-    arg_mapping = {"timeline": "show_timeline", "config": "config_path", "apply": "apply_fix"}
+    arg_mapping = {
+        "timeline": "show_timeline",
+        "config": "config_path",
+        "apply": "apply_fix",
+        "hide_report": "hide_diff_report",
+    }
 
     exporter_field_names = {f.name for f in fields(Exporter)}
 
