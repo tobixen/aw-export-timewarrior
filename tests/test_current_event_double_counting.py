@@ -98,6 +98,67 @@ class TestCurrentEventDoubleCountingFix:
             assert exporter.state.current_event_timestamp is None
             assert exporter.state.current_event_processed_duration == timedelta(0)
 
+    def test_current_event_clipped_to_last_known_tick(self) -> None:
+        """An ongoing event that started before last_known_tick must be clipped.
+
+        Regression test: find_next_activity's clipping fix (see
+        tests/test_known_events_time_clipping.py) only applies to
+        `completed_events`, not to the current/ongoing event processed by
+        `_process_current_event_incrementally`. A window event spanning an
+        AFK export boundary (started before last_known_tick, still ongoing)
+        had its FULL duration added to known_events_time, violating
+        known_events_time <= tracked_gap -- the same invariant the
+        completed-events clip protects.
+        """
+        from aw_export_timewarrior.main import Exporter
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            current_time = datetime.now(UTC).isoformat()
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {
+                "aw-watcher-window_test": {
+                    "id": "aw-watcher-window_test",
+                    "client": "aw-watcher-window",
+                    "last_updated": current_time,
+                },
+                "aw-watcher-afk_test": {
+                    "id": "aw-watcher-afk_test",
+                    "client": "aw-watcher-afk",
+                    "last_updated": current_time,
+                },
+            }
+            mock_aw_class.return_value = mock_client
+
+            exporter = Exporter(dry_run=True)
+
+            last_known_tick = datetime(2025, 12, 21, 9, 50, 0, tzinfo=UTC)
+            exporter.state.last_known_tick = last_known_tick
+            exporter.state.last_start_time = last_known_tick
+
+            # Ongoing window event that started 10 minutes before
+            # last_known_tick and is still running 2 minutes past it --
+            # mirrors the completed-event scenario in
+            # test_known_events_time_clipping.py, but for the current event.
+            event_start = last_known_tick - timedelta(minutes=10)
+            current_event = {
+                "timestamp": event_start,
+                "duration": timedelta(minutes=12),
+                "data": {"app": "MPlayer", "title": "MPlayer"},
+            }
+
+            exporter._process_current_event_incrementally(current_event)
+
+            tracked_gap = (
+                current_event["timestamp"]
+                + current_event["duration"]
+                - exporter.state.last_known_tick
+            )
+            assert exporter.state.stats.known_events_time <= tracked_gap, (
+                f"known_events_time ({exporter.state.stats.known_events_time}) exceeds "
+                f"tracked_gap ({tracked_gap}) -- the ongoing event's pre-last_known_tick "
+                "portion was not clipped."
+            )
+
     def test_completed_event_no_match_adds_full_duration(self) -> None:
         """Test that completed events NOT matching current_event_timestamp add full duration.
 

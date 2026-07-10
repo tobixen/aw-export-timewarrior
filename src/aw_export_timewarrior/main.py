@@ -1190,6 +1190,36 @@ class Exporter:
 
         return TagResult(result=EventMatchResult.MATCHED, tags=tags)
 
+    def _clip_to_last_known_tick(self, event):
+        """Clip a non-AFK event to start no earlier than last_known_tick.
+
+        In batch/diff mode (and for the ongoing "current" event in live sync)
+        the pipeline can return a window event that started before
+        last_known_tick but ends after it -- e.g. when the AFK heartbeat that
+        should have split it is too short to pass the max_mixed_interval
+        filter on a later pipeline call. Downstream duration accounting
+        (known_events_time, tag accumulation) must only count the portion
+        within the current tracking interval, or it violates the
+        known_events_time <= tracked_gap invariant.
+
+        Returns the clipped event (a new dict; the input is not mutated), or
+        None if the event ends at or before last_known_tick (nothing new to
+        process). AFK events and events already starting at/after
+        last_known_tick are returned unchanged.
+        """
+        if "status" in event["data"] or self.state.last_known_tick is None:
+            return event
+        if event["timestamp"] >= self.state.last_known_tick:
+            return event
+        event_end = event["timestamp"] + event["duration"]
+        if event_end <= self.state.last_known_tick:
+            return None
+        return {
+            **event,
+            "timestamp": self.state.last_known_tick,
+            "duration": event_end - self.state.last_known_tick,
+        }
+
     def _process_current_event_incrementally(self, event):
         """
         Process the current ongoing event in an idempotent way.
@@ -1204,6 +1234,18 @@ class Exporter:
         Args:
             event: The current ongoing event from ActivityWatch
         """
+        # Clip like completed events are in find_next_activity: an ongoing
+        # event can equally start before last_known_tick (e.g. it spans an
+        # AFK export boundary), and clipping here keeps the timestamp used
+        # for the current_event_timestamp dedup key consistent with what the
+        # completed_events loop will clip it to once this event finishes and
+        # reappears there.
+        clipped_event = self._clip_to_last_known_tick(event)
+        if clipped_event is None:
+            # Entirely before last_known_tick — nothing new to process
+            return
+        event = clipped_event
+
         event_start = event["timestamp"]
         current_duration = event["duration"]
 
@@ -1513,27 +1555,17 @@ class Exporter:
 
             # In batch/diff mode the pipeline returns events that overlap with
             # last_tick — including window events that STARTED before
-            # last_known_tick but end after it (e.g. when the AFK heartbeat
-            # that was used to split them is too short to pass the
-            # max_mixed_interval filter on the next pipeline call).
-            # Clip such events so every downstream calculation (known_events_time,
-            # tag accumulation, long-event export, export `since` timestamp) only
-            # counts the portion that falls within the current tracking interval.
-            if (
-                "status" not in event["data"]  # window events only, not AFK
-                and self.state.last_known_tick is not None
-                and event["timestamp"] < self.state.last_known_tick
-            ):
-                clipped_end = event["timestamp"] + event["duration"]
-                if clipped_end <= self.state.last_known_tick:
-                    # Entirely before last_known_tick — nothing new to process
-                    continue
-                event = {
-                    **event,
-                    "timestamp": self.state.last_known_tick,
-                    "duration": clipped_end - self.state.last_known_tick,
-                }
-                event_end = clipped_end  # already computed above
+            # last_known_tick but end after it. Clip such events so every
+            # downstream calculation (known_events_time, tag accumulation,
+            # long-event export, export `since` timestamp) only counts the
+            # portion that falls within the current tracking interval.
+            clipped_event = self._clip_to_last_known_tick(event)
+            if clipped_event is None:
+                # Entirely before last_known_tick — nothing new to process
+                continue
+            event = clipped_event
+            # event_end is the event's true end and is unaffected by clipping
+            # (only the start moves forward), already computed above
 
             tag_result = self.find_tags_from_event(event)
 
