@@ -620,6 +620,30 @@ class Exporter:
                         seconds=self.stickyness_factor * self.min_recording_interval
                     )
 
+    def _overlapping_ask_away_events(self, event: dict, exclude_exported: bool = False) -> list:
+        """Ask-away events from self._ask_away_events overlapping event's time range.
+
+        Returns [] if there are no ask-away events for this tick at all.
+
+        Args:
+            event: The event whose [timestamp, timestamp+duration) range to check
+            exclude_exported: If True, skip ask-away events already recorded in
+                self._exported_ask_away_timestamps (used by the "already AFK"
+                path in find_next_activity to avoid re-exporting).
+        """
+        if not getattr(self, "_ask_away_events", None):
+            return []
+
+        event_start = event["timestamp"]
+        event_end = event_start + event["duration"]
+        return [
+            ask
+            for ask in self._ask_away_events
+            if ask["timestamp"] < event_end
+            and ask["timestamp"] + ask["duration"] > event_start
+            and (not exclude_exported or ask["timestamp"] not in self._exported_ask_away_timestamps)
+        ]
+
     ## TODO: move all dealings with statistics to explicit statistics-handling methods
     def ensure_tag_exported(self, tags, event, since=None, accumulator_before=None):
         if since is None:
@@ -738,16 +762,8 @@ class Exporter:
         # This must happen BEFORE the final_tags comparison below, so that
         # ask-away tags are included in the comparison
         ask_away_tags = set()
-        if "afk" in tags and hasattr(self, "_ask_away_events") and self._ask_away_events:
-            event_start = event["timestamp"]
-            event_end = event_start + event["duration"]
-            overlapping_events = []
-
-            for ask_event in self._ask_away_events:
-                ask_start = ask_event["timestamp"]
-                ask_end = ask_start + ask_event["duration"]
-                if ask_start < event_end and ask_end > event_start:
-                    overlapping_events.append(ask_event)
+        if "afk" in tags:
+            overlapping_events = self._overlapping_ask_away_events(event)
 
             if overlapping_events:
                 # Check if first event has split metadata
@@ -799,18 +815,10 @@ class Exporter:
         # their own intervals — the split handler below must run even when final_tags
         # happens to equal timew_info["tags"] (e.g. both are {afk, ~aw}).
         has_overlapping_split_events = False
-        if "afk" in tags and hasattr(self, "_ask_away_events") and self._ask_away_events:
-            ev_start = event["timestamp"]
-            ev_end = ev_start + event["duration"]
-            for _ask in self._ask_away_events:
-                _ask_start = _ask["timestamp"]
-                if (
-                    _ask["data"].get("split")
-                    and _ask_start < ev_end
-                    and _ask_start + _ask["duration"] > ev_start
-                ):
-                    has_overlapping_split_events = True
-                    break
+        if "afk" in tags:
+            has_overlapping_split_events = any(
+                ask["data"].get("split") for ask in self._overlapping_ask_away_events(event)
+            )
 
         if (
             self.timew_info is not None
@@ -821,16 +829,8 @@ class Exporter:
 
         # Handle split ask-away events (these need special processing with multiple intervals)
         # Non-split ask-away events are already handled above via ask_away_tags
-        if "afk" in tags and hasattr(self, "_ask_away_events") and self._ask_away_events:
-            event_start = event["timestamp"]
-            event_end = event_start + event["duration"]
-            overlapping_events = []
-
-            for ask_event in self._ask_away_events:
-                ask_start = ask_event["timestamp"]
-                ask_end = ask_start + ask_event["duration"]
-                if ask_start < event_end and ask_end > event_start:
-                    overlapping_events.append(ask_event)
+        if "afk" in tags:
+            overlapping_events = self._overlapping_ask_away_events(event)
 
             if overlapping_events:
                 first_event = overlapping_events[0]
@@ -1592,20 +1592,10 @@ class Exporter:
                     # overlapping ask-away events not yet exported.  The ACTIVE→AFK
                     # path (was_afk_before=False) is already handled inside
                     # check_and_handle_afk_state_change — calling again would double-export.
-                    if (
-                        was_afk_before
-                        and hasattr(self, "_ask_away_events")
-                        and self._ask_away_events
-                    ):
-                        ev_start = event["timestamp"]
-                        ev_end = ev_start + event["duration"]
-                        new_overlapping = [
-                            ask
-                            for ask in self._ask_away_events
-                            if ask["timestamp"] < ev_end
-                            and ask["timestamp"] + ask["duration"] > ev_start
-                            and ask["timestamp"] not in self._exported_ask_away_timestamps
-                        ]
+                    if was_afk_before:
+                        new_overlapping = self._overlapping_ask_away_events(
+                            event, exclude_exported=True
+                        )
                         if new_overlapping:
                             self.ensure_tag_exported(tag_result.tags, event)
                             for ask in new_overlapping:

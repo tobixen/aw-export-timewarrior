@@ -2,12 +2,12 @@
 Comparison module for comparing TimeWarrior database with ActivityWatch suggestions.
 """
 
-import json
 import shlex
-import subprocess
 from datetime import UTC, datetime, timedelta
 
 from termcolor import colored
+
+from .timew_tracker import TimewTracker
 
 
 def _effective_end(interval) -> datetime:
@@ -61,7 +61,15 @@ class SuggestedInterval:
 
 def fetch_timew_intervals(start_time: datetime, end_time: datetime) -> list[TimewInterval]:
     """
-    Fetch intervals from TimeWarrior using `timew export`.
+    Fetch intervals from TimeWarrior in the given time range.
+
+    Delegates to TimewTracker.get_intervals -- "the ONLY place that knows
+    about TimeWarrior commands" -- and wraps the results as TimewInterval
+    objects for this module's comparison API. Previously this ran its own
+    `timew export <start> - <end>` call, which had drifted from
+    TimewTracker.get_intervals's bare-export-then-filter approach (the
+    latter exists specifically because the date-range CLI syntax varies by
+    timew version).
 
     Args:
         start_time: Start of time range
@@ -70,43 +78,11 @@ def fetch_timew_intervals(start_time: datetime, end_time: datetime) -> list[Time
     Returns:
         List of TimewInterval objects
     """
-    # Format times for timew export command (timew expects local time)
-    start_str = start_time.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
-    end_str = end_time.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
-
-    try:
-        result = subprocess.run(
-            ["timew", "export", f"{start_str}", "-", f"{end_str}"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-
-        data = json.loads(result.stdout)
-        intervals = []
-
-        for entry in data:
-            # Parse start time
-            start = datetime.strptime(entry["start"], "%Y%m%dT%H%M%SZ")
-            start = start.replace(tzinfo=UTC)
-
-            # Parse end time (may not exist for ongoing intervals)
-            end = None
-            if "end" in entry:
-                end = datetime.strptime(entry["end"], "%Y%m%dT%H%M%SZ")
-                end = end.replace(tzinfo=UTC)
-
-            # Parse tags
-            tags = set(entry.get("tags", []))
-
-            intervals.append(TimewInterval(id=entry.get("id", 0), start=start, end=end, tags=tags))
-
-        return intervals
-
-    except subprocess.CalledProcessError as e:
-        raise Exception(f"Failed to fetch timew data: {e.stderr}") from e
-    except json.JSONDecodeError as e:
-        raise Exception(f"Failed to parse timew export output: {e}") from e
+    tracker = TimewTracker()
+    return [
+        TimewInterval(id=entry["id"], start=entry["start"], end=entry["end"], tags=entry["tags"])
+        for entry in tracker.get_intervals(start_time, end_time)
+    ]
 
 
 def compare_intervals(

@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `report --min-duration SECONDS`: filter out events shorter than the given duration (e.g. `--min-duration 2` hides sub-2-second window flickers)
 
 ### Changed
+- `compare.py`'s `fetch_timew_intervals` now delegates to `TimewTracker.get_intervals` instead of running its own `timew export <start> - <end>` call, which had drifted from `TimewTracker`'s bare-export-then-filter approach (needed because the date-range CLI syntax varies by timew version).
+- Extracted the ask-away overlap check (repeated 4 times across `ensure_tag_exported` and `find_next_activity`) into one `_overlapping_ask_away_events()` helper.
 - Removed the legacy module-level `get_timew_info()`/`timew_run()`/`timew_retag()` functions from `main.py` (dead code duplicating `TimewTracker`, which the current `Exporter` flow already uses exclusively). `retag.py` (the bulk historical-retag script) now uses a new `TimewTracker.retag_interval_by_id()` method instead of calling `timew_run` directly, so it benefits from the same command-failure handling as the rest of the app. Also removed a redundant local `import subprocess` in `run_comparison`'s fix-apply loop (already imported at module top).
 
 ### Fixed
