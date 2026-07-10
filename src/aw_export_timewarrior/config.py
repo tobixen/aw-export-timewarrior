@@ -43,7 +43,8 @@ def expand_list_references(config: dict[str, Any]) -> dict[str, Any]:
     rules.*.*.{tags,timew_tags}, rules.app.*.app_names, exclusive.*.tags),
     @name is replaced by the list items inline.
     In regexp fields (url_regexp, title_regexp, path_regexp, etc.),
-    @name is replaced by a pipe-joined alternation of the list items.
+    @name is replaced by a non-capturing group '(?:item1|item2|...)'.
+    List items are not regex-escaped, so they may be regexp fragments.
     """
     all_lists: dict[str, list[str]] = {
         **config.get("app_groups", {}),
@@ -72,7 +73,10 @@ def expand_list_references(config: dict[str, Any]) -> dict[str, Any]:
             ref = m.group(1)
             if ref not in expanded_lists:
                 raise ListExpansionError(f"References unknown group/list '@{ref}'")
-            return "|".join(expanded_lists[ref])
+            # Non-capturing group so the alternation doesn't leak into
+            # surrounding atoms/anchors; items are deliberately not escaped
+            # so they may themselves be regexp fragments.
+            return "(?:" + "|".join(expanded_lists[ref]) + ")"
 
         return re.sub(r"@([A-Za-z_]\w*)", replace, pattern)
 

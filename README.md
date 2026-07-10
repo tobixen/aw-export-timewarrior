@@ -118,6 +118,26 @@ add = ["4WORK"]
 tags = ["afk", "not-afk"]
 ```
 
+### Reusable Lists
+
+A `[lists]` section defines named lists that can be referenced as `@name`
+elsewhere in the config. In list fields (`tags`, `app_names`, `source_tags`,
+etc.) the reference is replaced by the list items inline. In regexp fields
+(`url_regexp`, `title_regexp`, `path_regexp`, ...) it expands to a
+non-capturing alternation `(?:item1|item2|...)`; items are not regex-escaped,
+so they may themselves be regexp fragments. Lists may reference other lists.
+
+```toml
+[lists]
+customers = ["acme", "emca"]
+
+[rules.editor.customer-work]
+path_regexp = "^/home/user/(@customers)/"
+tags = ["4WORK", "$1"]
+```
+
+`[app_groups]` is an older alias for the same mechanism.
+
 ## Commands
 
 | Command | Description |

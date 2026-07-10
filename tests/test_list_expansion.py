@@ -1,5 +1,7 @@
 """Tests for general list expansion feature (lists section and @ref syntax)."""
 
+import re
+
 import pytest
 
 from aw_export_timewarrior.config import (
@@ -330,7 +332,7 @@ class TestRegexpExpansion:
             },
         }
         result = expand_list_references(config)
-        assert result["rules"]["app"]["cust"]["title_regexp"] == "(acme|emca)"
+        assert result["rules"]["app"]["cust"]["title_regexp"] == "((?:acme|emca))"
 
     def test_ref_in_url_regexp(self) -> None:
         config = {
@@ -345,7 +347,7 @@ class TestRegexpExpansion:
             },
         }
         result = expand_list_references(config)
-        assert result["rules"]["browser"]["cust"]["url_regexp"] == "^https://(acme|emca)\\.com/"
+        assert result["rules"]["browser"]["cust"]["url_regexp"] == "^https://((?:acme|emca))\\.com/"
 
     def test_ref_in_path_regexp(self) -> None:
         config = {
@@ -360,7 +362,7 @@ class TestRegexpExpansion:
             },
         }
         result = expand_list_references(config)
-        assert result["rules"]["editor"]["cust"]["path_regexp"] == "^/home/user/(acme|emca)/"
+        assert result["rules"]["editor"]["cust"]["path_regexp"] == "^/home/user/((?:acme|emca))/"
 
     def test_ref_in_project_regexp(self) -> None:
         config = {
@@ -375,7 +377,7 @@ class TestRegexpExpansion:
             },
         }
         result = expand_list_references(config)
-        assert result["rules"]["editor"]["cust"]["project_regexp"] == "acme|emca"
+        assert result["rules"]["editor"]["cust"]["project_regexp"] == "(?:acme|emca)"
 
     def test_ref_in_tmux_command(self) -> None:
         config = {
@@ -390,7 +392,7 @@ class TestRegexpExpansion:
             },
         }
         result = expand_list_references(config)
-        assert result["rules"]["tmux"]["editors"]["command"] == "(vim|nvim)"
+        assert result["rules"]["tmux"]["editors"]["command"] == "((?:vim|nvim))"
 
     def test_ref_in_tmux_path(self) -> None:
         config = {
@@ -405,7 +407,7 @@ class TestRegexpExpansion:
             },
         }
         result = expand_list_references(config)
-        assert result["rules"]["tmux"]["cust"]["path"] == "/home/user/(acme|emca)/"
+        assert result["rules"]["tmux"]["cust"]["path"] == "/home/user/((?:acme|emca))/"
 
     def test_multiple_refs_in_one_regexp(self) -> None:
         config = {
@@ -425,7 +427,7 @@ class TestRegexpExpansion:
         result = expand_list_references(config)
         assert (
             result["rules"]["browser"]["cust"]["url_regexp"]
-            == "^https://(acme|emca)-(prod|staging)\\.com/"
+            == "^https://((?:acme|emca))-((?:prod|staging))\\.com/"
         )
 
     def test_bare_ref_without_parens(self) -> None:
@@ -441,7 +443,52 @@ class TestRegexpExpansion:
             },
         }
         result = expand_list_references(config)
-        assert result["rules"]["editor"]["cust"]["path_regexp"] == "acme|emca"
+        assert result["rules"]["editor"]["cust"]["path_regexp"] == "(?:acme|emca)"
+
+    def test_bare_ref_does_not_break_anchors(self) -> None:
+        """A bare @ref next to other atoms must not leak alternation branches.
+
+        Without (?:...) grouping, '^@projects: (.*)' would expand to
+        '^foo|bar: (.*)' which matches 'unrelated bar: secret' despite the
+        anchor, and matches 'foo: x' without filling group 1.
+        """
+        config = {
+            "lists": {"projects": ["foo", "bar"]},
+            "rules": {
+                "app": {
+                    "proj": {
+                        "app_names": ["foot"],
+                        "title_regexp": "^@projects: (.*)",
+                        "tags": ["$1"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        pattern = result["rules"]["app"]["proj"]["title_regexp"]
+        assert re.search(pattern, "unrelated bar: secret") is None
+        match = re.search(pattern, "foo: x")
+        assert match is not None
+        assert match.group(1) == "x"
+
+    def test_explicit_parens_keep_capture_group_numbering(self) -> None:
+        """The conventional '(@ref)' usage still captures the matched item in group 1."""
+        config = {
+            "lists": {"customers": ["acme", "emca"]},
+            "rules": {
+                "app": {
+                    "cust": {
+                        "app_names": ["foot"],
+                        "title_regexp": "(@customers)",
+                        "tags": ["$1"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        match = re.search(result["rules"]["app"]["cust"]["title_regexp"], "working on emca now")
+        assert match is not None
+        assert match.group(1) == "emca"
 
     def test_unknown_ref_in_regexp_raises_error(self) -> None:
         config = {
@@ -475,7 +522,7 @@ class TestRegexpExpansion:
             },
         }
         result = expand_list_references(config)
-        assert result["rules"]["editor"]["proj"]["path_regexp"] == "(acme|emca|oss)"
+        assert result["rules"]["editor"]["proj"]["path_regexp"] == "((?:acme|emca|oss))"
 
     def test_list_items_used_as_regexp_fragments(self) -> None:
         """List items are not escaped — they can be regexp fragments themselves."""
@@ -491,7 +538,7 @@ class TestRegexpExpansion:
             },
         }
         result = expand_list_references(config)
-        assert result["rules"]["editor"]["pat"]["path_regexp"] == "(foo.*bar|baz\\d+)"
+        assert result["rules"]["editor"]["pat"]["path_regexp"] == "((?:foo.*bar|baz\\d+))"
 
     def test_app_groups_usable_in_regexp(self) -> None:
         config = {
@@ -507,4 +554,4 @@ class TestRegexpExpansion:
             },
         }
         result = expand_list_references(config)
-        assert result["rules"]["app"]["cust"]["title_regexp"] == "(acme|emca)"
+        assert result["rules"]["app"]["cust"]["title_regexp"] == "((?:acme|emca))"

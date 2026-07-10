@@ -132,7 +132,7 @@ heartbeat `[10:10, +10s]`, next event at 11:45 — the gap is measured from
 even though the user was demonstrably active until 11:40; active time is
 exported as afk. Track `max(end)` over the sweep instead.
 
-### 10. 🟠 `@list` regexp expansion breaks anchors and metacharacters — `config.py:75` (CONFIRMED by execution)
+### 10. ✅ FIXED (grouping half) — 🟠 `@list` regexp expansion breaks anchors and metacharacters — `config.py:75` (CONFIRMED by execution)
 
 `expand_regexp` substitutes `@list` with a bare `'|'.join(items)` — no
 `(?:...)` grouping and no `re.escape`.
@@ -144,6 +144,17 @@ despite the anchor, and matches `'foo: x'` without capturing group 1 (so `$1`
 tag templates silently vanish). An item like `'c++'` yields an invalid
 regexp. Fix: `'(?:' + '|'.join(re.escape(i) for i in items) + ')'` (escaping
 assuming list items are literals).
+
+**Resolution (2026-07-10):** the missing `(?:...)` grouping was a bug and is
+fixed — references now expand to `(?:item1|item2|...)`, so anchors and
+surrounding atoms are safe, and the conventional `(@ref)` usage keeps its
+group-1 capture. The missing `re.escape` is a *feature*, not a bug: commit
+`db369b0` explicitly states items are not escaped so they may be regexp
+fragments (e.g. `foo.*bar`); escaping would break that documented intent, so
+that half of the suggested fix was rejected. Documented in README
+("Reusable Lists"). Tests: `tests/test_list_expansion.py`
+(`test_bare_ref_does_not_break_anchors`,
+`test_list_items_used_as_regexp_fragments`).
 
 ---
 
