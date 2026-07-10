@@ -22,6 +22,29 @@ def normalize_browser_app(app: str) -> str:
     return "chrome" if app in ("chromium", "org.chromium.chromium") else app
 
 
+def _skip_browser_newtab(sub_event: dict) -> bool:
+    return sub_event["data"].get("url") in ("chrome://newtab/", "about:newtab")
+
+
+# Shared sub-event fetch parameters for subtypes with per-app buckets
+# (browser, editor). Consumed by both tag extraction (get_browser_tags /
+# get_editor_tags) and get_specialized_context, so the two paths can't drift
+# out of sync (tmux has a single shared bucket and is handled separately via
+# _fetch_tmux_sub_event).
+SUBEVENT_SPECS: dict[str, dict[str, Any]] = {
+    "browser": {
+        "apps": BROWSER_APPS,
+        "bucket_pattern": "aw-watcher-web-{app}",
+        "app_normalizer": normalize_browser_app,
+        "skip_if": _skip_browser_newtab,
+    },
+    "editor": {
+        "apps": ("emacs", "vi", "vim"),
+        "bucket_pattern": "aw-watcher-{app}",
+    },
+}
+
+
 @dataclass
 class ExclusiveGroupViolation:
     """Details about an exclusive group violation."""
@@ -159,56 +182,9 @@ class TagExtractor:
             Set of tags if matched, empty list if tmux context found but no rules match,
             or False if not applicable (not a terminal, no tmux, or terminal not running tmux)
         """
-        # Check if this is a terminal window
-        terminal_apps = self.terminal_apps or {
-            "foot",
-            "kitty",
-            "alacritty",
-            "terminator",
-            "gnome-terminal",
-            "konsole",
-            "xterm",
-            "urxvt",
-            "st",
-        }
-
-        app = window_event["data"].get("app", "").lower()
-        if app not in terminal_apps:
-            return False
-
-        # Get tmux bucket - there's only one tmux bucket (not per-app like browser/editor)
-        tmux_bucket = self.event_fetcher.get_tmux_bucket()
-        if not tmux_bucket:
-            return False  # No tmux watcher, fall through to app rules
-
-        # Get corresponding tmux event (handles picking the longest if multiple)
-        # Use fallback_to_recent since tmux state persists between recorded events
-        tmux_event = self.event_fetcher.get_corresponding_event(
-            window_event,
-            tmux_bucket,
-            ignorable=True,
-            fallback_to_recent=True,
-            retry=self.default_retry,
-        )
-
-        if not tmux_event:
-            return False  # No tmux events, fall through to app rules
-
-        # Verify the window title indicates this terminal is actually running tmux.
-        # This prevents non-tmux terminals from incorrectly picking up tmux events
-        # from other terminal windows that are running tmux.
-        window_title = window_event["data"].get("title", "").lower()
-        tmux_session = tmux_event["data"].get("session_name", "").lower()
-        tmux_window = tmux_event["data"].get("window_name", "").lower()
-
-        title_indicates_tmux = (
-            "tmux" in window_title
-            or (tmux_session and tmux_session in window_title)
-            or (tmux_window and tmux_window in window_title)
-        )
-
-        if not title_indicates_tmux:
-            return False  # Terminal not running tmux, fall through to app rules
+        tmux_event = self._fetch_tmux_sub_event(window_event)
+        if tmux_event is None:
+            return False  # not applicable, fall through to app rules
 
         # Use shared subevent tags logic with tmux matcher
         return self._get_subevent_tags(
@@ -324,15 +300,10 @@ class TagExtractor:
         return self._get_subevent_tags(
             window_event=window_event,
             subtype="browser",
-            apps=BROWSER_APPS,
-            bucket_pattern="aw-watcher-web-{app}",
-            app_normalizer=normalize_browser_app,
             matchers=[
                 ("url_regexp", self._match_url_regexp),
             ],
-            skip_if=lambda sub_event: (
-                sub_event["data"].get("url") in ("chrome://newtab/", "about:newtab")
-            ),
+            **SUBEVENT_SPECS["browser"],
         )
 
     def get_editor_tags(self, window_event: dict) -> set[str] | list | bool:
@@ -347,12 +318,11 @@ class TagExtractor:
         return self._get_subevent_tags(
             window_event=window_event,
             subtype="editor",
-            apps=("emacs", "vi", "vim"),
-            bucket_pattern="aw-watcher-{app}",
             matchers=[
                 ("projects", self._match_project),
                 ("path_regexp", self._match_path_regexp),
             ],
+            **SUBEVENT_SPECS["editor"],
         )
 
     def _fetch_sub_event(
@@ -624,7 +594,8 @@ class TagExtractor:
     def _fetch_tmux_sub_event(self, window_event: dict) -> dict | None:
         """Fetch tmux sub-event for a terminal window.
 
-        Uses the same logic as get_tmux_tags() for fetching.
+        Shared by get_tmux_tags() (tag extraction) and get_specialized_context()
+        (report/context display), so both stay consistent.
 
         Args:
             window_event: The window event
@@ -693,14 +664,8 @@ class TagExtractor:
         """
         result: dict[str, str | None] = {"type": None, "data": None}
 
-        # Try browser - same parameters as get_browser_tags()
-        sub_event, _ = self._fetch_sub_event(
-            window_event,
-            apps=BROWSER_APPS,
-            bucket_pattern="aw-watcher-web-{app}",
-            app_normalizer=normalize_browser_app,
-            skip_if=lambda e: e["data"].get("url") in ("chrome://newtab/", "about:newtab"),
-        )
+        # Try browser - same spec as get_browser_tags()
+        sub_event, _ = self._fetch_sub_event(window_event, **SUBEVENT_SPECS["browser"])
         if sub_event:
             url = sub_event["data"].get("url", "")
             if url:
@@ -708,12 +673,8 @@ class TagExtractor:
                 result["data"] = url
             return result
 
-        # Try editor - same parameters as get_editor_tags()
-        sub_event, _ = self._fetch_sub_event(
-            window_event,
-            apps=("emacs", "vi", "vim"),
-            bucket_pattern="aw-watcher-{app}",
-        )
+        # Try editor - same spec as get_editor_tags()
+        sub_event, _ = self._fetch_sub_event(window_event, **SUBEVENT_SPECS["editor"])
         if sub_event:
             file_path = sub_event["data"].get("file", "")
             project = sub_event["data"].get("project", "")
