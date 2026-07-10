@@ -269,6 +269,41 @@ class TestRetag:
         assert captured == []
 
 
+class TestRetagIntervalById:
+    """Test retag_interval_by_id method."""
+
+    def test_retag_interval_by_id_issues_retag_command(self) -> None:
+        """Test that retag_interval_by_id addresses the given interval by @N.
+
+        Unlike retag() (which always targets @1, the current interval),
+        retag_interval_by_id is used by retag.py to bulk-retag arbitrary
+        historical intervals.
+        """
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+
+        with patch("subprocess.run", return_value=Mock(returncode=0)):
+            tracker.retag_interval_by_id(42, {"work", "meeting"})
+
+        assert len(captured) == 1
+        cmd = captured[0]
+        assert cmd[0] == "timew"
+        assert cmd[1] == "retag"
+        assert cmd[2] == "@42"
+        assert "work" in cmd
+        assert "meeting" in cmd
+
+    def test_retag_interval_by_id_raises_on_command_failure(self) -> None:
+        """A failed retag command must propagate, not fail silently."""
+        tracker = TimewTracker(grace_time=0, hide_output=True)
+
+        with (
+            patch("subprocess.run", return_value=Mock(returncode=1, stderr="error")),
+            pytest.raises(RuntimeError),
+        ):
+            tracker.retag_interval_by_id(42, {"work"})
+
+
 class TestGetIntervals:
     """Test get_intervals method."""
 

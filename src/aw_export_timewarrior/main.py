@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import shlex
@@ -495,8 +494,6 @@ class Exporter:
 
                         print(f"Executing: {cmd}")
                         # Parse and execute the command (strip comment part)
-                        import subprocess
-
                         try:
                             # Remove comment part if present (e.g., "  # 2025-12-10 - old tags: ...")
                             command_part = cmd.split("  #")[0].strip()
@@ -1902,59 +1899,6 @@ class Exporter:
             return True
 
 
-## TODO: none of this has anything to do with ActivityWatch and can be moved to a separate module
-def get_timew_info():
-    """Get information about the currently active TimeWarrior interval.
-
-    Returns:
-        dict: Information about the active interval, or None if there's no active tracking
-    """
-    try:
-        current_timew = json.loads(
-            subprocess.check_output(["timew", "get", "dom.active.json"], stderr=subprocess.DEVNULL)
-        )
-        dt = datetime.strptime(current_timew["start"], "%Y%m%dT%H%M%SZ")
-        dt = dt.replace(tzinfo=UTC)
-        current_timew["start_dt"] = dt
-        current_timew["tags"] = set(current_timew["tags"])
-        return current_timew
-    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
-        # No active tracking, empty database, or invalid data
-        return None
-
-
-def timew_run(commands, dry_run=False, capture_to=None, hide_output=False):
-    """
-    Execute a timewarrior command, or show what would be done if dry_run=True.
-
-    Args:
-        commands: List of command arguments (without 'timew' prefix)
-        dry_run: If True, don't execute, just print what would be done
-        capture_to: Optional list to append commands to (for testing)
-        hide_output: If True, don't print the "DRY RUN" or "Running" messages
-    """
-    commands = ["timew"] + commands
-
-    if dry_run:
-        if not hide_output:
-            user_output(
-                f"DRY RUN: Would execute: {' '.join(commands)}", color="yellow", attrs=["bold"]
-            )
-        if capture_to is not None:
-            capture_to.append(commands)
-        return
-
-    if not hide_output:
-        user_output(f"Running: {' '.join(commands)}")
-    subprocess.run(commands)
-    grace_time = float(os.environ.get("AW2TW_GRACE_TIME", 10))
-    user_output(
-        f"Use timew undo if you don't agree!  You have {grace_time} seconds to press ctrl^c",
-        attrs=["bold"],
-    )
-    sleep(grace_time)
-
-
 ## TODO: do we need this backward compatibility function?
 ## not really retag, more like expand tags?  But it's my plan to allow replacement and not only addings
 def retag_by_rules(source_tags, cfg=None):
@@ -1975,30 +1919,3 @@ def retag_by_rules(source_tags, cfg=None):
     # Create a temporary TagExtractor to use the logic
     temp_extractor = TagExtractor(config=cfg, event_fetcher=None)
     return temp_extractor.apply_retag_rules(source_tags)
-
-
-def timew_retag(timew_info, dry_run=False, capture_to=None):
-    """Retag the current TimeWarrior interval according to rules.
-
-    Args:
-        timew_info: Current TimeWarrior interval info, or None if no active tracking
-        dry_run: If True, don't execute commands
-        capture_to: Optional list to capture commands to
-
-    Returns:
-        Updated timew_info, or None if no active tracking
-    """
-    if timew_info is None:
-        # No active tracking, nothing to retag
-        return None
-
-    source_tags = set(timew_info["tags"])
-    new_tags = retag_by_rules(source_tags)
-    if new_tags != source_tags:
-        timew_run(["retag"] + list(new_tags), dry_run=dry_run, capture_to=capture_to)
-        if not dry_run:
-            timew_info = get_timew_info()
-            if timew_info:  # Check if still active
-                assert set(timew_info["tags"]) == new_tags
-        return timew_info
-    return timew_info

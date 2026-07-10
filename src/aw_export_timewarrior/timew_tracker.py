@@ -189,6 +189,21 @@ class TimewTracker(TimeTracker):
         if to_add:
             self._run_timew(["tag", "@1"] + sorted(to_add))
 
+    def retag_interval_by_id(self, interval_id: int, tags: set[str]) -> None:
+        """Set the tag list on a specific (not necessarily current) interval.
+
+        Unlike retag(), which diffs against the current interval (@1) and
+        issues incremental tag/untag commands, this directly replaces the
+        tag list on any interval addressed by TimeWarrior's relative `@N`
+        scheme via `timew retag`, for bulk maintenance use cases (e.g.
+        re-applying rules to historical intervals).
+
+        Args:
+            interval_id: TimeWarrior's relative interval id (the N in @N)
+            tags: New tags to apply
+        """
+        self._run_timew(["retag", f"@{interval_id}"] + sorted(tags))
+
     def get_intervals(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
         """Get TimeWarrior intervals in time range.
 

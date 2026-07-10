@@ -1,18 +1,12 @@
 """Integration tests for the export workflow and timewarrior interaction."""
 
 import logging
-import subprocess
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pytest
 
-from aw_export_timewarrior.main import (
-    Exporter,
-    get_timew_info,
-    timew_retag,
-    timew_run,
-)
+from aw_export_timewarrior.main import Exporter
 from aw_export_timewarrior.state import AfkState
 
 
@@ -50,152 +44,6 @@ def mock_aw_client():
         }
         mock_aw_class.return_value = mock_client
         yield mock_client
-
-
-class TestGetTimewInfo:
-    """Tests for get_timew_info function."""
-
-    @patch("subprocess.check_output")
-    def test_get_timew_info_parses_json(self, mock_subprocess: Mock) -> None:
-        """Test that get_timew_info parses timewarrior JSON correctly."""
-        mock_subprocess.return_value = b"""{
-            "id": 1,
-            "start": "20250528T140000Z",
-            "tags": ["4work", "programming", "python"]
-        }"""
-
-        result = get_timew_info()
-
-        assert result["id"] == 1
-        assert result["start"] == "20250528T140000Z"
-        assert result["tags"] == {"4work", "programming", "python"}
-        assert "start_dt" in result
-        assert isinstance(result["start_dt"], datetime)
-        assert result["start_dt"].tzinfo == UTC
-
-    @patch("subprocess.check_output")
-    def test_get_timew_info_command(self, mock_subprocess: Mock) -> None:
-        """Test that correct timewarrior command is called."""
-        mock_subprocess.return_value = b'{"id": 1, "start": "20250528T140000Z", "tags": []}'
-
-        get_timew_info()
-
-        mock_subprocess.assert_called_once_with(
-            ["timew", "get", "dom.active.json"], stderr=subprocess.DEVNULL
-        )
-
-    @patch("subprocess.check_output")
-    def test_get_timew_info_no_active_tracking(self, mock_subprocess: Mock) -> None:
-        """Test that get_timew_info returns None when there's no active tracking."""
-        mock_subprocess.side_effect = subprocess.CalledProcessError(
-            255, ["timew", "get", "dom.active.json"]
-        )
-
-        result = get_timew_info()
-
-        assert result is None
-
-    @patch("subprocess.check_output")
-    def test_get_timew_info_invalid_json(self, mock_subprocess: Mock) -> None:
-        """Test that get_timew_info returns None when timew returns invalid JSON."""
-        mock_subprocess.return_value = b"invalid json"
-
-        result = get_timew_info()
-
-        assert result is None
-
-
-class TestTimewRun:
-    """Tests for timew_run function."""
-
-    @patch("subprocess.run")
-    @patch.dict("os.environ", {"AW2TW_GRACE_TIME": "0.1"})
-    def test_timew_run_executes_command(self, mock_subprocess: Mock) -> None:
-        """Test that timew_run executes the correct command."""
-        import tests.conftest
-
-        initial_sleep_count = tests.conftest.sleep_counter
-
-        timew_run(["start", "4work", "programming"])
-
-        mock_subprocess.assert_called_once()
-        call_args = mock_subprocess.call_args[0][0]
-        assert call_args == ["timew", "start", "4work", "programming"]
-        # Sleep should have been called (monkeypatched by conftest)
-        assert tests.conftest.sleep_counter == initial_sleep_count + 1
-
-    @patch("subprocess.run")
-    @patch.dict("os.environ", {"AW2TW_GRACE_TIME": "0.1"})
-    def test_timew_run_waits_grace_time(self, mock_subprocess: Mock) -> None:
-        """Test that timew_run waits the grace period."""
-        import tests.conftest
-
-        initial_sleep_count = tests.conftest.sleep_counter
-
-        timew_run(["stop"])
-
-        # Sleep should have been called once (monkeypatched by conftest)
-        assert tests.conftest.sleep_counter == initial_sleep_count + 1
-
-
-class TestTimewRetag:
-    """Tests for timew_retag function."""
-
-    @patch(
-        "aw_export_timewarrior.main.config",
-        {
-            "exclusive": {},
-            "tags": {"work_tags": {"source_tags": ["programming"], "add": ["4work"]}},
-        },
-    )
-    @patch("aw_export_timewarrior.main.timew_run")
-    @patch("aw_export_timewarrior.main.get_timew_info")
-    def test_timew_retag_applies_rules(self, mock_get_info: Mock, mock_timew_run: Mock) -> None:
-        """Test that timew_retag applies retagging rules."""
-        initial_info = {
-            "id": 1,
-            "start": "20250528T140000Z",
-            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            "tags": {"programming"},
-        }
-
-        retagged_info = {
-            "id": 1,
-            "start": "20250528T140000Z",
-            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            "tags": {"programming", "4work"},
-        }
-
-        mock_get_info.return_value = retagged_info
-
-        result = timew_retag(initial_info)
-
-        # Should have called timew retag command
-        mock_timew_run.assert_called_once()
-        call_args = mock_timew_run.call_args[0][0]
-        assert call_args[0] == "retag"
-        assert "4work" in call_args
-        assert "programming" in call_args
-
-        # Verify result matches expected retagged info
-        assert result == retagged_info
-
-    @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
-    @patch("aw_export_timewarrior.main.timew_run")
-    def test_timew_retag_no_changes_needed(self, mock_timew_run: Mock) -> None:
-        """Test that timew_retag doesn't call timew if no changes needed."""
-        timew_info = {
-            "id": 1,
-            "start": "20250528T140000Z",
-            "start_dt": datetime(2025, 5, 28, 14, 0, 0, tzinfo=UTC),
-            "tags": {"4work", "programming"},
-        }
-
-        result = timew_retag(timew_info)
-
-        # Should not have called timew_run
-        mock_timew_run.assert_not_called()
-        assert result == timew_info
 
 
 class TestEnsureTagExported:
