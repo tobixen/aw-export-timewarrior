@@ -4,12 +4,15 @@ This module isolates all ActivityWatch data access into a single component,
 making it easy to test and maintain. Part of the Exporter refactoring plan.
 """
 
+import bisect
 import logging
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from time import time
 from typing import Any
+
+from .utils import normalize_duration, normalize_timestamp
 
 # Import at module level for easier mocking in tests
 try:
@@ -156,32 +159,58 @@ class EventFetcher:
                         cache_start,
                         cache_end,
                     )
-                    self._events_cache[bucket_id] = self.aw.get_events(
-                        bucket_id, start=cache_start, end=cache_end
-                    )
+                    raw_events = self.aw.get_events(bucket_id, start=cache_start, end=cache_end)
+                    self._events_cache[bucket_id] = self._prepare_cached_events(raw_events)
                 return self._filter_events_in_range(self._events_cache[bucket_id], start, end)
             return self.aw.get_events(bucket_id, start=start, end=end)
         else:
             # Test data path
             return self._get_events_from_test_data(bucket_id, start, end)
 
+    def _prepare_cached_events(self, events: list) -> list[tuple[datetime, datetime, dict]]:
+        """Normalize timestamps once and sort by start, for efficient repeated filtering.
+
+        A cached bucket is filtered once per get_events() call within its range
+        (potentially O(N events) times over a batch run). Precomputing (start,
+        end) here instead of re-parsing ISO timestamps on every
+        _filter_events_in_range call, and sorting so that call can bisect
+        straight to the relevant slice, turns each filter from an O(bucket
+        size) rescan into O(log bucket size + matches).
+        """
+        prepared = [
+            (
+                normalize_timestamp(event["timestamp"]),
+                normalize_timestamp(event["timestamp"]) + normalize_duration(event["duration"]),
+                event,
+            )
+            for event in events
+        ]
+        prepared.sort(key=lambda item: item[0])
+        return prepared
+
     def _filter_events_in_range(
-        self, events: list, start: datetime | None, end: datetime | None
+        self,
+        prepared_events: list[tuple[datetime, datetime, dict]],
+        start: datetime | None,
+        end: datetime | None,
     ) -> list:
-        """Filter cached events to those overlapping [start, end].
+        """Filter cache-prepared (start, end, event) tuples to those overlapping [start, end].
 
         Matches the semantics of _get_events_from_test_data(): includes events where
         event_end >= start AND event_start <= end (i.e. any overlap with the window).
+
+        prepared_events must be sorted by start (see _prepare_cached_events),
+        so bisecting to the last entry whose start <= end bounds the scan to
+        a prefix instead of walking every cached event.
         """
-        from .utils import normalize_duration, normalize_timestamp
+        if end is not None:
+            hi = bisect.bisect_right(prepared_events, end, key=lambda item: item[0])
+        else:
+            hi = len(prepared_events)
 
         result = []
-        for event in events:
-            event_start = normalize_timestamp(event["timestamp"])
-            event_end = event_start + normalize_duration(event["duration"])
+        for _event_start, event_end, event in prepared_events[:hi]:
             if start and event_end < start:
-                continue
-            if end and event_start > end:
                 continue
             result.append(event)
         return result
