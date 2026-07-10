@@ -750,8 +750,12 @@ def main(argv=None) -> int:
     # Default to 'sync' if no subcommand specified
     subcommand = args.subcommand or "sync"
     if not args.subcommand:
-        # Re-parse with 'sync' as the subcommand
-        argv_with_sync = ["sync"] + (argv if argv else sys.argv[1:])
+        # Re-parse with 'sync' as the subcommand. The first parse (above)
+        # already succeeded with no subcommand, so every token in argv is a
+        # global flag the top-level parser accepts; append 'sync' after
+        # them rather than prepending, since global flags must precede the
+        # subcommand token for argparse subparsers to accept them.
+        argv_with_sync = (argv if argv else sys.argv[1:]) + ["sync"]
         args = parser.parse_args(argv_with_sync)
         args.subcommand = "sync"
 

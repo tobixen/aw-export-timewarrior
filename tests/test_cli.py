@@ -479,6 +479,26 @@ class TestEndToEndCLI:
 
         assert result == 1  # Error exit code
 
+    @patch("aw_export_timewarrior.cli.run_sync")
+    def test_implicit_sync_accepts_global_flags(self, mock_run_sync: Mock) -> None:
+        """Test that global flags work with the implicit-sync default.
+
+        Regression test: main() re-parses with 'sync' prepended to the
+        front of argv when no subcommand is given, but global flags like
+        --log-level must appear *before* the subcommand token for argparse
+        subparsers to accept them. Prepending 'sync' pushed them after it,
+        so `aw-export-timewarrior --log-level DEBUG` (no subcommand) raised
+        an argparse error instead of running sync.
+        """
+        from aw_export_timewarrior.cli import main
+
+        mock_run_sync.return_value = 0
+
+        result = main(["--log-level", "DEBUG"])
+
+        assert result == 0
+        mock_run_sync.assert_called_once()
+
 
 class TestDiffModeReadOnly:
     """Test that diff mode is read-only and doesn't execute timew commands."""
