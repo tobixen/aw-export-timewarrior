@@ -11,6 +11,7 @@ from termcolor import colored
 from .config import config
 from .tag_extractor import ExclusiveGroupError, TagExtractor
 from .timew_tracker import TimewTracker
+from .utils import ts2str, ts2strtime
 
 logger = logging.getLogger(__name__)
 
@@ -253,8 +254,8 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
         for suggested in comparison["missing"]:
             duration = suggested.duration()
             # Convert to local time for display
-            start_local = suggested.start.astimezone().strftime("%H:%M:%S")
-            end_local = suggested.end.astimezone().strftime("%H:%M:%S")
+            start_local = ts2strtime(suggested.start)
+            end_local = ts2strtime(suggested.end)
             lines.append(
                 colored(
                     f"  - {start_local} - {end_local} ({duration.total_seconds() / 60:.1f}min)",
@@ -271,10 +272,8 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
         for timew_int in comparison["extra"]:
             duration = timew_int.duration()
             # Convert to local time for display
-            start_local = timew_int.start.astimezone().strftime("%H:%M:%S")
-            end_local = (
-                timew_int.end.astimezone().strftime("%H:%M:%S") if timew_int.end else "ongoing"
-            )
+            start_local = ts2strtime(timew_int.start)
+            end_local = ts2strtime(timew_int.end) if timew_int.end else "ongoing"
             lines.append(
                 colored(
                     f"  + {start_local} - {end_local} ({duration.total_seconds() / 60:.1f}min)",
@@ -302,10 +301,8 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
         )
         for timew_int in comparison["previously_synced"][:5]:  # Limit to first 5
             duration = timew_int.duration()
-            start_local = timew_int.start.astimezone().strftime("%H:%M:%S")
-            end_local = (
-                timew_int.end.astimezone().strftime("%H:%M:%S") if timew_int.end else "ongoing"
-            )
+            start_local = ts2strtime(timew_int.start)
+            end_local = ts2strtime(timew_int.end) if timew_int.end else "ongoing"
             lines.append(
                 colored(
                     f"  • {start_local} - {end_local} ({duration.total_seconds() / 60:.1f}min)",
@@ -338,10 +335,8 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
             display_timew_tags = {t for t in timew_tags if not t.startswith("~")}
 
             # Convert to local time for display
-            start_local = timew_int.start.astimezone().strftime("%H:%M:%S")
-            end_local = (
-                timew_int.end.astimezone().strftime("%H:%M:%S") if timew_int.end else "ongoing"
-            )
+            start_local = ts2strtime(timew_int.start)
+            end_local = ts2strtime(timew_int.end) if timew_int.end else "ongoing"
             lines.append(f"  {start_local} - {end_local}")
 
             if display_timew_tags:
@@ -369,8 +364,8 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
             else:
                 # Multiple sub-intervals with different tags - show each separately
                 for _, suggested in sorted_entries:
-                    sub_start = suggested.start.astimezone().strftime("%H:%M:%S")
-                    sub_end = suggested.end.astimezone().strftime("%H:%M:%S")
+                    sub_start = ts2strtime(suggested.start)
+                    sub_end = ts2strtime(suggested.end)
                     display_suggested = {t for t in suggested.tags if not t.startswith("~")}
                     if display_suggested:
                         lines.append(
@@ -386,10 +381,8 @@ def format_diff_output(comparison: dict[str, list], verbose: bool = False) -> st
         for timew_int, _suggested in comparison["matching"]:
             duration = timew_int.duration()
             # Convert to local time for display
-            start_local = timew_int.start.astimezone().strftime("%H:%M:%S")
-            end_local = (
-                timew_int.end.astimezone().strftime("%H:%M:%S") if timew_int.end else "ongoing"
-            )
+            start_local = ts2strtime(timew_int.start)
+            end_local = ts2strtime(timew_int.end) if timew_int.end else "ongoing"
             lines.append(
                 colored(
                     f"  ✓ {start_local} - {end_local} ({duration.total_seconds() / 60:.1f}min)",
@@ -488,8 +481,8 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     for suggested in merged_suggested:
         # Format: timew track 2025-12-08T10:00:00 - 2025-12-08T11:00:00 tag1 tag2 :adjust
         # NOTE: Using :adjust to handle both gaps AND retagging existing intervals
-        start_str = suggested.start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
-        end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+        start_str = ts2str(suggested.start)
+        end_str = ts2str(suggested.end)
         # Apply recursive tag rules before generating command
         final_tags = _safe_retag_by_rules(suggested.tags, extractor)
         tags = " ".join(shlex.quote(t) for t in sorted(final_tags))
@@ -505,8 +498,8 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         commands.append("")
         commands.append("# Manually edited intervals (no ~aw tag, not overwriting):")
         for timew_int, suggested in sorted(manual_entries, key=lambda x: x[1].start):
-            start_str = suggested.start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
-            end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+            start_str = ts2str(suggested.start)
+            end_str = ts2str(suggested.end)
             final_tags = _safe_retag_by_rules(suggested.tags, extractor)
             tags = " ".join(shlex.quote(t) for t in sorted(final_tags))
             old_tags = " ".join(sorted(timew_int.tags))
@@ -546,8 +539,8 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
             # Find tags that should be added (derived from retag rules but not yet in timew)
             derived_tags = expanded_tags - current_tags
 
-            timestamp_str = timew_int.start.astimezone().strftime("%Y-%m-%d %H:%M")
-            end_str = timew_int.end.astimezone().strftime("%H:%M") if timew_int.end else "ongoing"
+            timestamp_str = ts2str(timew_int.start, "%Y-%m-%d %H:%M")
+            end_str = ts2str(timew_int.end, "%H:%M") if timew_int.end else "ongoing"
             tags_str = " ".join(sorted(current_tags))
 
             if derived_tags:

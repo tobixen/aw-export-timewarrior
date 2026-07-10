@@ -14,7 +14,7 @@ from .output import user_output
 from .state import AfkState, StateManager
 from .tag_extractor import ExclusiveGroupError, TagExtractor
 from .timew_tracker import TimewTracker
-from .utils import ts2strtime
+from .utils import parse_datetime, ts2strtime
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
@@ -397,12 +397,11 @@ class Exporter:
                 tags = set(cmd[2:-1])  # All elements between 'start' and timestamp
                 timestamp_str = cmd[-1]
 
-                # Parse timestamp - timestamps in commands are in local timezone
-                # (because they're generated with since.astimezone().strftime())
-                start = datetime.fromisoformat(timestamp_str.replace("T", " ", 1).rstrip("Z"))
-                if start.tzinfo is None:
-                    # Assume local timezone, then convert to UTC
-                    start = start.astimezone(UTC)
+                # Parse timestamp - timestamps in commands are normally local
+                # (generated with since.astimezone().strftime()), but parse_datetime
+                # also correctly honors an explicit 'Z'/offset if one is present,
+                # rather than stripping it and misreading UTC as local.
+                start = parse_datetime(timestamp_str).astimezone(UTC)
 
                 # If there was a previous interval, close it
                 if current_start:
@@ -418,10 +417,7 @@ class Exporter:
                 # Close current interval
                 # May have timestamp as last arg
                 if len(cmd) > 2 and cmd[-1].count("T") == 1:
-                    end = datetime.fromisoformat(cmd[-1].replace("T", " ", 1).rstrip("Z"))
-                    if end.tzinfo is None:
-                        # Assume local timezone, then convert to UTC
-                        end = end.astimezone(UTC)
+                    end = parse_datetime(cmd[-1]).astimezone(UTC)
                 else:
                     end = datetime.now(UTC)
 

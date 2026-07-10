@@ -240,3 +240,25 @@ def test_get_suggested_intervals_includes_final_interval() -> None:
             assert last_interval.end == end_time, (
                 f"Final interval should end at end_time ({end_time}), but got {last_interval.end}"
             )
+
+
+def test_get_suggested_intervals_parses_utc_z_suffixed_timestamps_correctly() -> None:
+    """A 'Z'-suffixed (genuine UTC) command timestamp must not be misread as local time.
+
+    Regression test: get_suggested_intervals() parsed captured command
+    timestamps with `datetime.fromisoformat(s.replace("T", " ", 1).rstrip("Z"))`.
+    Stripping the 'Z' discards the UTC marker, so the resulting naive
+    datetime was then (incorrectly) treated as local time and shifted by
+    the local UTC offset instead of being recognized as already-UTC.
+    """
+    exporter = Exporter(dry_run=True, test_data={"buckets": {}})
+    exporter.captured_commands = [
+        ["timew", "start", "work", "2025-06-01T10:00:00Z"],
+        ["timew", "stop", "2025-06-01T11:00:00Z"],
+    ]
+
+    intervals = exporter.get_suggested_intervals()
+
+    assert len(intervals) == 1
+    assert intervals[0].start == datetime(2025, 6, 1, 10, 0, 0, tzinfo=UTC)
+    assert intervals[0].end == datetime(2025, 6, 1, 11, 0, 0, tzinfo=UTC)
