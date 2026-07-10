@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum, auto
 from time import sleep
 
-from .aw_client import EventFetcher
+from .aw_client import FALLBACK_TO_RECENT_LOOKBACK, EventFetcher
 from .config import config
 from .event_pipeline import EventPipeline, EventPipelineConfig
 from .output import user_output
@@ -28,6 +28,12 @@ MIN_KNOWN_ACTIVITY_RATIO = 0.2
 # Debug threshold: trigger breakpoint if skipping an event longer than this duration.
 # This helps catch unexpected behavior where significant events are being skipped.
 DEBUG_SKIP_THRESHOLD_SECONDS = 30
+
+# Buffer to extend the ActivityWatch event cache range beyond the requested
+# tracking window, so get_corresponding_event's fallback_to_recent lookback
+# doesn't miss events cached just outside that window.
+CACHE_LOOKBACK_BUFFER = FALLBACK_TO_RECENT_LOOKBACK + timedelta(minutes=1)  # + margin
+CACHE_LOOKAHEAD_MARGIN = timedelta(seconds=16)
 
 
 def parse_message_tags(message: str) -> set[str]:
@@ -208,10 +214,9 @@ class Exporter:
         # start_time (e.g. browser events from get_corresponding_event lookback).
         aw_cache_range = None
         if self.start_time and self.end_time and not self.test_data:
-            _cache_buffer = timedelta(minutes=11)  # covers fallback_to_recent (10 min) + margin
             aw_cache_range = (
-                self.start_time - _cache_buffer,
-                self.end_time + timedelta(seconds=16),
+                self.start_time - CACHE_LOOKBACK_BUFFER,
+                self.end_time + CACHE_LOOKAHEAD_MARGIN,
             )
         self.event_fetcher = EventFetcher(
             test_data=self.test_data,
@@ -1818,10 +1823,10 @@ class Exporter:
             _elapsed = (_now - _last_rebuild).total_seconds() if _last_rebuild else float("inf")
             _had_completed = getattr(self, "_last_tick_had_completed_events", True)
             if _elapsed >= 10.0 or _had_completed:
-                _cache_buffer = timedelta(minutes=11)  # covers fallback_to_recent (10 min) + margin
-                _cache_margin = timedelta(seconds=16)
-                _cache_start = (self.state.last_tick or _now) - _cache_buffer
-                self.event_fetcher.reset_cache(new_range=(_cache_start, _now + _cache_margin))
+                _cache_start = (self.state.last_tick or _now) - CACHE_LOOKBACK_BUFFER
+                self.event_fetcher.reset_cache(
+                    new_range=(_cache_start, _now + CACHE_LOOKAHEAD_MARGIN)
+                )
                 self._last_cache_rebuild: datetime = _now
 
         # If process_all is True, keep finding activity until there's none left

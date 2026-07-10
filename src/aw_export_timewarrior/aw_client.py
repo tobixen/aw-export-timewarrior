@@ -30,6 +30,12 @@ IGNORE_INTERVAL = 3.0  # Ignore events shorter than this
 # timing differences between different watchers.
 EVENT_MATCHING_BUFFER_SECONDS = 15
 
+# How far back get_corresponding_event's fallback_to_recent lookup searches for
+# a nearby sub-event (e.g. tmux, where state persists between recorded
+# events). main.py's cache-range buffer is sized off this constant, since a
+# cache window shorter than this lookback would make the fallback a no-op.
+FALLBACK_TO_RECENT_LOOKBACK = timedelta(minutes=10)
+
 # Logging threshold: minimum event duration (as multiple of IGNORE_INTERVAL)
 # before we log a warning about missing corresponding events.
 # 4x IGNORE_INTERVAL = 12 seconds by default.
@@ -296,7 +302,7 @@ class EventFetcher:
         # and where the tmux event may start slightly after the window event
         # (e.g., 0-second window events just before tmux activity begins)
         if not ret and fallback_to_recent:
-            lookback = timedelta(minutes=10)
+            lookback = FALLBACK_TO_RECENT_LOOKBACK
             lookahead = timedelta(seconds=EVENT_MATCHING_BUFFER_SECONDS)
             nearby_events = self.get_events(
                 bucket_id,

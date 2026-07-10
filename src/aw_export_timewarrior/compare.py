@@ -2,12 +2,32 @@
 Comparison module for comparing TimeWarrior database with ActivityWatch suggestions.
 """
 
+import logging
 import shlex
 from datetime import UTC, datetime, timedelta
 
 from termcolor import colored
 
+from .config import config
+from .tag_extractor import ExclusiveGroupError, TagExtractor
 from .timew_tracker import TimewTracker
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_retag_by_rules(tags: set[str], extractor: TagExtractor) -> set[str]:
+    """Apply retag rules via a shared TagExtractor, handling exclusive group
+    violations gracefully.
+
+    When tags violate exclusive group rules (e.g., multiple tags from an
+    exclusive group), log a warning and return the original tags instead
+    of raising an exception. This allows comparison to proceed.
+    """
+    try:
+        return extractor.apply_retag_rules(tags)
+    except ExclusiveGroupError as e:
+        logger.warning(f"Exclusive group violation in interval tags, using original tags: {e}")
+        return tags
 
 
 def _effective_end(interval) -> datetime:
@@ -100,25 +120,7 @@ def compare_intervals(
     Returns:
         Dict with keys: 'missing', 'extra', 'different_tags', 'matching', 'previously_synced'
     """
-    # Import here to avoid circular dependency
-    import logging
-
-    from .config import config
-    from .main import retag_by_rules
-    from .tag_extractor import ExclusiveGroupError
-
-    def safe_retag_by_rules(tags: set[str]) -> set[str]:
-        """Apply retag rules, handling exclusive group violations gracefully.
-
-        When tags violate exclusive group rules (e.g., multiple tags from an
-        exclusive group), log a warning and return the original tags instead
-        of raising an exception. This allows comparison to proceed.
-        """
-        try:
-            return retag_by_rules(tags, config)
-        except ExclusiveGroupError as e:
-            logging.warning(f"Exclusive group violation in interval tags, using original tags: {e}")
-            return tags
+    extractor = TagExtractor(config=config, event_fetcher=None)
 
     result = {
         "missing": [],  # Intervals suggested but not in timew
@@ -173,8 +175,8 @@ def compare_intervals(
 
             if overlap_start < overlap_end:
                 # There's actual overlap - check if tags match
-                timew_tags_expanded = safe_retag_by_rules(tw.tags)
-                suggested_tags_expanded = safe_retag_by_rules(suggested.tags)
+                timew_tags_expanded = _safe_retag_by_rules(tw.tags, extractor)
+                suggested_tags_expanded = _safe_retag_by_rules(suggested.tags, extractor)
 
                 # Create interval objects for the overlapping portion
                 overlapping_suggested = SuggestedInterval(
@@ -456,20 +458,7 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     Returns:
         List of timew command strings (may include commented lines)
     """
-    # Import here to avoid circular dependency
-    import logging
-
-    from .config import config
-    from .main import retag_by_rules
-    from .tag_extractor import ExclusiveGroupError
-
-    def safe_retag_by_rules(tags: set[str]) -> set[str]:
-        """Apply retag rules, handling exclusive group violations gracefully."""
-        try:
-            return retag_by_rules(tags, config)
-        except ExclusiveGroupError as e:
-            logging.warning(f"Exclusive group violation in interval tags, using original tags: {e}")
-            return tags
+    extractor = TagExtractor(config=config, event_fetcher=None)
 
     commands = []
 
@@ -502,7 +491,7 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         start_str = suggested.start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
         end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
         # Apply recursive tag rules before generating command
-        final_tags = safe_retag_by_rules(suggested.tags)
+        final_tags = _safe_retag_by_rules(suggested.tags, extractor)
         tags = " ".join(shlex.quote(t) for t in sorted(final_tags))
         commands.append(f"timew track {start_str} - {end_str} {tags} :adjust")
 
@@ -518,7 +507,7 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         for timew_int, suggested in sorted(manual_entries, key=lambda x: x[1].start):
             start_str = suggested.start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
             end_str = suggested.end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
-            final_tags = safe_retag_by_rules(suggested.tags)
+            final_tags = _safe_retag_by_rules(suggested.tags, extractor)
             tags = " ".join(shlex.quote(t) for t in sorted(final_tags))
             old_tags = " ".join(sorted(timew_int.tags))
             commands.append(f"# timew track {start_str} - {end_str} {tags} :adjust")
@@ -526,7 +515,7 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
 
             # Apply retag rules to the current TimeWarrior tags
             current_tags = timew_int.tags - {"~aw"}  # Exclude internal marker
-            expanded_tags = safe_retag_by_rules(current_tags)
+            expanded_tags = _safe_retag_by_rules(current_tags, extractor)
 
             # Find tags that should be added (derived from retag rules but not yet in timew)
             derived_tags = expanded_tags - current_tags
@@ -552,7 +541,7 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
         for timew_int in sorted(comparison["extra"], key=lambda x: x.start):
             # Apply retag rules to the current TimeWarrior tags
             current_tags = timew_int.tags - {"~aw"}  # Exclude internal marker
-            expanded_tags = safe_retag_by_rules(current_tags)
+            expanded_tags = _safe_retag_by_rules(current_tags, extractor)
 
             # Find tags that should be added (derived from retag rules but not yet in timew)
             derived_tags = expanded_tags - current_tags
