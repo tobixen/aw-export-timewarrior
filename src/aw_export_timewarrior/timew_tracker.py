@@ -86,6 +86,16 @@ class TimewTracker(TimeTracker):
             cmd, capture_output=self.capture_commands is not None, text=True, check=False
         )
 
+        if result.returncode != 0:
+            # Fail loud rather than silently: callers (e.g. ensure_tag_exported)
+            # advance internal tracking state assuming the command succeeded, so
+            # a swallowed failure (db lock, hook rejection) would desync that
+            # state from what TimeWarrior actually recorded.
+            detail = f"\n{result.stderr.strip()}" if result.stderr else ""
+            raise RuntimeError(
+                f"timew command failed (exit {result.returncode}): {' '.join(cmd)}{detail}"
+            )
+
         if show_undo_message and not self.hide_output:
             from .output import user_output
 

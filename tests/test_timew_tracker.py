@@ -453,6 +453,37 @@ class TestRunTimew:
 
             mock_sleep.assert_called_once_with(0.01)
 
+    def test_run_timew_raises_on_nonzero_returncode(self) -> None:
+        """Test that a failed timew command raises instead of failing silently.
+
+        Regression test: _run_timew used check=False and no caller inspected
+        the returncode, so a failed timew command (db lock, hook failure)
+        was silently swallowed even though callers like ensure_tag_exported
+        had already advanced internal state (last_known_tick, accumulator)
+        assuming the command succeeded.
+        """
+        tracker = TimewTracker(grace_time=0, hide_output=True)
+
+        with (
+            patch(
+                "subprocess.run",
+                return_value=Mock(returncode=1, stderr="There is already an active time tracking."),
+            ),
+            pytest.raises(RuntimeError, match="timew"),
+        ):
+            tracker._run_timew(["start", "work"])
+
+    def test_start_tracking_raises_on_command_failure(self) -> None:
+        """Test that start_tracking propagates a failed timew command."""
+        tracker = TimewTracker(grace_time=0, hide_output=True)
+        start_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+        with (
+            patch("subprocess.run", return_value=Mock(returncode=1, stderr="error")),
+            pytest.raises(RuntimeError),
+        ):
+            tracker.start_tracking({"work"}, start_time)
+
 
 class TestOutputVisibility:
     """Test that timew output is visible in normal mode."""
