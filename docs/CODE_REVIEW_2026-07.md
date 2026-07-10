@@ -245,10 +245,15 @@ review angles.
   whole cached bucket, re-parsing ISO timestamps per event per call (O(N²)
   over a batch run). Normalize once at cache population and slice with
   bisect.
-- `main.py:1478` — `find_next_activity` re-runs the full `EventPipeline` on
-  every call; AFK-transition early-returns make batch mode re-merge/re-sort
-  the same immutable cached data O(K·N) times. Prepare once, consume
-  incrementally.
+- ✅ FIXED — `main.py:1478` — `find_next_activity` re-runs the full
+  `EventPipeline` on every call; AFK-transition early-returns make batch mode
+  re-merge/re-sort the same immutable cached data O(K·N) times. Prepare once,
+  consume incrementally. *(2026-07-10: batch mode now memoizes the prepared
+  event stream inside `EventPipeline` and serves later calls by filtering on
+  the advanced `last_tick`. Side effect: later calls see the full-range merge
+  result instead of a suffix re-merge, so the boundary artifact worked around
+  by the March 2026 clipping fix no longer arises in batch mode — clipping
+  stays as a safety net. Test: `tests/test_pipeline_prepare_once.py`.)*
 - `timew_tracker.py:170` — `get_intervals` runs a bare `timew export` (entire
   database, unbounded growth) to answer a 7-day question at sync startup;
   pass the range as `compare.py:73` already does.

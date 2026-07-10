@@ -73,6 +73,8 @@ class EventPipeline:
     start_time: datetime | None = None
 
     # Internal state
+    # Batch-mode memo: (prepare_start, end_time, [(event_end, event)], ask_away_events)
+    _prepared_batch: tuple | None = field(default=None, init=False, repr=False)
     _ask_away_events: list = field(default_factory=list, init=False, repr=False)
     _last_stale_warning: datetime | None = field(default=None, init=False, repr=False)
     _stale_warning_interval: timedelta = field(
@@ -82,10 +84,65 @@ class EventPipeline:
     def fetch_and_prepare_events(self) -> tuple[list, dict | None]:
         """Fetch, filter, merge, and sort events from ActivityWatch.
 
+        In batch mode (end_time set) the underlying data is immutable, so the
+        expensive preparation (fetch, AFK gap workaround, heartbeat merge, lid
+        merge, window-split, sort) runs once for the whole range and later
+        calls — triggered by find_next_activity()'s AFK-transition early
+        returns — are served by filtering the memoized result on the advanced
+        last_tick.
+
         Returns:
             Tuple of (completed_events, current_event):
             - completed_events: List of finished events to process
             - current_event: The ongoing event (or None)
+        """
+        if self.end_time is not None:
+            return self._fetch_batch_memoized(), None
+        return self._run_pipeline()
+
+    def _fetch_batch_memoized(self) -> list:
+        """Serve batch-mode events from the memoized full-range preparation.
+
+        The pipeline is prepared once starting from the first call's
+        last_tick; subsequent calls only see events ending after the (always
+        advancing) last_tick — the same filter _run_pipeline applies — without
+        re-running the merge/split/sort stages.  A last_tick before the
+        prepared range (should not happen: last_tick is monotonic) or a
+        changed end_time forces re-preparation.
+        """
+        cached = self._prepared_batch
+        if (
+            cached is None
+            or cached[1] != self.end_time
+            or (cached[0] is not None and (self.last_tick is None or self.last_tick < cached[0]))
+        ):
+            events, _current = self._run_pipeline()
+            self._prepared_batch = (
+                self.last_tick,
+                self.end_time,
+                [(get_event_range(e)[1], e) for e in events],
+                list(self._ask_away_events),
+            )
+            return events
+
+        _start, _end, prepared_events, ask_away_events = cached
+        if self.last_tick is None:
+            self._ask_away_events = list(ask_away_events)
+            return [event for _event_end, event in prepared_events]
+        # Ask-away events use get_events()'s overlap semantics (end >= start
+        # of the query range); prepared events use _run_pipeline's strict
+        # end > last_tick filter.
+        self._ask_away_events = [
+            a for a in ask_away_events if get_event_range(a)[1] >= self.last_tick
+        ]
+        return [event for event_end, event in prepared_events if event_end > self.last_tick]
+
+    def _run_pipeline(self) -> tuple[list, dict | None]:
+        """Run the full fetch/merge/split/sort pipeline for [last_tick, end_time].
+
+        Returns:
+            Tuple of (completed_events, current_event) as described in
+            fetch_and_prepare_events().
         """
         afk_id = self.event_fetcher.bucket_by_client["aw-watcher-afk"][0]
         window_id = self.event_fetcher.bucket_by_client["aw-watcher-window"][0]
