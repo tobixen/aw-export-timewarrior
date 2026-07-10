@@ -87,6 +87,22 @@ class TestCreateParser:
         assert args.timeline is True
         assert args.hide_report is True
 
+    def test_global_config_survives_diff_subcommand(self) -> None:
+        """Test that --config before 'diff' isn't clobbered by the subparser.
+
+        Regression test: the diff subparser used to redefine --config with
+        the same dest as the global option. argparse parses subparser
+        arguments into a fresh namespace (applying the subparser's own
+        defaults) before merging it into the main namespace, so the
+        subparser's default of None always overwrote the global value,
+        even when --config was only given before 'diff'.
+        """
+        parser = create_parser()
+
+        args = parser.parse_args(["--config", "test.toml", "diff"])
+
+        assert args.config == Path("test.toml")
+
     def test_report_subcommand_options(self) -> None:
         """Test report-specific options."""
         parser = create_parser()

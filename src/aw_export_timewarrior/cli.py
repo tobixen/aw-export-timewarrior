@@ -268,9 +268,6 @@ Examples:
     diff_parser.add_argument(
         "--test-data", metavar="FILE", type=Path, help="Use test data instead of live ActivityWatch"
     )
-    diff_parser.add_argument(
-        "--config", metavar="FILE", type=Path, help="Path to configuration file"
-    )
 
     # ===== ANALYZE subcommand =====
     analyze_parser = subparsers.add_parser(
