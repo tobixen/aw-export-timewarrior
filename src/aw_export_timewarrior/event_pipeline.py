@@ -628,35 +628,55 @@ class EventPipeline:
         window_events = [e for e in events if "status" not in e["data"]]
         status_events = [e for e in events if "status" in e["data"]]
 
+        # Pre-normalize and sort AFK ("afk"-status only) events once, instead
+        # of re-parsing every AFK timestamp for every window event (O(W*A)
+        # re-parsing). window_events is already sorted by start (it's a
+        # filtered subset of the caller's sorted combined list); sorting
+        # afk_windows here too lets the loop below sweep both lists forward
+        # with a single pointer instead of rescanning from the start each time.
+        afk_windows = sorted(
+            (
+                (
+                    normalize_timestamp(afk["timestamp"]),
+                    normalize_timestamp(afk["timestamp"]) + normalize_duration(afk["duration"]),
+                )
+                for afk in afk_events
+                if afk["data"].get("status") == "afk"
+            ),
+            key=lambda pair: pair[0],
+        )
+
         result = []
+        low = 0  # first afk_windows index that might still overlap a future window
 
         for window_event in window_events:
             window_start = normalize_timestamp(window_event["timestamp"])
             window_end = window_start + normalize_duration(window_event["duration"])
 
-            # Find overlapping AFK events
-            overlapping_afk = [
-                afk
-                for afk in afk_events
-                if afk["data"].get("status") == "afk"
-                and normalize_timestamp(afk["timestamp"]) < window_end
-                and (normalize_timestamp(afk["timestamp"]) + normalize_duration(afk["duration"]))
-                > window_start
-            ]
+            # Drop AFK periods that ended before this window starts: since
+            # window starts are non-decreasing, they can't overlap this or
+            # any later window either.
+            while low < len(afk_windows) and afk_windows[low][1] <= window_start:
+                low += 1
+
+            # Collect AFK periods overlapping this window, without advancing
+            # `low` past ones that may still overlap a later window (e.g. one
+            # long AFK period spanning several short window events).
+            overlapping_afk = []
+            i = low
+            while i < len(afk_windows) and afk_windows[i][0] < window_end:
+                if afk_windows[i][1] > window_start:
+                    overlapping_afk.append(afk_windows[i])
+                i += 1
 
             if not overlapping_afk:
                 result.append(window_event)
                 continue
 
-            # Sort AFK events by timestamp
-            overlapping_afk.sort(key=lambda x: normalize_timestamp(x["timestamp"]))
-
-            # Split window event at AFK boundaries
+            # Split window event at AFK boundaries (overlapping_afk is
+            # already sorted, since afk_windows is and this is a subsequence)
             current_time = window_start
-            for afk_event in overlapping_afk:
-                afk_start = normalize_timestamp(afk_event["timestamp"])
-                afk_end = afk_start + normalize_duration(afk_event["duration"])
-
+            for afk_start, afk_end in overlapping_afk:
                 # Add window portion before AFK (if any)
                 if current_time < afk_start < window_end:
                     duration_td = afk_start - current_time

@@ -157,6 +157,10 @@ def compare_intervals(
         uncovered_gaps = []
         current_pos = suggested.start
 
+        # Loop-invariant: suggested.tags doesn't change across the inner loop
+        # below, so expand it once here instead of on every iteration.
+        suggested_tags_expanded = _safe_retag_by_rules(suggested.tags, extractor)
+
         for tw in overlapping_sorted:
             # Gap before this timew interval?
             if tw.start > current_pos:
@@ -177,7 +181,6 @@ def compare_intervals(
             if overlap_start < overlap_end:
                 # There's actual overlap - check if tags match
                 timew_tags_expanded = _safe_retag_by_rules(tw.tags, extractor)
-                suggested_tags_expanded = _safe_retag_by_rules(suggested.tags, extractor)
 
                 # Create interval objects for the overlapping portion
                 overlapping_suggested = SuggestedInterval(
