@@ -425,6 +425,63 @@ class TestGetIntervals:
         ):
             tracker.get_intervals(start, end)
 
+    def test_get_intervals_passes_date_range_to_export(self) -> None:
+        """get_intervals should pass the range to `timew export`, not export everything.
+
+        Regression test for the efficiency finding in CODE_REVIEW_2026-07.md:
+        a bare `timew export` re-parses the entire (potentially huge)
+        database on every call. The date range must be passed as CLI args so
+        timew itself narrows the result.
+        """
+        tracker = TimewTracker(grace_time=0)
+        start = datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+        mock_result = Mock()
+        mock_result.stdout = "[]"
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            tracker.get_intervals(start, end)
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "timew"
+        assert cmd[1] == "export"
+        assert "-" in cmd
+        assert len(cmd) == 5  # ["timew", "export", start_str, "-", end_str]
+
+    def test_get_intervals_falls_back_to_bare_export_on_range_failure(self) -> None:
+        """If ranged export fails (older timew, unsupported range syntax),
+        fall back to a bare `timew export` and filter client-side."""
+        tracker = TimewTracker(grace_time=0)
+        start = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 1, 2, 0, 0, 0, tzinfo=UTC)
+
+        mock_data = [
+            {
+                "id": 1,
+                "start": "20250101T100000Z",
+                "end": "20250101T110000Z",
+                "tags": ["work"],
+            }
+        ]
+        bare_result = Mock()
+        bare_result.stdout = json.dumps(mock_data)
+
+        with patch(
+            "subprocess.run",
+            side_effect=[subprocess.CalledProcessError(1, "timew"), bare_result],
+        ) as mock_run:
+            intervals = tracker.get_intervals(start, end)
+
+        assert mock_run.call_count == 2
+        first_cmd = mock_run.call_args_list[0][0][0]
+        second_cmd = mock_run.call_args_list[1][0][0]
+        assert first_cmd == ["timew", "export", *first_cmd[2:]]  # ranged attempt first
+        assert second_cmd == ["timew", "export"]  # bare fallback
+        assert len(intervals) == 1
+        assert intervals[0]["tags"] == {"work"}
+
 
 class TestTrackInterval:
     """Test track_interval method."""
@@ -477,8 +534,9 @@ class TestRunTimew:
         assert tracker._current_cache is None
 
     def test_run_timew_waits_grace_period(self) -> None:
-        """Test that command waits for grace period."""
-        tracker = TimewTracker(grace_time=0.01, hide_output=True)  # Very short for testing
+        """Test that command waits for grace period when output (and the undo
+        message) is visible."""
+        tracker = TimewTracker(grace_time=0.01, hide_output=False)  # Very short for testing
 
         with (
             patch("subprocess.run", return_value=Mock(returncode=0)),
@@ -487,6 +545,22 @@ class TestRunTimew:
             tracker._run_timew(["test"])
 
             mock_sleep.assert_called_once_with(0.01)
+
+    def test_run_timew_skips_grace_period_when_output_hidden(self) -> None:
+        """The grace-period sleep exists to give the user a window to react to
+        the printed undo message; with hide_output=True that message is never
+        shown, so sleeping serves no purpose and only slows down batches of
+        commands (e.g. retag.py's bulk retag loop).
+        """
+        tracker = TimewTracker(grace_time=10, hide_output=True)
+
+        with (
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+            patch("time.sleep") as mock_sleep,
+        ):
+            tracker._run_timew(["test"])
+
+            mock_sleep.assert_not_called()
 
     def test_run_timew_raises_on_nonzero_returncode(self) -> None:
         """Test that a failed timew command raises instead of failing silently.

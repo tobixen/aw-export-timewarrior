@@ -104,8 +104,13 @@ class TimewTracker(TimeTracker):
                 attrs=["bold"],
             )
 
-        # Wait grace period for timew to settle
-        time.sleep(self.grace_time)
+        # Wait grace period for timew to settle. This exists to give the user
+        # a window to react to the undo message just printed above; with
+        # hide_output=True that message is never shown, so sleeping serves no
+        # purpose and only slows down batches of commands (e.g. retag.py's
+        # bulk retag loop, or a `timew tag`+`untag` pair in retag()).
+        if not self.hide_output:
+            time.sleep(self.grace_time)
 
         # Invalidate cache
         self._current_cache = None
@@ -214,14 +219,28 @@ class TimewTracker(TimeTracker):
         Returns:
             List of intervals with 'start', 'end', 'tags', 'id'
         """
+        start_str = start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+        end_str = end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+
         try:
-            # Export all intervals (date range syntax varies by timew version, so export all and filter)
-            result = subprocess.run(
-                ["timew", "export"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
+            try:
+                # Ask timew to narrow the export itself, so we don't parse the
+                # entire (potentially huge, ever-growing) database on every call.
+                result = subprocess.run(
+                    ["timew", "export", start_str, "-", end_str],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+            except subprocess.CalledProcessError:
+                # Older timew versions may not support this range syntax;
+                # fall back to exporting everything and filtering below.
+                result = subprocess.run(
+                    ["timew", "export"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
 
             data = json.loads(result.stdout)
 
