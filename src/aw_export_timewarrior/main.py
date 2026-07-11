@@ -449,7 +449,6 @@ class Exporter:
             fetch_timew_intervals,
             format_diff_output,
             format_timeline,
-            generate_fix_commands,
         )
 
         if not self.show_diff:
@@ -478,62 +477,68 @@ class Exporter:
 
         # Generate and display/execute fix commands
         if self.show_fix_commands or self.apply_fix:
-            fix_commands = generate_fix_commands(comparison)
-
-            if fix_commands:
-                if self.apply_fix:
-                    print("\n" + "=" * 80)
-                    print("Applying fixes to TimeWarrior database...")
-                    print("=" * 80 + "\n")
-
-                    for cmd in fix_commands:
-                        # Skip empty lines and commented-out commands
-                        if not cmd.strip() or cmd.startswith("#"):
-                            if cmd.startswith("#"):
-                                print(f"Skipping (manual entry): {cmd}")
-                            continue
-
-                        print(f"Executing: {cmd}")
-                        # Parse and execute the command (strip comment part)
-                        try:
-                            # Remove comment part if present (e.g., "  # 2025-12-10 - old tags: ...")
-                            command_part = cmd.split("  #")[0].strip()
-                            # shlex.split (not str.split): generate_fix_commands quotes
-                            # multi-word tags (e.g. "personal communication") so they must
-                            # be un-quoted back into a single argument, not torn apart.
-                            result = subprocess.run(
-                                shlex.split(command_part),
-                                capture_output=True,
-                                text=True,
-                                check=True,
-                            )
-                            print("  ✓ Success")
-                            if result.stdout:
-                                print(f"    Output: {result.stdout.strip()}")
-                        except subprocess.CalledProcessError as e:
-                            print(f"  ✗ Failed (exit code {e.returncode})")
-                            if e.stderr:
-                                print(f"    stderr: {e.stderr.strip()}")
-                            if e.stdout:
-                                print(f"    stdout: {e.stdout.strip()}")
-                            print(f"    Command: {command_part}")
-
-                    print("\n" + "=" * 80 + "\n")
-                else:
-                    # Just show the commands
-                    print("\n" + "=" * 80)
-                    print("Commands to fix differences:")
-                    print("=" * 80 + "\n")
-
-                    for cmd in fix_commands:
-                        print(cmd)
-
-                    print("\n" + "=" * 80 + "\n")
-            else:
-                if self.hide_diff_report:
-                    print("No differences found - TimeWarrior matches ActivityWatch suggestions.")
+            self._handle_fix_commands(comparison)
 
         return comparison
+
+    def _handle_fix_commands(self, comparison: dict) -> None:
+        """Generate fix commands from a comparison and either display or apply them."""
+        from .compare import generate_fix_commands
+
+        fix_commands = generate_fix_commands(comparison)
+
+        if not fix_commands:
+            if self.hide_diff_report:
+                print("No differences found - TimeWarrior matches ActivityWatch suggestions.")
+            return
+
+        if not self.apply_fix:
+            print("\n" + "=" * 80)
+            print("Commands to fix differences:")
+            print("=" * 80 + "\n")
+            for cmd in fix_commands:
+                print(cmd)
+            print("\n" + "=" * 80 + "\n")
+            return
+
+        print("\n" + "=" * 80)
+        print("Applying fixes to TimeWarrior database...")
+        print("=" * 80 + "\n")
+        for cmd in fix_commands:
+            self._apply_single_fix_command(cmd)
+        print("\n" + "=" * 80 + "\n")
+
+    def _apply_single_fix_command(self, cmd: str) -> None:
+        """Execute a single fix-command line, or skip it if blank/commented out."""
+        if not cmd.strip():
+            return
+        if cmd.startswith("#"):
+            print(f"Skipping (manual entry): {cmd}")
+            return
+
+        print(f"Executing: {cmd}")
+        # Remove comment part if present (e.g., "  # 2025-12-10 - old tags: ...")
+        command_part = cmd.split("  #")[0].strip()
+        try:
+            # shlex.split (not str.split): generate_fix_commands quotes
+            # multi-word tags (e.g. "personal communication") so they must
+            # be un-quoted back into a single argument, not torn apart.
+            result = subprocess.run(
+                shlex.split(command_part),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print("  ✓ Success")
+            if result.stdout:
+                print(f"    Output: {result.stdout.strip()}")
+        except subprocess.CalledProcessError as e:
+            print(f"  ✗ Failed (exit code {e.returncode})")
+            if e.stderr:
+                print(f"    stderr: {e.stderr.strip()}")
+            if e.stdout:
+                print(f"    stdout: {e.stdout.strip()}")
+            print(f"    Command: {command_part}")
 
     def show_unmatched_events_report(self, limit: int = 10, verbose: bool = False) -> None:
         """Display a report of events that didn't match any rules.

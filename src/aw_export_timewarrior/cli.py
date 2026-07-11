@@ -10,6 +10,7 @@ import importlib.metadata
 import logging
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -734,6 +735,27 @@ def run_validate(args: argparse.Namespace) -> int:
         return 0
 
 
+def _subcommand_handlers() -> dict[
+    str, tuple[Callable[[argparse.Namespace], str | None], Callable[[argparse.Namespace], int]]
+]:
+    """Map each subcommand to its (validate, run) function pair.
+
+    Built fresh on every call (rather than as a module-level constant) so it
+    resolves run_sync/run_diff/etc. as they currently are in this module's
+    namespace at call time -- matching the late-binding behavior of a plain
+    if/elif chain, which tests rely on when patching e.g.
+    "aw_export_timewarrior.cli.run_sync".
+    """
+    return {
+        "sync": (validate_sync_args, run_sync),
+        "diff": (validate_diff_args, run_diff),
+        "analyze": (validate_analyze_args, run_analyze),
+        "export": (validate_export_args, run_export),
+        "report": (validate_report_args, run_report),
+        "validate": (validate_validate_args, run_validate),
+    }
+
+
 def main(argv=None) -> int:
     """
     Main CLI entry point.
@@ -769,51 +791,17 @@ def main(argv=None) -> int:
 
     try:
         # Validate and run the appropriate subcommand
-        if subcommand == "sync":
-            error = validate_sync_args(args)
-            if error:
-                print(error, file=sys.stderr)
-                return 1
-            return run_sync(args)
-
-        elif subcommand == "diff":
-            error = validate_diff_args(args)
-            if error:
-                print(error, file=sys.stderr)
-                return 1
-            return run_diff(args)
-
-        elif subcommand == "analyze":
-            error = validate_analyze_args(args)
-            if error:
-                print(error, file=sys.stderr)
-                return 1
-            return run_analyze(args)
-
-        elif subcommand == "export":
-            error = validate_export_args(args)
-            if error:
-                print(error, file=sys.stderr)
-                return 1
-            return run_export(args)
-
-        elif subcommand == "report":
-            error = validate_report_args(args)
-            if error:
-                print(error, file=sys.stderr)
-                return 1
-            return run_report(args)
-
-        elif subcommand == "validate":
-            error = validate_validate_args(args)
-            if error:
-                print(error, file=sys.stderr)
-                return 1
-            return run_validate(args)
-
-        else:
+        handler = _subcommand_handlers().get(subcommand)
+        if handler is None:
             print(f"Error: Unknown subcommand: {subcommand}", file=sys.stderr)
             return 1
+
+        validate_args, run_subcommand = handler
+        error = validate_args(args)
+        if error:
+            print(error, file=sys.stderr)
+            return 1
+        return run_subcommand(args)
 
     except KeyboardInterrupt:
         print("\nExiting...")

@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `report --min-duration SECONDS`: filter out events shorter than the given duration (e.g. `--min-duration 2` hides sub-2-second window flickers)
 
 ### Changed
+- `run_comparison`'s fix-command block (six levels of nesting) is now split into `_handle_fix_commands` (display vs. apply) and `_apply_single_fix_command` (execute one line), each with early returns instead of nested conditionals.
+- `cli.py`'s six-branch `if subcommand == ... elif ...` dispatch in `main()` is now a `_subcommand_handlers()` lookup table mapping each subcommand to its `(validate, run)` function pair.
 - `compare.py` now formats timestamps via `utils.ts2str`/`ts2strtime` instead of ~16 inlined `astimezone().strftime(...)` calls.
 - `compare.py`'s `fetch_timew_intervals` now delegates to `TimewTracker.get_intervals` instead of running its own `timew export <start> - <end>` call, which had drifted from `TimewTracker`'s bare-export-then-filter approach (needed because the date-range CLI syntax varies by timew version).
 - Extracted the ask-away overlap check (repeated 4 times across `ensure_tag_exported` and `find_next_activity`) into one `_overlapping_ask_away_events()` helper.
