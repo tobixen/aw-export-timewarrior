@@ -154,3 +154,6 @@ config.local.toml
 
 # AI prompt recording (runtime data, not for the repo)
 .prompts/
+
+# lychee link-checker cache
+.lycheecache
