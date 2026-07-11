@@ -1,0 +1,5 @@
+# Lychee ignore list — each line is a regex matched against extracted URLs.
+# These are not real links: they are url_regexp fixtures/examples that happen
+# to look like URLs (tests/test_list_expansion.py, README config examples).
+https://acme\.com/
+https://\(@customers
