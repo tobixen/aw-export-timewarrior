@@ -12,6 +12,7 @@ A full code review was done by Claude Fable - it found multiple potential bugs t
 ### Added
 - `[lists]` config section for reusable named lists, referenced as `@name` in list fields (`tags`, `app_names`, `source_tags`, ...) and in regexp fields (`url_regexp`, `title_regexp`, `path_regexp`, ...), where a reference expands to a non-capturing alternation `(?:item1|item2|...)`. Supersedes `[app_groups]`, which remains as an alias.
 - `report --min-duration SECONDS`: filter out events shorter than the given duration (e.g. `--min-duration 2` hides sub-2-second window flickers)
+- `--stop` as an alias for `--to`/`--until`/`--end` when giving the end of a time range.
 
 ### Fixed
 - Fix captured `timew start`/`stop` timestamps recorded in UTC (`Z` suffix) being shifted by your local UTC offset, placing those intervals at the wrong time of day.
@@ -28,6 +29,14 @@ A full code review was done by Claude Fable - it found multiple potential bugs t
 - Fix split ask-away events being exported twice, producing duplicate intervals and sometimes causing the following work events to be mistagged as UNKNOWN.
 - Fix tmux tag matching for 0-second window events that occur just before tmux activity begins (matching now looks forward as well as backward).
 - Fix an ask-away event starting inside an AFK period being matched to a later, unrelated AFK period, which silently discarded hours of window activity between the two.
+- Fix flatpak Chromium not being recognized as a browser, so its visited URLs never showed up as tags in `sync` or `report`.
+- Fix a terminal window not running tmux picking up tmux tags from another terminal that was running tmux, mistagging the focused window.
+- Fix `diff` crashing when an existing TimeWarrior interval carried tags that violate an exclusive-group rule; it now warns and keeps the original tags.
+- Fix `diff` dropping the last interval of a time range when it was still open at the range end, and being too quick to mark activity as UNKNOWN.
+- Fix `diff --apply` truncating or splitting a currently-running (open) TimeWarrior interval, which it had wrongly treated as missing.
+- Fix `diff --apply` never converging for intervals carrying a multi-word tag (e.g. the default `personal communication`), which was being torn into separate tags.
+- Fix retag rules that remove or replace tags having no effect — only tag additions were applied.
+- Fix `sync` crashing shortly after a `timew stop` when nothing was being tracked but its internal state was still "away".
 
 ### Performance
 - `diff`, `report`, `analyze` and time-bounded `sync` are dramatically faster on historical ranges: each range is now fetched and processed once instead of being repeatedly re-fetched and re-processed. A 3-hour `diff` that previously took ~12 s now completes in under 1 s.
