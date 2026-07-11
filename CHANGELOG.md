@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `report --min-duration SECONDS`: filter out events shorter than the given duration (e.g. `--min-duration 2` hides sub-2-second window flickers)
 
 ### Changed
+- Added missing type annotations to `Exporter.ensure_tag_exported`, `Exporter.set_known_tick_stats`, and `load_config`; fixed several `Exporter` dataclass fields (`timew_info`, `config`, `config_path`, `test_data`, `start_time`, `end_time`) that were annotated as non-optional (e.g. `dict = None`) despite defaulting to and accepting `None`.
+- Introduced an `Exporter.batch_mode` property and a `_log_in_batch_else_breakpoint` helper, replacing four separate `if self.start_time and self.end_time:` checks (two of which had their own duplicated log-vs-breakpoint mode policy).
 - `run_comparison`'s fix-command block (six levels of nesting) is now split into `_handle_fix_commands` (display vs. apply) and `_apply_single_fix_command` (execute one line), each with early returns instead of nested conditionals.
 - `cli.py`'s six-branch `if subcommand == ... elif ...` dispatch in `main()` is now a `_subcommand_handlers()` lookup table mapping each subcommand to its `(validate, run)` function pair.
 - `compare.py` now formats timestamps via `utils.ts2str`/`ts2strtime` instead of ~16 inlined `astimezone().strftime(...)` calls.

@@ -5,6 +5,7 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import Enum, auto
+from pathlib import Path
 from time import sleep
 
 from .aw_client import FALLBACK_TO_RECENT_LOOKBACK, EventFetcher
@@ -127,7 +128,7 @@ def get_tuning_param(config: dict, param_name: str, env_var: str, default: float
 SPECIAL_TAGS = {"manual", "override", "not-afk"}
 
 
-def load_config(config_path):
+def load_config(config_path: str | Path | None) -> dict:
     # Load custom config if provided
     from . import config as config_module
 
@@ -145,7 +146,7 @@ class Exporter:
     _state: StateManager = field(default_factory=StateManager, init=False, repr=False)
 
     ## Information from timew about the current tagging (not part of StateManager)
-    timew_info: dict = None
+    timew_info: dict | None = None
 
     ## Testing and debugging options
     dry_run: bool = False  # If True, don't actually modify timewarrior
@@ -159,11 +160,11 @@ class Exporter:
     show_timeline: bool = False  # If True, show side-by-side timeline view in diff mode
     enable_pdb: bool = False  # If True, drop into debugger on unexpected states
     enable_assert: bool = True  # If True, assert on unexpected states
-    config: dict = None  # Configuration
-    config_path: str = None  # Configuration file name
-    test_data: dict = None  # Optional test data instead of querying AW
-    start_time: datetime = None  # Optional start time for processing window
-    end_time: datetime = None  # Optional end time for processing window
+    config: dict | None = None  # Configuration
+    config_path: str | Path | None = None  # Configuration file name
+    test_data: dict | None = None  # Optional test data instead of querying AW
+    start_time: datetime | None = None  # Optional start time for processing window
+    end_time: datetime | None = None  # Optional end time for processing window
     captured_commands: list | None = (
         None  # Captures timew commands when set to a list (for testing)
     )
@@ -213,7 +214,7 @@ class Exporter:
         # Extend the cache range by a small buffer to catch events that start just before
         # start_time (e.g. browser events from get_corresponding_event lookback).
         aw_cache_range = None
-        if self.start_time and self.end_time and not self.test_data:
+        if self.batch_mode and not self.test_data:
             aw_cache_range = (
                 self.start_time - CACHE_LOOKBACK_BUFFER,
                 self.end_time + CACHE_LOOKAHEAD_MARGIN,
@@ -313,6 +314,34 @@ class Exporter:
             breakpoint()
         elif self.enable_assert:
             raise AssertionError(reason)
+
+    @property
+    def batch_mode(self) -> bool:
+        """True when processing an explicit historical range (start_time and
+        end_time both set), as opposed to continuous/live sync mode."""
+        return bool(self.start_time and self.end_time)
+
+    def _log_in_batch_else_breakpoint(
+        self, batch_message: str, sync_reason: str | None = None, event=None
+    ) -> None:
+        """Log an expected anomaly at DEBUG in batch mode, or breakpoint in sync mode.
+
+        Several conditions are normal artifacts of processing historical data
+        in batch/diff mode but indicate a real problem if seen in live sync
+        mode. This centralizes that mode-dependent policy.
+
+        Args:
+            batch_message: Message to log at DEBUG when self.batch_mode is True
+            sync_reason: Message passed to self.breakpoint() otherwise (uses
+                breakpoint()'s own default reason if not given)
+            event: Optional event to attach to the batch-mode log entry
+        """
+        if self.batch_mode:
+            self.log(batch_message, event=event, level=logging.DEBUG)
+        elif sync_reason is not None:
+            self.breakpoint(sync_reason)
+        else:
+            self.breakpoint()
 
     def apply_retag_rules(self, source_tags: set[str]) -> set[str]:
         """Apply retag rules with proper error handling for exclusive group violations.
@@ -553,17 +582,17 @@ class Exporter:
 
     def set_known_tick_stats(
         self,
-        event=None,
-        start=None,
-        end=None,
-        manual=False,
-        tags=None,
-        reset_accumulator=False,
-        retain_accumulator=True,
-        record_export=False,
-        decision_timestamp=None,
-        accumulator_before=None,
-    ):
+        event: dict | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        manual: bool = False,
+        tags: set[str] | str | None = None,
+        reset_accumulator: bool = False,
+        retain_accumulator: bool = True,
+        record_export: bool = False,
+        decision_timestamp: datetime | None = None,
+        accumulator_before: dict | None = None,
+    ) -> None:
         """
         Set statistics after exporting tags.
 
@@ -651,7 +680,13 @@ class Exporter:
         ]
 
     ## TODO: move all dealings with statistics to explicit statistics-handling methods
-    def ensure_tag_exported(self, tags, event, since=None, accumulator_before=None):
+    def ensure_tag_exported(
+        self,
+        tags: set[str] | str,
+        event: dict,
+        since: datetime | None = None,
+        accumulator_before: dict | None = None,
+    ) -> None:
         if since is None:
             since = event["timestamp"]
 
@@ -676,18 +711,11 @@ class Exporter:
                 and not self.state.manual_tracking
                 and last_activity_run_time.total_seconds() < self.min_recording_interval - 3
             ):
-                if self.start_time and self.end_time:
-                    # Batch/diff mode - log and continue
-                    self.log(
-                        f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < min_recording_interval-3 ({self.min_recording_interval - 3}s) - normal in batch/diff mode",
-                        event=event,
-                        level=logging.DEBUG,
-                    )
-                else:
-                    # Sync mode - this indicates a real problem
-                    self.breakpoint(
-                        f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < self.min_recording_interval-3 ({self.min_recording_interval - 3}s), last_start_time={self.state.last_start_time}, since={since}"
-                    )
+                self._log_in_batch_else_breakpoint(
+                    f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < min_recording_interval-3 ({self.min_recording_interval - 3}s) - normal in batch/diff mode",
+                    f"last_activity_run_time ({last_activity_run_time.total_seconds()}s) < self.min_recording_interval-3 ({self.min_recording_interval - 3}s), last_start_time={self.state.last_start_time}, since={since}",
+                    event=event,
+                )
 
             ## If the tracked time is less than the known events time we've counted
             ## then something is a little bit wrong.
@@ -1067,16 +1095,10 @@ class Exporter:
                 ## - Processing events from the past and building up state
                 ## - TimeWarrior's current state doesn't match the historical timestamp
                 ## - In dry-run mode where we haven't applied changes yet
-                if self.start_time and self.end_time:
-                    # Batch/diff mode - log and continue
-                    self.log(
-                        "Internal state shows AFK but TimeWarrior not tracking afk tag - normal in batch/diff mode",
-                        event=event,
-                        level=logging.DEBUG,
-                    )
-                else:
-                    # Sync mode - this indicates a real problem
-                    self.breakpoint()
+                self._log_in_batch_else_breakpoint(
+                    "Internal state shows AFK but TimeWarrior not tracking afk tag - normal in batch/diff mode",
+                    event=event,
+                )
             if "not-afk" in tags:
                 self._afk_change_stats("not-afk", tags, event)
                 self.log(
@@ -1335,7 +1357,7 @@ class Exporter:
         """
         # In batch/diff mode with explicit time range, don't skip events based on state
         # Process all events within the requested range
-        if self.start_time and self.end_time:
+        if self.batch_mode:
             return False
 
         # Skip events older than last_tick or last_known_tick
