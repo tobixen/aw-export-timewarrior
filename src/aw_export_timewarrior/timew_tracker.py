@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .time_tracker import TimeTracker
+from .utils import effective_end, ts2str
 
 
 class TimewTracker(TimeTracker):
@@ -56,6 +57,11 @@ class TimewTracker(TimeTracker):
         self.hide_output = hide_output
         self._current_cache: dict[str, Any] | None = None
         self._cache_time: float = 0.0
+        # Whether `timew export <start> - <end>` (ranged export) is supported by
+        # the installed timew version. Starts optimistic; get_intervals() sets
+        # this to False after the first failure so it doesn't pay a failed
+        # subprocess call on every subsequent call for an old install.
+        self._ranged_export_supported: bool = True
 
     def _run_timew(
         self, args: list[str], show_undo_message: bool = True
@@ -166,7 +172,7 @@ class TimewTracker(TimeTracker):
             start_time: When to start from
         """
         # Convert to local time for timew
-        args = ["start"] + sorted(tags) + [start_time.astimezone().strftime("%Y-%m-%dT%H:%M:%S")]
+        args = ["start"] + sorted(tags) + [ts2str(start_time)]
         self._run_timew(args)
 
     def stop_tracking(self) -> None:
@@ -216,28 +222,30 @@ class TimewTracker(TimeTracker):
         Returns:
             List of intervals with 'start', 'end', 'tags', 'id'
         """
-        start_str = start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
-        end_str = end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+        start_str = ts2str(start)
+        end_str = ts2str(end)
+
+        # Ask timew to narrow the export itself, so we don't parse the entire
+        # (potentially huge, ever-growing) database on every call. Older timew
+        # versions may not support this range syntax, so fall back to
+        # exporting everything and filtering below - remembered per-instance
+        # so an unsupported install doesn't pay a failed subprocess call on
+        # every subsequent get_intervals().
+        candidates = []
+        if self._ranged_export_supported:
+            candidates.append((True, ["timew", "export", start_str, "-", end_str]))
+        candidates.append((False, ["timew", "export"]))
 
         try:
-            try:
-                # Ask timew to narrow the export itself, so we don't parse the
-                # entire (potentially huge, ever-growing) database on every call.
-                result = subprocess.run(
-                    ["timew", "export", start_str, "-", end_str],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-            except subprocess.CalledProcessError:
-                # Older timew versions may not support this range syntax;
-                # fall back to exporting everything and filtering below.
-                result = subprocess.run(
-                    ["timew", "export"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
+            result = None
+            for is_ranged, cmd in candidates:
+                try:
+                    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                    break
+                except subprocess.CalledProcessError:
+                    if not is_ranged:
+                        raise
+                    self._ranged_export_supported = False
 
             data = json.loads(result.stdout)
 
@@ -260,10 +268,7 @@ class TimewTracker(TimeTracker):
                 # requiring interval_end to exist - otherwise an ongoing interval
                 # that started before `start` is invisible even though it's still
                 # running and clearly overlaps the query range.
-                effective_end = (
-                    interval_end if interval_end is not None else datetime.max.replace(tzinfo=UTC)
-                )
-                in_range = interval_start <= end and effective_end >= start
+                in_range = interval_start <= end and effective_end(interval_end) >= start
 
                 if in_range:
                     intervals.append(
@@ -290,8 +295,8 @@ class TimewTracker(TimeTracker):
             tags: Tags for interval
         """
         # Format times for timew track command
-        start_str = start.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
-        end_str = end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+        start_str = ts2str(start)
+        end_str = ts2str(end)
 
         args = ["track", start_str, "-", end_str] + sorted(tags)
 

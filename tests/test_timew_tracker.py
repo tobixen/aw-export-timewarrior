@@ -504,6 +504,34 @@ class TestGetIntervals:
         assert len(intervals) == 1
         assert intervals[0]["tags"] == {"work"}
 
+    def test_get_intervals_remembers_ranged_export_unsupported(self) -> None:
+        """Regression test for CODE_REVIEW_2026-07-12.md cleanup list: once
+        ranged export has failed once, subsequent calls should go straight to
+        the bare export instead of paying a failed subprocess call every time.
+        """
+        tracker = TimewTracker(grace_time=0)
+        start = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 1, 2, 0, 0, 0, tzinfo=UTC)
+
+        bare_result = Mock()
+        bare_result.stdout = "[]"
+
+        with patch(
+            "subprocess.run",
+            side_effect=[subprocess.CalledProcessError(1, "timew"), bare_result],
+        ):
+            tracker.get_intervals(start, end)
+
+        assert tracker._ranged_export_supported is False
+
+        # Second call: only the bare export should be attempted.
+        with patch("subprocess.run", return_value=bare_result) as mock_run:
+            tracker.get_intervals(start, end)
+
+        mock_run.assert_called_once_with(
+            ["timew", "export"], capture_output=True, text=True, check=True
+        )
+
 
 class TestTrackInterval:
     """Test track_interval method."""

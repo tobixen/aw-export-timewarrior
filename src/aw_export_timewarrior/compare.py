@@ -4,14 +4,14 @@ Comparison module for comparing TimeWarrior database with ActivityWatch suggesti
 
 import logging
 import shlex
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from termcolor import colored
 
 from .config import config
 from .tag_extractor import ExclusiveGroupError, TagExtractor
 from .timew_tracker import TimewTracker
-from .utils import ts2str, ts2strtime
+from .utils import effective_end, ts2str, ts2strtime
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def _safe_retag_by_rules(tags: set[str], extractor: TagExtractor) -> set[str]:
 
 def _effective_end(interval) -> datetime:
     """End time to use in overlap math; open (ongoing) intervals have no end yet."""
-    return interval.end if interval.end else datetime.max.replace(tzinfo=UTC)
+    return effective_end(interval.end)
 
 
 class TimewInterval:

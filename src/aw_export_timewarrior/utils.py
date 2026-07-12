@@ -1,6 +1,6 @@
 """Shared utility functions for aw-export-timewarrior."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import dateparser
 
@@ -107,3 +107,12 @@ def ts2strtime(ts: datetime | None) -> str:
     if not ts:
         return "XX:XX:XX"
     return ts2str(ts, "%H:%M:%S")
+
+
+def effective_end(end: datetime | None) -> datetime:
+    """End time to use in overlap math; an open (ongoing) interval has no end yet.
+
+    Shared by every module doing interval-overlap math (compare.py,
+    timew_tracker.py) so their "ongoing interval" sentinel can't diverge.
+    """
+    return end if end is not None else datetime.max.replace(tzinfo=UTC)

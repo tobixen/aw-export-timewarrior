@@ -13,7 +13,7 @@ from aw_export_timewarrior.main import (
 )
 from aw_export_timewarrior.state import AfkState
 from aw_export_timewarrior.tag_extractor import TagExtractor
-from aw_export_timewarrior.utils import ts2str, ts2strtime
+from aw_export_timewarrior.utils import effective_end, ts2str, ts2strtime
 
 
 def create_aw_event(timestamp, duration, data):
@@ -79,6 +79,21 @@ class TestTimestampFormatting:
         """Test ts2strtime with None input."""
         result = ts2strtime(None)
         assert result == "XX:XX:XX"
+
+    def test_effective_end_with_end(self) -> None:
+        """Test effective_end returns the given end unchanged when present."""
+        end = datetime(2025, 5, 28, 14, 30, 45, tzinfo=UTC)
+        assert effective_end(end) == end
+
+    def test_effective_end_with_none_is_unbounded(self) -> None:
+        """Test effective_end treats an ongoing (end=None) interval as unbounded.
+
+        Shared by compare.py's _effective_end and timew_tracker.py's
+        get_intervals so their overlap-math sentinel can't diverge
+        (CODE_REVIEW_2026-07-12.md cleanup list).
+        """
+        result = effective_end(None)
+        assert result > datetime(2100, 1, 1, tzinfo=UTC)
 
 
 class TestExclusiveOverlapping:
