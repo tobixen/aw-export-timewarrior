@@ -607,6 +607,12 @@ def run_sync(args: argparse.Namespace) -> int:
         else:
             print("Starting continuous monitoring (Ctrl+C to stop)...", flush=True)
 
+        # KNOWN LIMITATION (CODE_REVIEW_2026-07-12.md #4): _run_timew now raises
+        # on any nonzero timew exit (db lock, hook rejection). That exception
+        # propagates out of tick() through this loop to main()'s generic
+        # except-Exception handler, which kills the whole continuous daemon on
+        # a single transient failure. Needs per-tick retry/tolerance; deferred
+        # pending a decision on the retry/backoff policy.
         while exporter.tick():
             # Small sleep to prevent 100% CPU usage during continuous sync
             time.sleep(0.1)
