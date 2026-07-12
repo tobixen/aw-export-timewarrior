@@ -392,3 +392,48 @@ class TestExporterWithMockAW:
         batch_intervals = exporter_batch.get_suggested_intervals()
 
         _assert_no_differences(sync_intervals, batch_intervals)
+
+
+class TestCacheGatedOnClosedRange:
+    """The AW event cache must only be enabled for a genuinely closed (past)
+    range, not merely "start and end both set".
+
+    A bounded live sync (`sync --from <past> --to <future>`) has both times set
+    but is still an open range: new heartbeats keep arriving.  Caching the first
+    snapshot would freeze the live portion, so the cache must stay disabled -
+    mirroring EventPipeline's batch-memo gate (end_time <= now).
+    """
+
+    def test_future_end_time_disables_event_cache(self) -> None:
+        test_data, t0, _t_end = _simple_coding_scenario()
+        mock_aw = _build_mock_aw_client(test_data)
+
+        now = datetime.now(UTC)
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient", return_value=mock_aw):
+            exporter = Exporter(
+                dry_run=True,
+                start_time=now - timedelta(hours=1),
+                end_time=now + timedelta(hours=1),  # future -> open range
+                config_path=CONFIG_FILE,
+            )
+
+        assert exporter.event_fetcher._cache_range is None, (
+            "Cache must be disabled for a future end_time (open range); otherwise "
+            "the live portion is frozen to the first-tick snapshot."
+        )
+
+    def test_past_end_time_enables_event_cache(self) -> None:
+        test_data, t0, t_end = _simple_coding_scenario()
+        mock_aw = _build_mock_aw_client(test_data)
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient", return_value=mock_aw):
+            exporter = Exporter(
+                dry_run=True,
+                start_time=t0,
+                end_time=t_end,  # both in the past -> closed range
+                config_path=CONFIG_FILE,
+            )
+
+        assert exporter.event_fetcher._cache_range is not None, (
+            "Cache should be enabled for a closed, past range."
+        )

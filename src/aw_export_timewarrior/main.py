@@ -199,22 +199,38 @@ class Exporter:
         # When using test data, automatically set start_time and end_time from metadata if not already set
         if self.test_data:
             metadata = self.test_data.get("metadata", {})
+            # Use parse_datetime (not bare fromisoformat): it normalizes a
+            # tz-less metadata timestamp to an aware datetime (local tz),
+            # matching the CLI path. A naive end_time would later TypeError
+            # against datetime.now(UTC) in EventPipeline.fetch_and_prepare_events.
             if not self.start_time and "start_time" in metadata:
-                start_time_str = metadata["start_time"]
-                self.start_time = datetime.fromisoformat(start_time_str)
+                self.start_time = parse_datetime(metadata["start_time"])
             if not self.end_time and "end_time" in metadata:
-                end_time_str = metadata["end_time"]
-                self.end_time = datetime.fromisoformat(end_time_str)
+                self.end_time = parse_datetime(metadata["end_time"])
 
         ## Initialize EventFetcher for all ActivityWatch data access
         client_name = "timewarrior_test_export" if self.dry_run else "timewarrior_export"
-        # Enable event caching for batch/historical processing (start_time + end_time both set,
-        # no test data). This avoids repeated HTTP requests to ActivityWatch for the same data,
-        # reducing get_events() calls from O(N events) to O(number of buckets).
-        # Extend the cache range by a small buffer to catch events that start just before
-        # start_time (e.g. browser events from get_corresponding_event lookback).
+        # Enable event caching for batch/historical processing. This avoids
+        # repeated HTTP requests to ActivityWatch for the same data, reducing
+        # get_events() calls from O(N events) to O(number of buckets). Extend
+        # the cache range by a small buffer to catch events that start just
+        # before start_time (e.g. browser events from get_corresponding_event
+        # lookback).
+        #
+        # The cache is only sound when the range is genuinely closed: start and
+        # end set AND end already in the past. A future end_time (bounded live
+        # sync `sync --from <past> --to <future>`) is still an open range - new
+        # heartbeats keep arriving - so caching the first snapshot would freeze
+        # the live portion. This mirrors EventPipeline's batch-memo gate
+        # (end_time <= now); "start and end both set" (batch_mode) is *not* the
+        # right discriminator, as it also matches the future case.
         aw_cache_range = None
-        if self.batch_mode and not self.test_data:
+        if (
+            self.batch_mode
+            and not self.test_data
+            and self.end_time is not None
+            and self.end_time <= datetime.now(UTC)
+        ):
             aw_cache_range = (
                 self.start_time - CACHE_LOOKBACK_BUFFER,
                 self.end_time + CACHE_LOOKAHEAD_MARGIN,

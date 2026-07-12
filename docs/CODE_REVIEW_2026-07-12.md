@@ -180,6 +180,14 @@ early-exit. Note the "start **and** end set" discriminator floated above is
 (`event_pipeline.py`); a future end_time re-runs the pipeline each call. Test:
 `tests/test_batch_memo_future_end.py`.
 
+**Follow-up fix (2026-07-12, later session):** the pipeline-memo gate alone was
+insufficient — the underlying `EventFetcher` event cache (`main.py`) was still
+enabled on `batch_mode` (start **and** end set), the exact discriminator flagged
+wrong above. So `sync --from <past> --to <future>` re-ran the pipeline each tick
+but read a *frozen* cache snapshot, freezing the live portion one layer down. The
+cache is now gated on the same `end_time <= now` test. Test:
+`tests/test_cache_regression.py::TestCacheGatedOnClosedRange`.
+
 ---
 
 ## Efficiency
@@ -228,6 +236,12 @@ exist in shipped v0.6.5 code (worth a quick confirm before removing).
   arms differing only in the command list (`timew_tracker.py:226-243`); loop over
   the two candidate commands instead, and cache the "ranged-export unsupported"
   outcome so old-timew installs don't pay a failed subprocess on every call.
+  **Done (2026-07-12).** Follow-up: the cache latch was refined so it only trips
+  when the ranged attempt fails *and* the plain-export fallback then succeeds
+  (proving the range syntax is the problem), not on any failure — a transient
+  db-lock/hook failure no longer permanently degrades every later call to a
+  full-DB scan. Test:
+  `tests/test_timew_tracker.py::TestGetIntervals::test_get_intervals_transient_failure_does_not_latch_off_ranged`.
 - `guarded_run` / `guarded_check_output` are copy-paste closures differing by one
   word (`tests/conftest.py:71`); build them from a factory.
 - `_prepared_batch` is an untyped positional 4-tuple documented only in a comment

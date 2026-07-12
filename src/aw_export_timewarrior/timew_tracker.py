@@ -238,6 +238,7 @@ class TimewTracker(TimeTracker):
 
         try:
             result = None
+            ranged_failed = False
             for is_ranged, cmd in candidates:
                 try:
                     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -245,7 +246,17 @@ class TimewTracker(TimeTracker):
                 except subprocess.CalledProcessError:
                     if not is_ranged:
                         raise
-                    self._ranged_export_supported = False
+                    ranged_failed = True
+
+            # Only latch off ranged export when the ranged attempt failed *and*
+            # the plain-export fallback then succeeded (result is set): that
+            # combination indicates the range *syntax* is unsupported. A
+            # transient failure (db lock, hook rejection) would typically also
+            # fail the immediate fallback and re-raise, leaving the flag on so
+            # the next call retries ranged - rather than permanently degrading
+            # every later get_intervals() to a full-DB export after one blip.
+            if ranged_failed and result is not None:
+                self._ranged_export_supported = False
 
             data = json.loads(result.stdout)
 

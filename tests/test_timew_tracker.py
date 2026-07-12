@@ -532,6 +532,41 @@ class TestGetIntervals:
             ["timew", "export"], capture_output=True, text=True, check=True
         )
 
+    def test_get_intervals_transient_failure_does_not_latch_off_ranged(self) -> None:
+        """A transient failure (db lock, hook) that also fails the bare-export
+        fallback must NOT permanently disable ranged export: both attempts
+        raise, so the next call should still try the efficient ranged export
+        rather than degrading to a full-DB scan forever after one blip."""
+        tracker = TimewTracker(grace_time=0)
+        start = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 1, 2, 0, 0, 0, tzinfo=UTC)
+
+        # Ranged attempt fails, and the bare fallback fails too -> propagate.
+        with (
+            patch(
+                "subprocess.run",
+                side_effect=[
+                    subprocess.CalledProcessError(1, "timew"),
+                    subprocess.CalledProcessError(1, "timew"),
+                ],
+            ),
+            pytest.raises(RuntimeError),
+        ):
+            tracker.get_intervals(start, end)
+
+        # Flag stays optimistic: the failure wasn't proven to be the range syntax.
+        assert tracker._ranged_export_supported is True
+
+        # Next call still leads with the ranged export.
+        ok_result = Mock()
+        ok_result.stdout = "[]"
+        with patch("subprocess.run", return_value=ok_result) as mock_run:
+            tracker.get_intervals(start, end)
+
+        first_cmd = mock_run.call_args_list[0][0][0]
+        assert first_cmd[:2] == ["timew", "export"]
+        assert "-" in first_cmd  # ranged syntax attempted again
+
 
 class TestTrackInterval:
     """Test track_interval method."""
