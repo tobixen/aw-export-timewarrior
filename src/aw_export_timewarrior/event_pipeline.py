@@ -7,6 +7,7 @@ of events from ActivityWatch before they are processed for tag extraction.
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import NamedTuple
 
 from .output import user_output
 from .utils import get_event_range, normalize_duration, normalize_timestamp
@@ -15,6 +16,15 @@ logger = logging.getLogger(__name__)
 
 # Default threshold for considering window events stale (5 minutes)
 DEFAULT_STALE_EVENTS_THRESHOLD = timedelta(minutes=5)
+
+
+class _PreparedBatch(NamedTuple):
+    """Memoized batch-mode preparation, keyed by the range it was prepared for."""
+
+    prepare_start: datetime | None
+    end_time: datetime | None
+    prepared_events: list[tuple[datetime, dict]]
+    ask_away_events: list[dict]
 
 
 @dataclass
@@ -73,8 +83,7 @@ class EventPipeline:
     start_time: datetime | None = None
 
     # Internal state
-    # Batch-mode memo: (prepare_start, end_time, [(event_end, event)], ask_away_events)
-    _prepared_batch: tuple | None = field(default=None, init=False, repr=False)
+    _prepared_batch: _PreparedBatch | None = field(default=None, init=False, repr=False)
     _ask_away_events: list = field(default_factory=list, init=False, repr=False)
     _last_stale_warning: datetime | None = field(default=None, init=False, repr=False)
     _stale_warning_interval: timedelta = field(
@@ -113,29 +122,31 @@ class EventPipeline:
         cached = self._prepared_batch
         if (
             cached is None
-            or cached[1] != self.end_time
-            or (cached[0] is not None and (self.last_tick is None or self.last_tick < cached[0]))
+            or cached.end_time != self.end_time
+            or (
+                cached.prepare_start is not None
+                and (self.last_tick is None or self.last_tick < cached.prepare_start)
+            )
         ):
             events, _current = self._run_pipeline()
-            self._prepared_batch = (
-                self.last_tick,
-                self.end_time,
-                [(get_event_range(e)[1], e) for e in events],
-                list(self._ask_away_events),
+            self._prepared_batch = _PreparedBatch(
+                prepare_start=self.last_tick,
+                end_time=self.end_time,
+                prepared_events=[(get_event_range(e)[1], e) for e in events],
+                ask_away_events=list(self._ask_away_events),
             )
             return events
 
-        _start, _end, prepared_events, ask_away_events = cached
         if self.last_tick is None:
-            self._ask_away_events = list(ask_away_events)
-            return [event for _event_end, event in prepared_events]
+            self._ask_away_events = list(cached.ask_away_events)
+            return [event for _event_end, event in cached.prepared_events]
         # Ask-away events use get_events()'s overlap semantics (end >= start
         # of the query range); prepared events use _run_pipeline's strict
         # end > last_tick filter.
         self._ask_away_events = [
-            a for a in ask_away_events if get_event_range(a)[1] >= self.last_tick
+            a for a in cached.ask_away_events if get_event_range(a)[1] >= self.last_tick
         ]
-        return [event for event_end, event in prepared_events if event_end > self.last_tick]
+        return [event for event_end, event in cached.prepared_events if event_end > self.last_tick]
 
     def _run_pipeline(self) -> tuple[list, dict | None]:
         """Run the full fetch/merge/split/sort pipeline for [last_tick, end_time].
@@ -635,14 +646,7 @@ class EventPipeline:
         # afk_windows here too lets the loop below sweep both lists forward
         # with a single pointer instead of rescanning from the start each time.
         afk_windows = sorted(
-            (
-                (
-                    normalize_timestamp(afk["timestamp"]),
-                    normalize_timestamp(afk["timestamp"]) + normalize_duration(afk["duration"]),
-                )
-                for afk in afk_events
-                if afk["data"].get("status") == "afk"
-            ),
+            (get_event_range(afk) for afk in afk_events if afk["data"].get("status") == "afk"),
             key=lambda pair: pair[0],
         )
 
@@ -650,8 +654,7 @@ class EventPipeline:
         low = 0  # first afk_windows index that might still overlap a future window
 
         for window_event in window_events:
-            window_start = normalize_timestamp(window_event["timestamp"])
-            window_end = window_start + normalize_duration(window_event["duration"])
+            window_start, window_end = get_event_range(window_event)
 
             # Drop AFK periods that ended before this window starts: since
             # window starts are non-decreasing, they can't overlap this or
