@@ -15,7 +15,14 @@ code (several confirmed by execution). Verdicts:
 See also `CODE_REVIEW_2026-07.md` (2026-07-09 full-codebase review) and
 `CODE_REVIEW.md` (December 2025 review).
 
-**Fix status:** none fixed yet.
+**Fix status (2026-07-12, follow-up session):** #1, #2, #5, #9, #10 fixed;
+#3 and #4 addressed as documented/flagged known limitations (maintainer
+decision, no code change); all 6 "Lower-priority cleanups" bullets applied.
+#6, #7, #8 (all PLAUSIBLE) deliberately deferred per maintainer decision —
+not fixed, no regression test added yet. See commit history from `790e0ef`
+through `e6e766d` for the individual changes (one commit per finding, mostly
+without CHANGELOG entries since almost all of this diff's bugs were
+introduced and fixed within the same unreleased window).
 
 **Refuted / not reported:** `min_lid_duration` moving to `[tuning]` (commit
 `c2f3930`) is a correct fix, not a regression — the shipped default config,
