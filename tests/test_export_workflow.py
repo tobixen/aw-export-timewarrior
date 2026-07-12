@@ -161,6 +161,68 @@ class TestEnsureTagExported:
         # Should not have started new tracking because tags are already tracked
         exporter.tracker.start_tracking.assert_not_called()
 
+    @patch("aw_export_timewarrior.main.config", {"exclusive": {}, "tags": {}})
+    def test_ensure_tag_exported_handles_two_non_split_ask_away_answers(
+        self, mock_aw_client: Mock
+    ) -> None:
+        """Regression test for CODE_REVIEW_2026-07-12.md #2: a second non-split
+        ask-away answer overlapping the same AFK event was silently, permanently
+        dropped.
+
+        The non-split handler only ever read overlapping_events[0], so with two
+        separate (non-split) ask-away answers overlapping one AFK event, only the
+        first answer's tags reached TimeWarrior. The "already AFK" outer-loop path
+        then marked *both* answers' timestamps as exported regardless, so
+        exclude_exported=True permanently blocked any retry of the second one.
+
+        Both answers must now produce their own tracked interval, at their own
+        timestamp, like the (already-working) split-event handling does.
+        """
+        exporter = Exporter(enable_assert=False)
+        exporter.state.last_known_tick = datetime(2025, 5, 28, 9, 0, 0, tzinfo=UTC)
+        exporter.state.last_start_time = datetime(2025, 5, 28, 9, 0, 0, tzinfo=UTC)
+        exporter.state.set_afk_state(AfkState.AFK)
+        exporter.state.manual_tracking = False
+
+        exporter.tracker.get_current_tracking = Mock(return_value=None)
+        exporter.tracker.start_tracking = Mock()
+        exporter.tracker.retag = Mock()
+
+        tea_ts = datetime(2025, 5, 28, 9, 5, 0, tzinfo=UTC)
+        meeting_ts = datetime(2025, 5, 28, 9, 35, 0, tzinfo=UTC)
+        exporter._ask_away_events = [
+            {"timestamp": tea_ts, "duration": timedelta(minutes=10), "data": {"message": "tea"}},
+            {
+                "timestamp": meeting_ts,
+                "duration": timedelta(minutes=10),
+                "data": {"message": "meeting"},
+            },
+        ]
+
+        # One merged AFK event spanning both ask-away answers, as
+        # _merge_consecutive_afk_events would produce.
+        event = {
+            "timestamp": datetime(2025, 5, 28, 9, 0, 0, tzinfo=UTC),
+            "duration": timedelta(hours=1),
+        }
+
+        exporter.ensure_tag_exported({"afk"}, event)
+
+        assert exporter.tracker.start_tracking.call_count == 2, (
+            f"Expected one tracked interval per ask-away answer, got: "
+            f"{exporter.tracker.start_tracking.call_args_list}"
+        )
+        calls_by_since = {
+            call.args[1]: call.args[0] for call in exporter.tracker.start_tracking.call_args_list
+        }
+        assert "tea" in calls_by_since.get(tea_ts, set()), (
+            f"Expected 'tea' tagged at {tea_ts}, got: {calls_by_since}"
+        )
+        assert "meeting" in calls_by_since.get(meeting_ts, set()), (
+            f"Expected 'meeting' tagged at {meeting_ts}, got: {calls_by_since}"
+        )
+        assert exporter._exported_ask_away_timestamps == {tea_ts, meeting_ts}
+
 
 class TestExporterTick:
     """Tests for main tick method."""

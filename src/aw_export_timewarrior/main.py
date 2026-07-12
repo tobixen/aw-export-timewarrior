@@ -792,42 +792,45 @@ class Exporter:
         tags = self.apply_retag_rules(tags)
         assert not self.tag_extractor.check_exclusive_groups(tags)
 
-        # Look up ask-away message for this event and extract tags from it
+        # Look up ask-away message(s) for this event and extract tags from them.
         # This must happen BEFORE the final_tags comparison below, so that
-        # ask-away tags are included in the comparison
+        # ask-away tags are included in the comparison.
         ask_away_tags = set()
-        if "afk" in tags:
-            overlapping_events = self._overlapping_ask_away_events(event)
+        overlapping_ask_away_events = (
+            self._overlapping_ask_away_events(event) if "afk" in tags else []
+        )
+        # Multiple overlapping answers - e.g. two separate non-split ask-away
+        # replies within one merged AFK period, or a user-initiated split - each
+        # need their own tracked interval at their own timestamp; a single merged
+        # interval can only ever carry one answer's tags (see
+        # CODE_REVIEW_2026-07-12.md #2: with >1 non-split answers, only the first
+        # was ever applied and the rest were silently, permanently dropped).
+        use_multi_interval_ask_away = len(overlapping_ask_away_events) > 1 or (
+            len(overlapping_ask_away_events) == 1
+            and overlapping_ask_away_events[0]["data"].get("split", False)
+        )
 
-            if overlapping_events:
-                # Check if first event has split metadata
-                first_event = overlapping_events[0]
-                is_split = first_event["data"].get("split", False)
-
-                if is_split:
-                    # Split events are handled separately below
-                    pass
-                else:
-                    # Non-split: extract tags from the first overlapping event
-                    ask_event = overlapping_events[0]
-                    message = ask_event["data"].get("message", "")
-                    if message:
-                        synthetic_event = {
-                            "timestamp": event["timestamp"],
-                            "duration": event["duration"],
-                            "data": {"app": "ask-away", "title": message},
-                        }
-                        message_tags = self.tag_extractor.get_app_tags(synthetic_event)
-                        if not message_tags or message_tags is False:
-                            message_tags = parse_message_tags(message)
-                        if message_tags:
-                            if isinstance(message_tags, set):
-                                ask_away_tags = message_tags
-                            else:
-                                ask_away_tags = set(message_tags)
-                    # Mark this ask-away event as exported so the outer loop
-                    # does not re-export it in a subsequent "already AFK" call.
-                    self._exported_ask_away_timestamps.add(ask_event["timestamp"])
+        if overlapping_ask_away_events and not use_multi_interval_ask_away:
+            # Single non-split answer: fold its tags into this one interval.
+            ask_event = overlapping_ask_away_events[0]
+            message = ask_event["data"].get("message", "")
+            if message:
+                synthetic_event = {
+                    "timestamp": event["timestamp"],
+                    "duration": event["duration"],
+                    "data": {"app": "ask-away", "title": message},
+                }
+                message_tags = self.tag_extractor.get_app_tags(synthetic_event)
+                if not message_tags or message_tags is False:
+                    message_tags = parse_message_tags(message)
+                if message_tags:
+                    if isinstance(message_tags, set):
+                        ask_away_tags = message_tags
+                    else:
+                        ask_away_tags = set(message_tags)
+            # Mark this ask-away event as exported so the outer loop
+            # does not re-export it in a subsequent "already AFK" call.
+            self._exported_ask_away_timestamps.add(ask_event["timestamp"])
 
         # Check if tags are exactly the same as current tags (after rule application)
         # This prevents redundant timew start commands when tags haven't changed
@@ -845,90 +848,81 @@ class Exporter:
                 record_export_history=True,
             )
 
-        # Skip early return if there are overlapping split ask-away events that need
-        # their own intervals — the split handler below must run even when final_tags
-        # happens to equal timew_info["tags"] (e.g. both are {afk, ~aw}).
-        has_overlapping_split_events = False
-        if "afk" in tags:
-            has_overlapping_split_events = any(
-                ask["data"].get("split") for ask in self._overlapping_ask_away_events(event)
-            )
-
+        # Skip early return if there are overlapping ask-away events that need
+        # their own interval(s) - the multi-interval handler below must run even
+        # when final_tags happens to equal timew_info["tags"] (e.g. both are
+        # {afk, ~aw}).
         if (
             self.timew_info is not None
             and final_tags == self.timew_info["tags"]
-            and not has_overlapping_split_events
+            and not use_multi_interval_ask_away
         ):
             return
 
-        # Handle split ask-away events (these need special processing with multiple intervals)
-        # Non-split ask-away events are already handled above via ask_away_tags
-        if "afk" in tags:
-            overlapping_events = self._overlapping_ask_away_events(event)
+        # Handle ask-away answers that need their own interval: either the user
+        # explicitly split the AFK period (split=True), or more than one non-split
+        # answer overlaps the same AFK event. Each gets its own tracked interval
+        # at its own timestamp.
+        if use_multi_interval_ask_away:
+            # Sort by split_index for genuine split parts; non-split multi
+            # answers all default to split_index 0, so the timestamp tiebreak
+            # puts them in chronological order.
+            sub_events = sorted(
+                overlapping_ask_away_events,
+                key=lambda e: (e["data"].get("split_index", 0), e["timestamp"]),
+            )
 
-            if overlapping_events:
-                first_event = overlapping_events[0]
-                is_split = first_event["data"].get("split", False)
+            logger.info(f"Found {len(sub_events)} ask-away activities for AFK period")
 
-                if is_split:
-                    # This AFK period was split by the user
-                    # Sort split events by split_index to ensure correct order
-                    split_events = sorted(
-                        overlapping_events, key=lambda e: e["data"].get("split_index", 0)
+            # For each answer, create a separate tracking entry
+            for i, sub_event in enumerate(sub_events):
+                message = sub_event["data"].get("message", "")
+                if not message:
+                    continue
+
+                # Extract tags for this specific activity
+                synthetic_event = {
+                    "timestamp": sub_event["timestamp"],
+                    "duration": sub_event["duration"],
+                    "data": {"app": "ask-away", "title": message},
+                }
+                message_tags = self.tag_extractor.get_app_tags(synthetic_event)
+
+                # If no rules matched, use the message text directly as tags
+                if not message_tags or message_tags is False:
+                    message_tags = parse_message_tags(message)
+
+                # Combine with base tags
+                sub_tags = tags | {"~aw"}
+                if message_tags:
+                    if isinstance(message_tags, set):
+                        sub_tags = sub_tags | message_tags
+                    else:
+                        sub_tags = sub_tags | set(message_tags)
+
+                # Start tracking for this activity with its specific timestamp
+                sub_since = sub_event["timestamp"]
+                logger.info(
+                    f"  Ask-away {i + 1}/{len(sub_events)}: '{message}' "
+                    f"at {sub_since} ({sub_event['duration']})"
+                )
+                self.tracker.start_tracking(sub_tags, sub_since)
+                self._exported_ask_away_timestamps.add(sub_event["timestamp"])
+
+                # Update state after each answer (simulate sequential tracking)
+                if not self.dry_run:
+                    self.set_timew_info(self.retag_current_interval())
+                else:
+                    self.set_timew_info(
+                        {
+                            "start": sub_since.strftime("%Y%m%dT%H%M%SZ"),
+                            "start_dt": sub_since,
+                            "tags": sub_tags,
+                        }
                     )
 
-                    logger.info(f"Found {len(split_events)} split activities for AFK period")
-
-                    # For each split event, create a separate tracking entry
-                    for i, split_event in enumerate(split_events):
-                        message = split_event["data"].get("message", "")
-                        if not message:
-                            continue
-
-                        # Extract tags for this specific split activity
-                        synthetic_event = {
-                            "timestamp": split_event["timestamp"],
-                            "duration": split_event["duration"],
-                            "data": {"app": "ask-away", "title": message},
-                        }
-                        message_tags = self.tag_extractor.get_app_tags(synthetic_event)
-
-                        # If no rules matched, use the message text directly as tags
-                        if not message_tags or message_tags is False:
-                            message_tags = parse_message_tags(message)
-
-                        # Combine with base tags
-                        split_tags = tags | {"~aw"}
-                        if message_tags:
-                            if isinstance(message_tags, set):
-                                split_tags = split_tags | message_tags
-                            else:
-                                split_tags = split_tags | set(message_tags)
-
-                        # Start tracking for this split activity with its specific timestamp
-                        split_since = split_event["timestamp"]
-                        logger.info(
-                            f"  Split {i + 1}/{len(split_events)}: '{message}' "
-                            f"at {split_since} ({split_event['duration']})"
-                        )
-                        self.tracker.start_tracking(split_tags, split_since)
-                        self._exported_ask_away_timestamps.add(split_event["timestamp"])
-
-                        # Update state after each split (simulate sequential tracking)
-                        if not self.dry_run:
-                            self.set_timew_info(self.retag_current_interval())
-                        else:
-                            self.set_timew_info(
-                                {
-                                    "start": split_since.strftime("%Y%m%dT%H%M%SZ"),
-                                    "start_dt": split_since,
-                                    "tags": split_tags,
-                                }
-                            )
-
-                    # Split events handled - return early, don't call start_tracking again
-                    return
-                # Non-split events already handled via ask_away_tags above
+            # Handled - return early, don't call start_tracking again
+            return
 
         # Start tracking with the final tags
         self.tracker.start_tracking(final_tags, since)
