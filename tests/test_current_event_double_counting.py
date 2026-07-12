@@ -159,6 +159,84 @@ class TestCurrentEventDoubleCountingFix:
                 "portion was not clipped."
             )
 
+    def test_ongoing_event_survives_export_advancing_last_known_tick(self) -> None:
+        """Invariant guard for CODE_REVIEW_2026-07-12.md #6.
+
+        _process_current_event_incrementally keys its dedup on the *clipped*
+        start (== last_known_tick when the event started earlier). If an export
+        advances last_known_tick while the same event stays open across ticks,
+        that key shifts and the "new ongoing event" branch re-adds the full
+        clipped span. That only stays correct because every real path that
+        advances last_known_tick also zeroes known_events_time (and clears the
+        current-event tracking): record_export couples reset_stats to both
+        (state.py) and the AFK path resets stats just before.
+
+        This test drives that real coupling -- a genuine export advancing
+        last_known_tick between two incremental calls on the same open event --
+        and asserts the known_events_time <= tracked_gap invariant still holds.
+        It fails if a future change decouples the last_known_tick advance from
+        the stats reset.
+        """
+        from aw_export_timewarrior.main import Exporter
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            current_time = datetime.now(UTC).isoformat()
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {
+                "aw-watcher-window_test": {
+                    "id": "aw-watcher-window_test",
+                    "client": "aw-watcher-window",
+                    "last_updated": current_time,
+                },
+                "aw-watcher-afk_test": {
+                    "id": "aw-watcher-afk_test",
+                    "client": "aw-watcher-afk",
+                    "last_updated": current_time,
+                },
+            }
+            mock_aw_class.return_value = mock_client
+
+            exporter = Exporter(dry_run=True)
+
+            l1 = datetime(2025, 12, 21, 9, 50, 0, tzinfo=UTC)
+            exporter.state.last_known_tick = l1
+            exporter.state.last_start_time = l1
+
+            event_start = l1 - timedelta(minutes=10)
+
+            def open_event(total_minutes: int) -> dict:
+                return {
+                    "timestamp": event_start,
+                    "duration": timedelta(minutes=total_minutes),
+                    "data": {"app": "MPlayer", "title": "MPlayer"},
+                }
+
+            # Tick 1: event runs to l1 + 2min; only [l1, l1+2min] is countable.
+            exporter._process_current_event_incrementally(open_event(12))
+
+            # A real export at l1+2min advances last_known_tick through the
+            # normal, invariant-preserving path (reset_accumulator zeroes stats
+            # and clears current-event tracking).
+            l2 = l1 + timedelta(minutes=2)
+            exporter.set_known_tick_stats(
+                start=l1,
+                end=l2,
+                tags={"work"},
+                reset_accumulator=True,
+                record_export=True,
+            )
+            assert exporter.state.last_known_tick == l2
+
+            # Tick 2: same event still open, now to l1 + 5min.
+            exporter._process_current_event_incrementally(open_event(15))
+
+            tracked_gap = (event_start + timedelta(minutes=15)) - exporter.state.last_known_tick
+            assert exporter.state.stats.known_events_time <= tracked_gap, (
+                f"known_events_time ({exporter.state.stats.known_events_time}) exceeds "
+                f"tracked_gap ({tracked_gap}) after an export advanced last_known_tick "
+                "while the event stayed open -- the reset coupling was broken (#6)."
+            )
+
     def test_completed_event_no_match_adds_full_duration(self) -> None:
         """Test that completed events NOT matching current_event_timestamp add full duration.
 
