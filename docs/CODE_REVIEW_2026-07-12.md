@@ -18,11 +18,19 @@ See also `CODE_REVIEW_2026-07.md` (2026-07-09 full-codebase review) and
 **Fix status (2026-07-12, follow-up session):** #1, #2, #5, #9, #10 fixed;
 #3 and #4 addressed as documented/flagged known limitations (maintainer
 decision, no code change); all 6 "Lower-priority cleanups" bullets applied.
-#6, #7, #8 (all PLAUSIBLE) deliberately deferred per maintainer decision —
-not fixed, no regression test added yet. See commit history from `790e0ef`
-through `e6e766d` for the individual changes (one commit per finding, mostly
-without CHANGELOG entries since almost all of this diff's bugs were
-introduced and fixed within the same unreleased window).
+See commit history from `790e0ef` through `e6e766d` for the individual changes
+(one commit per finding, mostly without CHANGELOG entries since almost all of
+this diff's bugs were introduced and fixed within the same unreleased window).
+
+**PLAUSIBLE follow-up (2026-07-12, later session):** #6, #7, #8 were
+re-researched. **#7 fixed** — `compare.py` now reads `config` per call
+(`tests/test_compare_config_rebind.py`). **#8 fixed** — batch memo gated on
+`end_time <= now`; the doc's original "start and end set" fix suggestion was
+wrong, see below (`tests/test_batch_memo_future_end.py`). **#6 not reachable**
+today — every real path that advances `last_known_tick` also zeroes
+`known_events_time` (record_export's reset_stats coupling / the `main.py:776`
+reset), so no code change; an invariant-guarding regression test was added
+(`test_ongoing_event_survives_export_advancing_last_known_tick`).
 
 **Refuted / not reported:** `min_lid_duration` moving to `[tuning]` (commit
 `c2f3930`) is a correct fix, not a regression — the shipped default config,
@@ -122,6 +130,15 @@ on a retain-accumulator export path it would, violating the
 `last_known_tick` while an event stays open across ticks", given the project's
 history of exactly these clipping bugs.
 
+**Resolution (2026-07-12):** re-verified as **not reachable** — the double-count
+needs `known_events_time` to survive a `last_known_tick` advance, but
+`record_export` couples `reset_stats` to both the stats reset *and* clearing
+current-event tracking (`state.py`), and the one `reset_stats=False` path (AFK
+export) is preceded by the `main.py:776` `stats.reset()`. A repro that manually
+advanced `last_known_tick` without zeroing stats does trip the assert, so the
+coupling is load-bearing; the invariant is now guarded by
+`test_ongoing_event_survives_export_advancing_last_known_tick`. No code change.
+
 ### 7. 🟡 `compare.py` binds the rebindable `config` global at import time — `compare.py:11` (PLAUSIBLE)
 
 The old code imported `config` *inside* each function (re-reading the current
@@ -136,6 +153,11 @@ or a second `--config` run in the same process would silently use stale rules.
 
 **Fix:** pass `config` as a parameter, or keep the deferred per-call import.
 
+**Fix (2026-07-12):** reverted to the deferred per-call `from .config import
+config` in both `compare_intervals` and `generate_fix_commands`; confirmed by
+execution that the stale binding ignored a post-import custom `[tags]` rule.
+Test: `tests/test_compare_config_rebind.py`.
+
 ### 8. 🟡 Batch memo is served whenever `end_time` is set, not just true batch mode — `event_pipeline.py:99` (PLAUSIBLE, narrow)
 
 `fetch_and_prepare_events` memoizes on `if self.end_time is not None` and the
@@ -144,7 +166,19 @@ for *past* ranges. A `sync --to <future>` (end_time set, start_time None) serves
 the first-tick snapshot for the whole run, so heartbeats recorded during
 processing are never fetched and the run ends early. If sync-until-a-future-time
 isn't a supported invocation this is moot; if it is, the guard should require a
-genuinely past/closed range (start **and** end set, or `end_time <= now`).
+genuinely past/closed range.
+
+**Follow-up research (2026-07-12):** the exact case above (`--to` with no
+`--from`) is *blocked* — `cli.py` rejects `--end` without `--start`. But the
+neighboring `sync --from <past> --to <future>` (continuous, no `--once`) IS
+supported (`cli.py` prints "Starting sync until {end_time}") and reproduces the
+early-exit. Note the "start **and** end set" discriminator floated above is
+**wrong**: that bounded-live-sync has both set. The correct guard is
+`end_time <= now`.
+
+**Fix (2026-07-12):** memo is now gated on `self.end_time <= datetime.now(UTC)`
+(`event_pipeline.py`); a future end_time re-runs the pipeline each call. Test:
+`tests/test_batch_memo_future_end.py`.
 
 ---
 
