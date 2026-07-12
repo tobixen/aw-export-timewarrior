@@ -26,6 +26,26 @@ def _is_timew_command(cmd: Any) -> bool:
     return isinstance(cmd, (list, tuple)) and len(cmd) > 0 and cmd[0] == "timew"
 
 
+def _make_guarded_subprocess_call(real_func, func_name: str, is_blocked):
+    """Wrap a subprocess function so blocked calls raise instead of hitting real timew.
+
+    Shared by the subprocess.run and subprocess.check_output guards below,
+    which are otherwise identical apart from which real function they wrap
+    and the name reported in the error message.
+    """
+
+    def guarded(cmd, *args, **kwargs):
+        if is_blocked(cmd):
+            raise RuntimeError(
+                f"Blocked unmocked real 'timew' subprocess call: {cmd}. Mock "
+                f"{func_name}, or use the `timew_sandbox` fixture for a real, "
+                "isolated integration test."
+            )
+        return real_func(cmd, *args, **kwargs)
+
+    return guarded
+
+
 def _timew_env_is_isolated() -> bool:
     """True if TIMEWARRIORDB or XDG_DATA_HOME points under the system temp dir.
 
@@ -68,26 +88,14 @@ def _guard_real_timew(monkeypatch):
             and _is_timew_command(cmd)
         )
 
-    def guarded_run(cmd, *args, **kwargs):
-        if is_blocked(cmd):
-            raise RuntimeError(
-                f"Blocked unmocked real 'timew' subprocess call: {cmd}. Mock "
-                "subprocess.run, or use the `timew_sandbox` fixture for a "
-                "real, isolated integration test."
-            )
-        return real_run(cmd, *args, **kwargs)
-
-    def guarded_check_output(cmd, *args, **kwargs):
-        if is_blocked(cmd):
-            raise RuntimeError(
-                f"Blocked unmocked real 'timew' subprocess call: {cmd}. Mock "
-                "subprocess.check_output, or use the `timew_sandbox` fixture "
-                "for a real, isolated integration test."
-            )
-        return real_check_output(cmd, *args, **kwargs)
-
-    monkeypatch.setattr(subprocess, "run", guarded_run)
-    monkeypatch.setattr(subprocess, "check_output", guarded_check_output)
+    monkeypatch.setattr(
+        subprocess, "run", _make_guarded_subprocess_call(real_run, "subprocess.run", is_blocked)
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "check_output",
+        _make_guarded_subprocess_call(real_check_output, "subprocess.check_output", is_blocked),
+    )
 
 
 @pytest.fixture
