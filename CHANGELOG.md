@@ -29,7 +29,6 @@ A full code review was done by Claude Fable - it found multiple potential bugs t
 - Fix activity blocks entered via ask-away (e.g. a tea break) being invisible to TimeWarrior when they happened while already in an away state; `diff` also left existing `~aw` blocks untouched in this case.
 - Fix split ask-away events being exported twice, producing duplicate intervals and sometimes causing the following work events to be mistagged as UNKNOWN.
 - Fix tmux tag matching for 0-second window events that occur just before tmux activity begins (matching now looks forward as well as backward).
-- Fix an ask-away event starting inside an AFK period being matched to a later, unrelated AFK period, which silently discarded hours of window activity between the two.
 - Fix flatpak Chromium not being recognized as a browser, so its visited URLs never showed up as tags in `sync` or `report`.
 - Fix a terminal window not running tmux picking up tmux tags from another terminal that was running tmux, mistagging the focused window.
 - Fix `diff` crashing when an existing TimeWarrior interval carried tags that violate an exclusive-group rule; it now warns and keeps the original tags.
