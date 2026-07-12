@@ -21,7 +21,7 @@ A full code review was done by Claude Fable - it found multiple potential bugs t
 - Fix `report --show-exports` always printing `Total exports: 0`; it now shows the real number of exports.
 - Fix failed `timew` commands (e.g. a database lock or a hook rejection) being silently ignored, which let internal tracking drift out of sync with what TimeWarrior actually recorded; such failures now raise an error instead.
 - Fix global flags being rejected when running with no subcommand — e.g. `aw-export-timewarrior --log-level DEBUG` errored out instead of running `sync`.
-- Fix `--config FILE` being silently ignored when placed after the `diff` subcommand; `--config` is a global flag and must be given before the subcommand.
+- Fix `--config FILE` being silently reset to the default whenever it was given before a subcommand (e.g. `--config x.toml diff ...`): the `diff` subcommand redefined `--config` under the same name as the global option, and argparse's per-subcommand default always overwrote the already-parsed global value.
 - Fix `diff --hide-report` being silently ignored.
 - Fix `min_lid_duration` being silently ignored when set under `[tuning]` (its documented location).
 - Fix a laptop-lid boot-gap wiping out a whole day of activity: a bedtime boot-gap can span 24+ hours and was treated as away-time for the entire day. It is now clipped to the first real AFK event, after which normal activity tracking resumes.
@@ -37,6 +37,9 @@ A full code review was done by Claude Fable - it found multiple potential bugs t
 - Fix `diff --apply` never converging for intervals carrying a multi-word tag (e.g. the default `personal communication`), which was being torn into separate tags.
 - Fix retag rules that remove or replace tags having no effect — only tag additions were applied.
 - Fix `sync` crashing shortly after a `timew stop` when nothing was being tracked but its internal state was still "away".
+
+### Changed
+- **Breaking:** `--config FILE` must now be given before the subcommand (e.g. `--config FILE sync`, not `sync --config FILE`), like every other global flag. `diff --config FILE` (config placed after the subcommand) happened to work before as a side effect of the bug fixed above, and will now error with "unrecognized arguments" instead.
 
 ### Performance
 - `diff`, `report`, `analyze` and time-bounded `sync` are dramatically faster on historical ranges: each range is now fetched and processed once instead of being repeatedly re-fetched and re-processed. A 3-hour `diff` that previously took ~12 s now completes in under 1 s.

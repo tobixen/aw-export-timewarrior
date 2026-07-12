@@ -103,6 +103,21 @@ class TestCreateParser:
 
         assert args.config == Path("test.toml")
 
+    def test_config_after_subcommand_is_rejected(self) -> None:
+        """`--config` placed after the subcommand is now a hard error.
+
+        Intentional (documented) breaking change: `diff --config FILE` used
+        to work only because the `diff` subparser redefined `--config`,
+        which caused the clobbering bug fixed by
+        test_global_config_survives_diff_subcommand above. Removing that
+        redefinition means `--config` must precede the subcommand like every
+        other global flag; see CODE_REVIEW_2026-07-12.md #3.
+        """
+        parser = create_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args(["diff", "--config", "test.toml"])
+
     def test_report_subcommand_options(self) -> None:
         """Test report-specific options."""
         parser = create_parser()

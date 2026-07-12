@@ -30,8 +30,8 @@ aw-export-timewarrior sync --dry-run
 # Test a specific scenario
 aw-export-timewarrior sync --dry-run --test-data tests/fixtures/simple_work_session.json --once
 
-# Test with a different config
-aw-export-timewarrior sync --dry-run --config my_test_config.toml --test-data tests/fixtures/afk_transition.json --once
+# Test with a different config (--config is global and must precede the subcommand)
+aw-export-timewarrior --config my_test_config.toml sync --dry-run --test-data tests/fixtures/afk_transition.json --once
 ```
 
 ### Output Example
@@ -203,8 +203,11 @@ Subcommands:
 ### Common Options
 
 ```
---config FILE             Use custom configuration file
---verbose, -v             Show detailed reasoning and decisions
+--config FILE             Use custom configuration file (global flag - must
+                          come BEFORE the subcommand, e.g.
+                          `aw-export-timewarrior --config FILE sync ...`)
+--verbose, -v             Show detailed reasoning and decisions (per-subcommand
+                          flag - comes after the subcommand)
 ```
 
 ### Sync Options
@@ -239,8 +242,8 @@ aw-export-timewarrior sync
 # Dry run with current live data
 aw-export-timewarrior sync --dry-run --once
 
-# Test a config change
-aw-export-timewarrior sync --dry-run --config new_config.toml --once
+# Test a config change (--config must precede the subcommand)
+aw-export-timewarrior --config new_config.toml sync --dry-run --once
 
 # Test with recorded data
 aw-export-timewarrior sync --dry-run --test-data yesterday.json --once
@@ -263,17 +266,17 @@ aw-export-timewarrior analyze --from yesterday
 ### Testing a New Tag Rule
 
 1. Create or modify your config
-2. Test with existing fixture:
+2. Test with existing fixture (`--config` is global and must precede the subcommand):
    ```bash
-   aw-export-timewarrior sync --dry-run --config my_config.toml --test-data tests/fixtures/simple_work_session.json --once
+   aw-export-timewarrior --config my_config.toml sync --dry-run --test-data tests/fixtures/simple_work_session.json --once
    ```
 3. If it looks good, test with real data:
    ```bash
-   aw-export-timewarrior sync --dry-run --config my_config.toml --once
+   aw-export-timewarrior --config my_config.toml sync --dry-run --once
    ```
 4. When confident, enable for real:
    ```bash
-   aw-export-timewarrior sync --config my_config.toml
+   aw-export-timewarrior --config my_config.toml sync
    ```
 
 ### Debugging a Tracking Issue
