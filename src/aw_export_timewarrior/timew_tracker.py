@@ -176,9 +176,11 @@ class TimewTracker(TimeTracker):
     def retag(self, tags: set[str]) -> None:
         """Retag current TimeWarrior interval.
 
-        `timew tag` only adds tags and `timew untag` only removes them - neither
-        replaces the tag set - so this diffs against the currently tracked tags
-        and issues both commands as needed to converge on the requested set.
+        Uses the atomic `timew retag` command to replace the whole tag set in
+        a single call, so a failure (db lock, hook rejection) leaves the
+        original tags intact instead of a partially-applied mix (see
+        CODE_REVIEW_2026-07-12.md #1: separate `untag`+`tag` commands could
+        leave tags stripped with no rollback if the second command failed).
 
         Args:
             tags: New tags to apply (replaces all existing tags)
@@ -186,13 +188,8 @@ class TimewTracker(TimeTracker):
         current = self.get_current_tracking()
         current_tags = current["tags"] if current else set()
 
-        to_remove = current_tags - tags
-        to_add = tags - current_tags
-
-        if to_remove:
-            self._run_timew(["untag", "@1"] + sorted(to_remove), show_undo_message=not to_add)
-        if to_add:
-            self._run_timew(["tag", "@1"] + sorted(to_add))
+        if current_tags != tags:
+            self._run_timew(["retag", "@1"] + sorted(tags))
 
     def retag_interval_by_id(self, interval_id: int, tags: set[str]) -> None:
         """Set the tag list on a specific (not necessarily current) interval.

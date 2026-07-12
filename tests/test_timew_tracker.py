@@ -209,7 +209,7 @@ class TestRetag:
         assert len(captured) == 1
         cmd = captured[0]
         assert cmd[0] == "timew"
-        assert cmd[1] == "tag"
+        assert cmd[1] == "retag"
         assert cmd[2] == "@1"
         assert "client" in cmd
         assert "meeting" in cmd
@@ -219,8 +219,8 @@ class TestRetag:
         """Regression test for CODE_REVIEW_2026-07.md #2: retag() only added tags.
 
         `timew tag @1 <tags>` only ADDS tags - it never removes anything. retag()
-        must diff against the current tags and issue `timew untag` for removals,
-        or the interval's tag set never converges to what the caller asked for.
+        must converge the interval's tag set to what the caller asked for,
+        including removals (now via a single atomic `timew retag` call).
         """
         captured = []
         tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
@@ -237,18 +237,40 @@ class TestRetag:
         ):
             tracker.retag(new_tags)
 
-        # "personal" must be explicitly untagged; "meeting" must be added.
-        untag_cmds = [c for c in captured if len(c) > 1 and c[1] == "untag"]
-        tag_cmds = [c for c in captured if len(c) > 1 and c[1] == "tag"]
+        assert len(captured) == 1
+        cmd = captured[0]
+        assert cmd[:3] == ["timew", "retag", "@1"]
+        assert set(cmd[3:]) == new_tags, (
+            f"Expected the retag command to carry exactly {new_tags}, got: {cmd}"
+        )
 
-        assert any("personal" in c for c in untag_cmds), (
-            f"Expected an untag command removing 'personal', got: {captured}"
-        )
-        assert any("meeting" in c for c in tag_cmds), (
-            f"Expected a tag command adding 'meeting', got: {captured}"
-        )
-        # 'work' is unchanged and should not need re-adding or removing.
-        assert not any("work" in c for c in untag_cmds)
+    def test_retag_is_atomic_single_command(self) -> None:
+        """Regression test for CODE_REVIEW_2026-07-12.md #1: retag() issued
+        `timew untag` then `timew tag` as two separate commands. If the untag
+        succeeded but the following tag command failed (db lock, hook
+        rejection), the interval was left with tags stripped and never
+        replaced - silent data loss with no rollback. A single atomic
+        `timew retag @1 <tags>` replaces the whole tag set in one command, so
+        a failure leaves the original tags intact instead of half-applied.
+        """
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+        current_data = {
+            "id": 1,
+            "start": "20250101T120000Z",
+            "tags": ["work", "personal"],
+        }
+
+        with (
+            patch("subprocess.check_output", return_value=json.dumps(current_data).encode()),
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+        ):
+            tracker.retag({"work", "meeting"})
+
+        assert len(captured) == 1, f"Expected a single atomic retag command, got: {captured}"
+        cmd = captured[0]
+        assert cmd[:3] == ["timew", "retag", "@1"]
+        assert set(cmd[3:]) == {"work", "meeting"}
 
     def test_retag_noop_when_tags_unchanged(self) -> None:
         """No timew command should be issued if the tag set is already correct."""
