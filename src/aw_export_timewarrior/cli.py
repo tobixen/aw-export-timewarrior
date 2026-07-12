@@ -783,7 +783,7 @@ def main(argv=None) -> int:
         # global flag the top-level parser accepts; append 'sync' after
         # them rather than prepending, since global flags must precede the
         # subcommand token for argparse subparsers to accept them.
-        argv_with_sync = (argv if argv else sys.argv[1:]) + ["sync"]
+        argv_with_sync = (sys.argv[1:] if argv is None else argv) + ["sync"]
         args = parser.parse_args(argv_with_sync)
         args.subcommand = "sync"
 

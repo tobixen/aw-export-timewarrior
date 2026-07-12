@@ -21,6 +21,7 @@ A full code review was done by Claude Fable - it found multiple potential bugs t
 - Fix `report --show-exports` always printing `Total exports: 0`; it now shows the real number of exports.
 - Fix failed `timew` commands (e.g. a database lock or a hook rejection) being silently ignored, which let internal tracking drift out of sync with what TimeWarrior actually recorded; such failures now raise an error instead.
 - Fix global flags being rejected when running with no subcommand — e.g. `aw-export-timewarrior --log-level DEBUG` errored out instead of running `sync`.
+- Fix `main()` (the CLI entry point, e.g. when called programmatically with an explicit empty argument list) falling back to the host process's `sys.argv` instead of running with defaults, since it couldn't distinguish "no arguments given" from "use the default arguments".
 - Fix `--config FILE` being silently reset to the default whenever it was given before a subcommand (e.g. `--config x.toml diff ...`): the `diff` subcommand redefined `--config` under the same name as the global option, and argparse's per-subcommand default always overwrote the already-parsed global value.
 - Fix `diff --hide-report` being silently ignored.
 - Fix `min_lid_duration` being silently ignored when set under `[tuning]` (its documented location).

@@ -485,6 +485,25 @@ class TestEndToEndCLI:
         assert result == 0
         mock_run_sync.assert_called_once()
 
+    @patch("sys.argv", ["cli.py", "--this-belongs-to-the-host-process", "--not-to-us"])
+    @patch("aw_export_timewarrior.cli.run_sync")
+    def test_explicit_empty_argv_does_not_fall_back_to_sys_argv(self, mock_run_sync: Mock) -> None:
+        """Regression test for CODE_REVIEW_2026-07-12.md #5: `main([])` (an
+        explicit "run with defaults" call, e.g. from a library/wrapper) used
+        `argv if argv else sys.argv[1:]`, a falsy check that can't
+        distinguish argv=None from argv=[]. So an explicit empty list fell
+        through to the host process's sys.argv - here, flags the host uses
+        that we don't recognize - instead of running with defaults.
+        """
+        from aw_export_timewarrior.cli import main
+
+        mock_run_sync.return_value = 0
+
+        result = main([])
+
+        assert result == 0
+        mock_run_sync.assert_called_once()
+
     def test_config_file_validation(self) -> None:
         """Test that missing config file is caught."""
         from aw_export_timewarrior.cli import main
