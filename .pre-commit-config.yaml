@@ -54,6 +54,12 @@ repos:
     hooks:
       - id: lychee
         args: ["--no-progress", "--timeout", "10", "--cache", "--max-cache-age", "1d", "."]
+        # Scan the repo via the "." arg only (as CI does), never per-file: with
+        # pass_filenames on (the default), pre-commit appends the changed files
+        # as explicit inputs, which forces lychee to extract "links" from files
+        # a "." scan skips - the regex patterns inside .lycheeignore itself and
+        # the fake URLs in tests/fixtures/*.json - and those fail the hook.
+        pass_filenames: false
         stages: [pre-push]
 
   # PRE-PUSH: verify lint and format before pushing (mirrors CI checks)
