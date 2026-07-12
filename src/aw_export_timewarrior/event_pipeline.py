@@ -93,19 +93,28 @@ class EventPipeline:
     def fetch_and_prepare_events(self) -> tuple[list, dict | None]:
         """Fetch, filter, merge, and sort events from ActivityWatch.
 
-        In batch mode (end_time set) the underlying data is immutable, so the
-        expensive preparation (fetch, AFK gap workaround, heartbeat merge, lid
-        merge, window-split, sort) runs once for the whole range and later
-        calls — triggered by find_next_activity()'s AFK-transition early
+        In batch mode (a closed, past range) the underlying data is immutable,
+        so the expensive preparation (fetch, AFK gap workaround, heartbeat
+        merge, lid merge, window-split, sort) runs once for the whole range and
+        later calls — triggered by find_next_activity()'s AFK-transition early
         returns — are served by filtering the memoized result on the advanced
         last_tick.
+
+        The memo is only valid when the range is genuinely closed: end_time set
+        AND already in the past. A future end_time (e.g. the bounded live sync
+        `sync --from <past> --to <future>`) is still an open range — new
+        heartbeats keep arriving — so it must re-run the pipeline each call, or
+        it would freeze the first-tick snapshot and stop early
+        (CODE_REVIEW_2026-07-12.md #8). Note "start and end both set" is *not*
+        the right discriminator: that batch invocation also covers the future
+        case; only end_time <= now guarantees immutability.
 
         Returns:
             Tuple of (completed_events, current_event):
             - completed_events: List of finished events to process
             - current_event: The ongoing event (or None)
         """
-        if self.end_time is not None:
+        if self.end_time is not None and self.end_time <= datetime.now(UTC):
             return self._fetch_batch_memoized(), None
         return self._run_pipeline()
 
