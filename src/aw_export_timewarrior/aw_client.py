@@ -87,10 +87,13 @@ class EventFetcher:
             self.buckets = self.aw.get_buckets()
             self.test_data = None
 
-        # Event cache for batch processing: bucket_id -> list of events
-        # Populated lazily on first get_events() call per bucket.
+        # Event cache for batch processing: bucket_id -> (prepared, prefix_max_end)
+        # from _prepare_cached_events(). Populated lazily on first get_events()
+        # call per bucket.
         self._cache_range = cache_range
-        self._events_cache: dict[str, list] = {} if cache_range else {}
+        self._events_cache: dict[str, tuple[list[tuple], list[datetime]]] = (
+            {} if cache_range else {}
+        )
 
         self._init_bucket_mappings()
 
@@ -167,7 +170,7 @@ class EventFetcher:
             # Test data path
             return self._get_events_from_test_data(bucket_id, start, end)
 
-    def _prepare_cached_events(self, events: list) -> list[tuple[datetime, datetime, dict]]:
+    def _prepare_cached_events(self, events: list) -> tuple[list[tuple], list[datetime]]:
         """Normalize timestamps once and sort by start, for efficient repeated filtering.
 
         A cached bucket is filtered once per get_events() call within its range
@@ -176,21 +179,36 @@ class EventFetcher:
         _filter_events_in_range call, and sorting so that call can bisect
         straight to the relevant slice, turns each filter from an O(bucket
         size) rescan into O(log bucket size + matches).
+
+        Also builds a running maximum of `end` in start-sorted order. Since
+        events are sorted by start (not end), a lower bound can't just bisect
+        on start - an early event can have a long duration and still overlap
+        a much later window. But the prefix-max IS monotonic: if the maximum
+        end seen up to index i is still before `start`, then every event up
+        to i has ended before `start` too, giving a valid bisectable lower
+        bound (see _filter_events_in_range).
         """
-        prepared = [
-            (
-                normalize_timestamp(event["timestamp"]),
-                normalize_timestamp(event["timestamp"]) + normalize_duration(event["duration"]),
-                event,
-            )
-            for event in events
-        ]
+        prepared = []
+        prefix_max_end = []
+        running_max_end = None
+        for event in events:
+            event_start = normalize_timestamp(event["timestamp"])
+            event_end = event_start + normalize_duration(event["duration"])
+            prepared.append((event_start, event_end, event))
+
         prepared.sort(key=lambda item: item[0])
-        return prepared
+
+        for _event_start, event_end, _event in prepared:
+            running_max_end = (
+                event_end if running_max_end is None else max(running_max_end, event_end)
+            )
+            prefix_max_end.append(running_max_end)
+
+        return prepared, prefix_max_end
 
     def _filter_events_in_range(
         self,
-        prepared_events: list[tuple[datetime, datetime, dict]],
+        cached_bucket: tuple[list[tuple], list[datetime]],
         start: datetime | None,
         end: datetime | None,
     ) -> list:
@@ -199,17 +217,25 @@ class EventFetcher:
         Matches the semantics of _get_events_from_test_data(): includes events where
         event_end >= start AND event_start <= end (i.e. any overlap with the window).
 
-        prepared_events must be sorted by start (see _prepare_cached_events),
-        so bisecting to the last entry whose start <= end bounds the scan to
-        a prefix instead of walking every cached event.
+        cached_bucket is the (prepared, prefix_max_end) pair from
+        _prepare_cached_events. `prepared` is sorted by start, so bisecting to
+        the last entry whose start <= end bounds the upper end of the scan.
+        `prefix_max_end` is non-decreasing, so bisecting it for the first
+        entry >= start bounds the lower end - narrowing the scan to a genuine
+        [lo, hi) slice instead of walking from the start of the bucket.
         """
+        prepared_events, prefix_max_end = cached_bucket
+
         if end is not None:
             hi = bisect.bisect_right(prepared_events, end, key=lambda item: item[0])
         else:
             hi = len(prepared_events)
 
+        lo = bisect.bisect_left(prefix_max_end, start) if start is not None else 0
+
         result = []
-        for _event_start, event_end, event in prepared_events[:hi]:
+        for i in range(lo, hi):
+            _event_start, event_end, event = prepared_events[i]
             if start and event_end < start:
                 continue
             result.append(event)

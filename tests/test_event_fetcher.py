@@ -888,6 +888,85 @@ class TestEventCache:
         events = fetcher.get_events("aw-watcher-window_test")
         assert len(events) == 1
 
+    def test_prepare_cached_events_normalizes_timestamp_once_per_event(self) -> None:
+        """Regression test for CODE_REVIEW_2026-07-12.md #9: `_prepare_cached_events`
+        called `normalize_timestamp(event["timestamp"])` twice per event (once for
+        the start, once again to derive the end) - the exact re-parsing this
+        cache exists to amortize away.
+        """
+        base = datetime(2026, 2, 9, 11, 0, 0, tzinfo=UTC)
+        events = [
+            {
+                "timestamp": base + timedelta(minutes=i),
+                "duration": timedelta(seconds=60),
+                "data": {},
+            }
+            for i in range(5)
+        ]
+
+        with (
+            patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class,
+            patch(
+                "aw_export_timewarrior.aw_client.normalize_timestamp",
+                side_effect=lambda ts: ts,
+            ) as mock_normalize,
+        ):
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = events
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher(cache_range=(base, base + timedelta(hours=1)))
+            fetcher.get_events("bucket-a", start=base, end=base + timedelta(hours=1))
+
+        assert mock_normalize.call_count == len(events), (
+            f"Expected normalize_timestamp called once per event ({len(events)}), "
+            f"got {mock_normalize.call_count}"
+        )
+
+    def test_cache_filters_long_early_event_overlapping_later_window(self) -> None:
+        """A long-duration event starting well before the requested window, but
+        still overlapping it, must not be dropped by the cache's lower-bound
+        search (events are sorted by start, not end, so a naive bisect on
+        start alone would incorrectly exclude it).
+        """
+        base = datetime(2026, 2, 9, 11, 0, 0, tzinfo=UTC)
+        cache_start = base
+        cache_end = base + timedelta(hours=3)
+
+        events = [
+            # Starts right at cache_start but runs for 2 hours - overlaps a
+            # request window that starts well after it.
+            {
+                "timestamp": base,
+                "duration": timedelta(hours=2),
+                "data": {"n": "long"},
+            },
+            {
+                "timestamp": base + timedelta(minutes=10),
+                "duration": timedelta(seconds=60),
+                "data": {"n": "short-early"},
+            },
+        ]
+
+        with patch("aw_export_timewarrior.aw_client.ActivityWatchClient") as mock_aw_class:
+            mock_client = Mock()
+            mock_client.get_buckets.return_value = {}
+            mock_client.get_events.return_value = events
+            mock_aw_class.return_value = mock_client
+
+            fetcher = EventFetcher(cache_range=(cache_start, cache_end))
+
+            result = fetcher.get_events(
+                "bucket-a",
+                start=base + timedelta(minutes=90),
+                end=base + timedelta(minutes=100),
+            )
+
+        names = {event["data"]["n"] for event in result}
+        assert "long" in names, f"Long early event should overlap the later window, got: {names}"
+        assert "short-early" not in names
+
 
 class TestResetCache:
     """Tests for reset_cache method (rolling cache support for sync mode)."""
