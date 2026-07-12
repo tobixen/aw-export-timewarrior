@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 
 from termcolor import colored
 
-from .config import config
 from .tag_extractor import ExclusiveGroupError, TagExtractor
 from .timew_tracker import TimewTracker
 from .utils import effective_end, ts2str, ts2strtime
@@ -121,6 +120,11 @@ def compare_intervals(
     Returns:
         Dict with keys: 'missing', 'extra', 'different_tags', 'matching', 'previously_synced'
     """
+    # Read `config` fresh per call: load_custom_config() rebinds config.config,
+    # and a module-level `from .config import config` would pin this to whatever
+    # object existed when compare was first imported (CODE_REVIEW_2026-07-12.md #7).
+    from .config import config
+
     extractor = TagExtractor(config=config, event_fetcher=None)
 
     result = {
@@ -454,6 +458,10 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
     Returns:
         List of timew command strings (may include commented lines)
     """
+    # See compare_intervals: read `config` fresh so a custom config loaded after
+    # import is honored (CODE_REVIEW_2026-07-12.md #7).
+    from .config import config
+
     extractor = TagExtractor(config=config, event_fetcher=None)
 
     commands = []
