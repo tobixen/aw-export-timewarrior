@@ -80,12 +80,15 @@ repos:
         always_run: true
         stages: [pre-push]
 
-  # PRE-PUSH: run test suite before pushing
+  # PRE-PUSH: run the (slow) test suite before pushing, but only on main.
+  # Pushing main triggers CI *and* the PyPI publish, so guard it hardest here.
+  # On feature branches the suite is skipped locally - the PR's CI run covers it,
+  # and the full run is too slow to gate every feature-branch push.
   - repo: local
     hooks:
       - id: pytest
-        name: pytest
-        entry: pytest
+        name: pytest (main branch only)
+        entry: "bash -c 'if [ \"$(git branch --show-current)\" = \"main\" ]; then exec pytest; else echo \"skipping pytest (not on main)\"; fi'"
         language: system
         pass_filenames: false
         always_run: true
