@@ -866,15 +866,14 @@ class TestGenerateFixCommands:
             "extra": [],
         }
 
-        # Create a mock retag_by_rules that adds 4BREAK when bedtime is present
-        def mock_retag_by_rules(tags, config):
-            result = set(tags)
-            if "bedtime" in tags:
-                result.add("4BREAK")
-            return result
+        # generate_fix_commands derives tags via TagExtractor.apply_retag_rules,
+        # which reads the global config (imported fresh inside the function). Inject
+        # a config with a retag rule "bedtime" -> "4BREAK" so the test is hermetic
+        # and does not depend on the developer's personal config being present.
+        retag_config = {"tags": {"break": {"source_tags": ["bedtime"], "add": ["4BREAK"]}}}
 
-        # Patch retag_by_rules in the main module (where it's imported from)
-        with patch("aw_export_timewarrior.main.retag_by_rules", side_effect=mock_retag_by_rules):
+        # Patch the config where generate_fix_commands reads it (`from .config import config`)
+        with patch("aw_export_timewarrior.config.config", retag_config):
             commands = generate_fix_commands(comparison)
 
         # Should have an executable command to add derived tags
