@@ -5,9 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0]
 
-A full code review was done by Claude Fable - it found multiple potential bugs that have been fixed.  Quite a bit of code refactoring has also been done, cleaning up, deduplicating and fixing performance issues.
+This software has been in use for quite a while now, so I think it's about time to declare it "stable" and release v1.0.0.
+
+During the last few days I've done a full code review utilizing Claude Fable - it found multiple potential bugs.  I've also gotten AI assistance on fixing up all of the code review findings, including quite a bit of code refactoring, clean up, deduplicating and performance fixups.
 
 ### Added
 - `[lists]` config section for reusable named lists, referenced as `@name` in list fields (`tags`, `app_names`, `source_tags`, ...) and in regexp fields (`url_regexp`, `title_regexp`, `path_regexp`, ...), where a reference expands to a non-capturing alternation `(?:item1|item2|...)`. Supersedes `[app_groups]`, which remains as an alias.
