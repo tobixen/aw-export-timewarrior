@@ -160,7 +160,10 @@ class TestStartTracking:
         start_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         tags = {"work", "coding", "python"}
 
-        with patch("subprocess.run", return_value=Mock(returncode=0)):
+        with (
+            patch.object(tracker, "get_intervals", return_value=[]),
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+        ):
             tracker.start_tracking(tags, start_time)
 
         assert len(captured) == 1
@@ -172,6 +175,167 @@ class TestStartTracking:
         assert "work" in cmd
         # Check time format (will be in local time)
         assert any("2025-01-01" in arg for arg in cmd)
+
+    def test_start_tracking_uses_adjust_hint(self) -> None:
+        """start_tracking must pass the :adjust hint.
+
+        The start timestamp can land inside an already-recorded interval --
+        e.g. a bedtime/boot-gap AFK event whose true start is a few seconds
+        before the current open interval began.  Plain `timew start` refuses
+        with "You cannot overlap intervals" (exit 255); the :adjust hint lets
+        timew clip the overlapping interval instead.  Without it a single such
+        boundary crash-loops the sync daemon indefinitely.
+        """
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+        start_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+        # No pre-existing intervals -> nothing to overwrite -> guard allows it.
+        with (
+            patch.object(tracker, "get_intervals", return_value=[]),
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+        ):
+            tracker.start_tracking({"afk", "bedtime"}, start_time)
+
+        cmd = captured[0]
+        assert ":adjust" in cmd, f":adjust hint missing from start command: {cmd}"
+        # The hint must trail the positional args (tags + timestamp) so it is
+        # parsed as a hint, not as a tag.
+        assert cmd[-1] == ":adjust", f":adjust must be the final argument: {cmd}"
+
+    def test_start_tracking_adjusts_over_own_interval(self) -> None:
+        """:adjust is allowed when the only overlapping interval is exporter-owned.
+
+        The real crash-loop case: the exporter moves an AFK boundary a couple
+        of minutes back, clipping its OWN '~aw'-tagged interval.  That is safe.
+        """
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+        start_time = datetime(2026, 7, 12, 5, 21, 45, tzinfo=UTC)
+        own_open = {
+            "id": 1,
+            "start": datetime(2026, 7, 12, 5, 23, 47, tzinfo=UTC),
+            "end": None,
+            "tags": {"afk", "~aw"},
+        }
+
+        with (
+            patch.object(tracker, "get_intervals", return_value=[own_open]),
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+        ):
+            tracker.start_tracking({"afk", "bedtime", "~aw"}, start_time)
+
+        assert captured[0][-1] == ":adjust"
+
+    def test_start_tracking_refuses_over_foreign_interval(self) -> None:
+        """start_tracking must NOT overwrite a manually-curated (non-'~aw') interval.
+
+        `timew start ... :adjust` deletes/clips every interval after the start
+        time; if one of those is hand-entered data, the exporter must refuse
+        rather than silently destroy it.
+        """
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+        start_time = datetime(2026, 7, 14, 8, 30, 0, tzinfo=UTC)
+        manual = {
+            "id": 1,
+            "start": datetime(2026, 7, 14, 9, 0, 0, tzinfo=UTC),
+            "end": datetime(2026, 7, 14, 10, 0, 0, tzinfo=UTC),
+            "tags": {"manual-coding"},  # no '~aw' -> foreign
+        }
+
+        with (
+            patch.object(tracker, "get_intervals", return_value=[manual]),
+            patch("subprocess.run", return_value=Mock(returncode=0)) as mock_run,
+            pytest.raises(RuntimeError, match="manually-curated"),
+        ):
+            tracker.start_tracking({"work", "~aw"}, start_time)
+
+        # It must refuse BEFORE running any timew command.
+        mock_run.assert_not_called()
+        assert captured == []
+
+    def test_start_tracking_ignores_foreign_interval_ending_before_start(self) -> None:
+        """A foreign interval that ends at/before the start time is not touched.
+
+        :adjust only affects intervals extending past the start time, so a
+        manual interval strictly earlier than start_time must not block the start.
+        """
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+        start_time = datetime(2026, 7, 14, 12, 0, 0, tzinfo=UTC)
+        earlier_manual = {
+            "id": 1,
+            "start": datetime(2026, 7, 14, 8, 0, 0, tzinfo=UTC),
+            "end": datetime(2026, 7, 14, 9, 0, 0, tzinfo=UTC),
+            "tags": {"manual-meeting"},
+        }
+
+        with (
+            patch.object(tracker, "get_intervals", return_value=[earlier_manual]),
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+        ):
+            tracker.start_tracking({"work", "~aw"}, start_time)
+
+        assert captured[0][-1] == ":adjust"
+
+    def test_start_tracking_clips_ongoing_foreign_interval(self) -> None:
+        """An ongoing (open) manual interval may be STOPPED (clipped), not blocked.
+
+        A tiny manual `timew start sometag` leaves an open, non-'~aw' interval.
+        When the exporter next starts its own activity with a start time *inside*
+        that interval, :adjust clips it to [start, start_time] -- the manual
+        entry survives, just ended earlier.  This is the intended "take over from
+        a manual start" behaviour (plain `timew start` did this before :adjust);
+        blocking on it crash-looped the daemon until the user ran `timew stop`.
+        """
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+        start_time = datetime(2026, 7, 16, 12, 3, 0, tzinfo=UTC)
+        ongoing_manual = {
+            "id": 1,
+            "start": datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC),  # before start_time
+            "end": None,  # ongoing -> the current manual activity
+            "tags": {"sometag"},  # no '~aw' -> foreign
+        }
+
+        with (
+            patch.object(tracker, "get_intervals", return_value=[ongoing_manual]),
+            patch("subprocess.run", return_value=Mock(returncode=0)),
+        ):
+            tracker.start_tracking({"work", "~aw"}, start_time)
+
+        assert captured[0][-1] == ":adjust"
+
+    def test_start_tracking_refuses_to_delete_ongoing_foreign_interval(self) -> None:
+        """An ongoing manual interval must NOT be DELETED by backfilling before it.
+
+        If the exporter's start time is at/before the open manual interval's own
+        start (e.g. resuming after a break, or `diff --apply`, backfilling
+        activity from before a still-running manual `timew start`), :adjust would
+        overwrite the whole interval -- deletion, not "stopping" it.  The
+        exporter must refuse rather than destroy the manual entry.
+        """
+        captured = []
+        tracker = TimewTracker(grace_time=0, capture_commands=captured, hide_output=True)
+        start_time = datetime(2026, 7, 16, 9, 0, 0, tzinfo=UTC)  # before the manual start
+        ongoing_manual = {
+            "id": 1,
+            "start": datetime(2026, 7, 16, 10, 0, 0, tzinfo=UTC),
+            "end": None,  # ongoing manual activity, entirely after start_time
+            "tags": {"sometag"},  # no '~aw' -> foreign
+        }
+
+        with (
+            patch.object(tracker, "get_intervals", return_value=[ongoing_manual]),
+            patch("subprocess.run", return_value=Mock(returncode=0)) as mock_run,
+            pytest.raises(RuntimeError, match="manually-curated"),
+        ):
+            tracker.start_tracking({"work", "~aw"}, start_time)
+
+        # It must refuse BEFORE running any timew command.
+        mock_run.assert_not_called()
+        assert captured == []
 
 
 class TestStopTracking:
@@ -672,7 +836,9 @@ class TestRunTimew:
         tracker = TimewTracker(grace_time=0, hide_output=True)
         start_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
 
+        # Stub the overlap guard so the test exercises the start command itself.
         with (
+            patch.object(tracker, "get_intervals", return_value=[]),
             patch("subprocess.run", return_value=Mock(returncode=1, stderr="error")),
             pytest.raises(RuntimeError),
         ):

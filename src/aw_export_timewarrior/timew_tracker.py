@@ -11,10 +11,10 @@ import json
 import os
 import subprocess
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .time_tracker import TimeTracker
+from .time_tracker import ProtectedIntervalError, TimeTracker
 from .utils import effective_end, ts2str
 
 
@@ -171,9 +171,114 @@ class TimewTracker(TimeTracker):
             tags: Tags to track
             start_time: When to start from
         """
-        # Convert to local time for timew
-        args = ["start"] + sorted(tags) + [ts2str(start_time)]
+        # The :adjust hint (trailing, so timew parses it as a hint rather than
+        # a tag) lets timew clip an existing interval when start_time lands
+        # inside history -- e.g. a bedtime/boot-gap AFK event whose true start
+        # precedes the current open interval.  Plain `timew start` refuses such
+        # a start with "You cannot overlap intervals" (exit 255), which crash-
+        # loops the sync daemon.
+        #
+        # But :adjust on `start` overwrites EVERY interval from start_time to
+        # now, regardless of tags (pinned by tests/test_timew_adjust_safety.py
+        # against the real binary), so it needs two safeguards:
+        #
+        # 1. Refuse outright when that would *destroy* manually-curated
+        #    (non-'~aw') data -- see _first_protected_interval.
+        # 2. When closed history follows start_time, do not use the open-ended
+        #    form at all: it would delete the exporter's own already-exported
+        #    intervals.  Fill just the hole with the bounded `track` form,
+        #    which only touches [start, end].
+        intervals = self.get_intervals(start_time - timedelta(days=7), datetime.now(UTC))
+        blocking = self._first_protected_interval(start_time, intervals)
+        if blocking is not None:
+            raise ProtectedIntervalError(
+                f"Refusing to start tracking at {ts2str(start_time)}: `timew start "
+                f"... :adjust` would overwrite a manually-curated (non-'~aw') "
+                f"TimeWarrior interval starting at {ts2str(blocking['start'])} "
+                f"({' '.join(sorted(blocking['tags']))}). Resolve the overlap by "
+                f"hand (e.g. `timew stop`, or retag it '~aw') if the exporter "
+                f"should own that time."
+            )
+        # Convert to local time for timew.
+        next_start = self._next_closed_interval_start(start_time, intervals)
+        if next_start is None:
+            args = ["start"] + sorted(tags) + [ts2str(start_time), ":adjust"]
+        else:
+            args = (
+                ["track", ts2str(start_time), "-", ts2str(next_start)] + sorted(tags) + [":adjust"]
+            )
         self._run_timew(args)
+
+    @staticmethod
+    def _next_closed_interval_start(
+        start_time: datetime, intervals: list[dict[str, Any]]
+    ) -> datetime | None:
+        """Start of the earliest *closed* interval beginning after ``start_time``.
+
+        ``None`` when nothing closed follows, which is the ordinary live case:
+        the exporter appends to the end of history, and the only interval
+        `:adjust` can touch is the open one (clipping it is the intent).
+
+        A datetime means the new start lands in a *hole* in existing history.
+        The open-ended form would delete everything after it, so the caller
+        bounds the command at this timestamp instead.  The open interval is
+        deliberately not considered: replacing it is what a takeover is.
+        """
+        later = [
+            interval["start"]
+            for interval in intervals
+            if interval["end"] is not None and interval["start"] > start_time
+        ]
+        return min(later) if later else None
+
+    def _first_protected_interval(
+        self, start_time: datetime, intervals: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any] | None:
+        """The first foreign interval `timew start <start_time> :adjust` would destroy.
+
+        `:adjust` on `start` overwrites every interval whose end falls after
+        ``start_time``.  The exporter owns intervals tagged '~aw' (the same
+        ownership discriminator compare.py uses) and may freely overwrite them;
+        a foreign (non-'~aw') interval must never be destroyed.  Return the
+        first such interval, or ``None`` when the start is safe.
+
+        The distinction the user asked for is historic vs. current:
+
+        * A *closed* foreign interval is hand-entered history -- protect it
+          whenever `:adjust` would touch it at all (``end > start_time``), even
+          a partial clip, since that rewrites data with a user-set end.
+        * The *ongoing* (open, ``end is None``) foreign interval is the current
+          manual activity and may be **stopped** -- but stopping means clipping
+          it to ``[interval.start, start_time]``, which only happens when the
+          new start falls strictly inside it (``start_time > interval.start``).
+          When ``start_time <= interval.start`` `:adjust` would *delete* the
+          whole interval, not stop it, so refuse -- e.g. backfilling activity
+          from before a still-open manual `timew start` must not wipe it.
+
+        This guards the live `sync` path only, which is the only caller of
+        start_tracking().  `diff --apply` builds its own bounded `timew track`
+        commands and skips foreign intervals in compare.py.
+        """
+        if intervals is None:
+            intervals = self.get_intervals(start_time - timedelta(days=7), datetime.now(UTC))
+        for interval in intervals:
+            if "~aw" in interval["tags"]:
+                # Exporter-owned -- safe to clip, and never deleted wholesale
+                # (see _next_closed_interval_start).
+                continue
+            end = interval["end"]
+            if end is None:
+                # Ongoing manual interval: stoppable (clipped) only if the new
+                # start lands inside it; otherwise :adjust deletes it wholesale.
+                if start_time <= interval["start"]:
+                    return interval
+                continue
+            if end <= start_time:
+                # Ends at or before the new start -- untouched by :adjust.
+                continue
+            # Closed foreign interval that :adjust would clip or delete.
+            return interval
+        return None
 
     def stop_tracking(self) -> None:
         """Stop TimeWarrior tracking."""

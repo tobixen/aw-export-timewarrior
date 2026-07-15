@@ -15,6 +15,8 @@ calls by filtering the memoized result on the advanced last_tick.
 
 from datetime import UTC, datetime, timedelta
 
+from aw_export_timewarrior.utils import strip_timew_hints
+
 from .conftest import FixtureDataBuilder
 
 CONFIG = {
@@ -105,5 +107,5 @@ def test_batch_mode_memoized_pipeline_still_exports_all_intervals() -> None:
     assert len(video_starts) >= 3, f"expected 3+ video exports, got: {start_cmds}"
 
     # Export start timestamps must never go backwards.
-    start_times = [datetime.fromisoformat(cmd[-1]) for cmd in start_cmds]
+    start_times = [datetime.fromisoformat(strip_timew_hints(cmd)[-1]) for cmd in start_cmds]
     assert start_times == sorted(start_times), f"exports out of order: {start_times}"

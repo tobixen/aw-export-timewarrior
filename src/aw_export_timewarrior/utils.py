@@ -116,3 +116,19 @@ def effective_end(end: datetime | None) -> datetime:
     timew_tracker.py) so their "ongoing interval" sentinel can't diverge.
     """
     return end if end is not None else datetime.max.replace(tzinfo=UTC)
+
+
+def strip_timew_hints(args: list[str]) -> list[str]:
+    """Drop TimeWarrior hint tokens (leading ':') from command arguments.
+
+    Hints such as ':adjust' and ':yes' are neither tags nor timestamps, so
+    anything parsing a captured `timew` command back into tags and times has to
+    remove them first.
+
+    Args:
+        args: Command arguments, e.g. ['work', '2026-09-10T08:00:00', ':adjust']
+
+    Returns:
+        The arguments with every hint token removed.
+    """
+    return [arg for arg in args if not arg.startswith(":")]

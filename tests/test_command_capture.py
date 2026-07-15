@@ -9,6 +9,7 @@ allowing us to verify what commands would be executed without actually running t
 from datetime import UTC, datetime
 
 from aw_export_timewarrior.main import Exporter
+from aw_export_timewarrior.time_tracker import DryRunTracker
 from tests.conftest import FixtureDataBuilder
 
 
@@ -262,3 +263,43 @@ def test_get_suggested_intervals_parses_utc_z_suffixed_timestamps_correctly() ->
     assert len(intervals) == 1
     assert intervals[0].start == datetime(2025, 6, 1, 10, 0, 0, tzinfo=UTC)
     assert intervals[0].end == datetime(2025, 6, 1, 11, 0, 0, tzinfo=UTC)
+
+
+def test_get_suggested_intervals_ignores_adjust_hint() -> None:
+    """A trailing ':adjust' hint must not be parsed as a tag or the timestamp.
+
+    TimewTracker.start_tracking appends the ':adjust' hint so timew can clip an
+    overlapping interval.  get_suggested_intervals() must drop timew hint tokens
+    (leading ':') rather than treat ':adjust' as the timestamp (a parse crash)
+    or fold the real timestamp into the tag set.
+    """
+    exporter = Exporter(dry_run=True, test_data={"buckets": {}})
+    exporter.captured_commands = [
+        ["timew", "start", "afk", "bedtime", "2025-06-01T10:00:00Z", ":adjust"],
+        ["timew", "stop", "2025-06-01T11:00:00Z"],
+    ]
+
+    intervals = exporter.get_suggested_intervals()
+
+    assert len(intervals) == 1
+    assert intervals[0].start == datetime(2025, 6, 1, 10, 0, 0, tzinfo=UTC)
+    assert intervals[0].end == datetime(2025, 6, 1, 11, 0, 0, tzinfo=UTC)
+    assert intervals[0].tags == {"afk", "bedtime"}
+
+
+def test_dry_run_capture_matches_live_command_shape() -> None:
+    """DryRunTracker must capture the same command shape TimewTracker runs.
+
+    `sync --dry-run` and `diff` always use DryRunTracker, so a captured command
+    that omits the ':adjust' hint shows the user a command live mode would not
+    run -- and hides that the live path can refuse the start altogether.
+    """
+    captured: list[list[str]] = []
+    tracker = DryRunTracker(capture_commands=captured, hide_output=True)
+
+    tracker.start_tracking({"work", "~aw"}, datetime(2025, 6, 1, 10, 0, 0, tzinfo=UTC))
+
+    assert captured[0][1] == "start"
+    assert captured[0][-1] == ":adjust", (
+        f"dry-run command must carry the same trailing hint as live: {captured[0]}"
+    )
