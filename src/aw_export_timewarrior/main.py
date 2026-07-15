@@ -14,8 +14,9 @@ from .event_pipeline import EventPipeline, EventPipelineConfig
 from .output import user_output
 from .state import AfkState, StateManager
 from .tag_extractor import ExclusiveGroupError, TagExtractor
+from .time_tracker import ProtectedIntervalError
 from .timew_tracker import TimewTracker
-from .utils import parse_datetime, ts2strtime
+from .utils import parse_datetime, strip_timew_hints, ts2strtime
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
@@ -438,9 +439,13 @@ class Exporter:
 
             if command == "start":
                 # Extract tags and timestamp
-                # Format: ['timew', 'start', 'tag1', 'tag2', ..., '2025-01-01T10:00:00']
-                tags = set(cmd[2:-1])  # All elements between 'start' and timestamp
-                timestamp_str = cmd[-1]
+                # Format: ['timew', 'start', 'tag1', 'tag2', ..., '2025-01-01T10:00:00', ':adjust']
+                # Drop timew hint tokens (leading ':', e.g. ':adjust' added by
+                # TimewTracker.start_tracking) -- they are neither tags nor the
+                # timestamp.
+                parts = strip_timew_hints(cmd[2:])
+                tags = set(parts[:-1])  # All elements between 'start' and timestamp
+                timestamp_str = parts[-1]
 
                 # Parse timestamp - timestamps in commands are normally local
                 # (generated with since.astimezone().strftime()), but parse_datetime
@@ -922,7 +927,14 @@ class Exporter:
                     f"  Ask-away {i + 1}/{len(sub_events)}: '{message}' "
                     f"at {sub_since} ({sub_event['duration']})"
                 )
-                self.tracker.start_tracking(sub_tags, sub_since)
+                try:
+                    self.tracker.start_tracking(sub_tags, sub_since)
+                except ProtectedIntervalError as e:
+                    # Hand-entered data in the way.  Skipping one block keeps
+                    # the daemon alive; exiting here crash-loops it, since the
+                    # offending interval is still there on the next restart.
+                    logger.warning(f"  Not exported: {e}")
+                    continue
                 self._exported_ask_away_timestamps.add(sub_event["timestamp"])
 
                 # Update state after each answer (simulate sequential tracking)
@@ -941,7 +953,13 @@ class Exporter:
             return
 
         # Start tracking with the final tags
-        self.tracker.start_tracking(final_tags, since)
+        try:
+            self.tracker.start_tracking(final_tags, since)
+        except ProtectedIntervalError as e:
+            # See above: refusing protects the user's data, exiting would only
+            # crash-loop the daemon against a state that never changes.
+            logger.warning(f"Not exported: {e}")
+            return
 
         # Update timew_info after command
         if not self.dry_run:

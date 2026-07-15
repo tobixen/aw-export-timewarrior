@@ -5,13 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.1]
+## [Unreleased]
 
 This software has been in use for quite a while now, so I think it's about time to declare it "stable" and release v1.0.0.
 
 During the last few days I've done a full code review utilizing Claude Fable - it found multiple potential bugs.  I've also gotten AI assistance on fixing up all of the code review findings, including quite a bit of code refactoring, clean up, deduplicating and performance fixups.
 
-(v1.0.0 was never properly released, it had a test failure only found when running tests on GitHub).
+(Changelog entries for v1.0.0 and v1.0.1 have been skipped - a broken test was found only when running tests on GitHub, and it was found that the auto-publish hook pushed things to pypi despite the test failure)
 
 ### Added
 - `[lists]` config section for reusable named lists, referenced as `@name` in list fields (`tags`, `app_names`, `source_tags`, ...) and in regexp fields (`url_regexp`, `title_regexp`, `path_regexp`, ...), where a reference expands to a non-capturing alternation `(?:item1|item2|...)`. Supersedes `[app_groups]`, which remains as an alias.
@@ -24,6 +24,7 @@ During the last few days I've done a full code review utilizing Claude Fable - i
 - Fix the currently in-progress event being double-counted when it spans an export boundary, which could distort the known-vs-unknown time accounting during sync.
 - Fix `report --show-exports` always printing `Total exports: 0`; it now shows the real number of exports.
 - Fix failed `timew` commands (e.g. a database lock or a hook rejection) being silently ignored, which let internal tracking drift out of sync with what TimeWarrior actually recorded; such failures now raise an error instead.
+- Fix the sync daemon crash-looping when a new interval has to start inside already-recorded history — e.g. resuming from suspend, where the bedtime/boot-gap AFK event's true start precedes the current open interval. `timew start` refuses such a start ("You cannot overlap intervals"), which combined with the fail-loud change above killed the daemon on every restart. Live `timew start` now uses the `:adjust` hint to clip the overlap. Because `:adjust` on `start` overwrites *every* interval from the start time to now regardless of tags, two safeguards come with it: the exporter refuses to start where that would destroy a hand-entered (non-`~aw`) interval, and where already-exported history follows the new start it fills only the gap (the bounded `timew track` form) instead of deleting that history. A currently *ongoing* manual interval (a plain `timew start sometag`) may still be **stopped** — when the exporter's new start falls inside it, `:adjust` merely clips it and the manual entry survives — but a *closed* historic interval, or an ongoing one the new start lands at or before, is protected. A refusal is now logged and the affected block skipped, rather than exiting: the offending interval survives a restart, so exiting could only crash-loop.
 - Fix global flags being rejected when running with no subcommand — e.g. `aw-export-timewarrior --log-level DEBUG` errored out instead of running `sync`.
 - Fix `main()` (the CLI entry point, e.g. when called programmatically with an explicit empty argument list) falling back to the host process's `sys.argv` instead of running with defaults, since it couldn't distinguish "no arguments given" from "use the default arguments".
 - Fix `--config FILE` being silently reset to the default whenever it was given before a subcommand (e.g. `--config x.toml diff ...`): the `diff` subcommand redefined `--config` under the same name as the global option, and argparse's per-subcommand default always overwrote the already-parsed global value.

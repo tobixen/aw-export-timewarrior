@@ -14,6 +14,16 @@ from datetime import datetime
 from typing import Any
 
 
+class ProtectedIntervalError(RuntimeError):
+    """Refusing an operation that would destroy hand-entered tracking data.
+
+    Distinct from the generic RuntimeError a failed backend command raises, so
+    the export loop can log it and skip the affected block instead of dying:
+    the offending state lives in the tracking database and survives a restart,
+    so an exit here is an unrecoverable crash loop, not a retry.
+    """
+
+
 class TimeTracker(ABC):
     """Abstract base class for time tracking backends.
 
@@ -122,12 +132,14 @@ class DryRunTracker(TimeTracker):
         """
         self.current_tracking = {"id": len(self.intervals) + 1, "start": start_time, "tags": tags}
 
-        # Capture command in same format as TimewTracker
+        # Capture command in same format as TimewTracker -- including the
+        # trailing ':adjust' hint, so `--dry-run` and `diff` show the command
+        # live mode would actually run.
         if self.capture_commands is not None:
             cmd = (
                 ["timew", "start"]
                 + sorted(tags)
-                + [start_time.astimezone().strftime("%Y-%m-%dT%H:%M:%S")]
+                + [start_time.astimezone().strftime("%Y-%m-%dT%H:%M:%S"), ":adjust"]
             )
             self.capture_commands.append(cmd)
 

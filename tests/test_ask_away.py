@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from aw_export_timewarrior.main import Exporter
+from aw_export_timewarrior.utils import strip_timew_hints
 from tests.conftest import FixtureDataBuilder
 
 
@@ -205,7 +206,7 @@ def test_ask_away_within_afk_does_not_extend_future_afk() -> None:
     assert len(afk_commands) >= 2, f"Expected at least 2 AFK exports, got: {afk_commands}"
 
     # Extract timestamps from AFK commands (last element of each command)
-    afk_timestamps = [cmd[-1] for cmd in afk_commands]
+    afk_timestamps = [strip_timew_hints(cmd)[-1] for cmd in afk_commands]
 
     # afk1 must start at T+5min (09:05 UTC) and afk2 at T+20min (09:20 UTC).
     # Timestamps in commands are local-time strings; match just the minute part.
