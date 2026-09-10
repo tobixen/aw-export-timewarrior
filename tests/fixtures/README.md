@@ -29,16 +29,20 @@ aw-export-timewarrior --dry-run --test-data tests/fixtures/simple_work_session.j
 ```python
 from tests.conftest import FixtureDataBuilder
 
+
 def test_my_scenario():
     # Option 1: Use the builder
-    data = (FixtureDataBuilder()
+    data = (
+        FixtureDataBuilder()
         .add_window_event("vscode", "main.py", 600)
         .add_afk_event("not-afk", 600)
-        .build())
+        .build()
+    )
 
     # Option 2: Load from file
     from aw_export_timewarrior.export import load_test_data
-    data = load_test_data('tests/fixtures/simple_work_session.json')
+
+    data = load_test_data("tests/fixtures/simple_work_session.json")
 
     # Use the data
     exporter = Exporter(test_data=data, dry_run=True)
@@ -113,13 +117,15 @@ Then edit the file to:
 from tests.conftest import FixtureDataBuilder
 import json
 
-data = (FixtureDataBuilder()
-    .add_window_event('vscode', 'bug.py', 300)
-    .add_afk_event('not-afk', 300)
-    .add_browser_event('https://stackoverflow.com/...', 'Stack Overflow', 180)
-    .build())
+data = (
+    FixtureDataBuilder()
+    .add_window_event("vscode", "bug.py", 300)
+    .add_afk_event("not-afk", 300)
+    .add_browser_event("https://stackoverflow.com/...", "Stack Overflow", 180)
+    .build()
+)
 
-with open('tests/fixtures/debugging_session.json', 'w') as f:
+with open("tests/fixtures/debugging_session.json", "w") as f:
     json.dump(data, f, indent=2)
 ```
 

@@ -205,11 +205,11 @@ When exports are recorded (for the `--show-exports` report feature), each record
 
 ```python
 ExportRecord(
-    timestamp=since,           # Interval start time
-    duration=end - since,      # Interval duration
-    tags={"coding", "editor"}, # Tags exported
+    timestamp=since,  # Interval start time
+    duration=end - since,  # Interval duration
+    tags={"coding", "editor"},  # Tags exported
     accumulator_before={...},  # Tag accumulator state before reset
-    accumulator_after={...},   # Tag accumulator state after reset
+    accumulator_after={...},  # Tag accumulator state after reset
 )
 ```
 

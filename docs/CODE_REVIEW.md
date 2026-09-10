@@ -213,6 +213,7 @@ except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
 @dataclass
 class Config:
     """Type-safe configuration with validation."""
+
     enable_afk_gap_workaround: bool = True
     enable_lid_events: bool = True
     terminal_apps: list[str] = field(default_factory=list)
@@ -223,6 +224,7 @@ class Config:
         if self.tuning.min_lid_duration < 0:
             raise ValueError("min_lid_duration must be >= 0")
         # ... more validations ...
+
 
 def load_config(config_path: Path | None = None) -> Config:
     """Load and validate configuration."""
@@ -250,6 +252,7 @@ def load_config(config_path: Path | None = None) -> Config:
 @dataclass
 class StateManager:
     session_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+
 
 # Include in all log records
 log_data["session_id"] = self.state.session_id
@@ -358,6 +361,7 @@ if is_split:
 ```python
 # Auto-detect terminal width
 import shutil
+
 terminal_width = shutil.get_terminal_size().columns
 ```
 

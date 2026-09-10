@@ -71,11 +71,8 @@ Create an `aw-watcher-tags` bucket with tagged events:
     "data": {
         "tags": ["coding", "python", "4work"],
         "category": "4work",  # Primary exclusive group match
-        "source": {
-            "app": "Emacs",
-            "title": "main.py - aw-tagger"
-        }
-    }
+        "source": {"app": "Emacs", "title": "main.py - aw-tagger"},
+    },
 }
 ```
 

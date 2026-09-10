@@ -19,18 +19,20 @@ from aw_export_timewarrior.main import Exporter
 from tests.conftest import FixtureDataBuilder
 
 # Create test data
-data = (FixtureDataBuilder()
+data = (
+    FixtureDataBuilder()
     .add_window_event("Code", "main.py", duration=600)
     .add_afk_event("not-afk", duration=600)
     .add_window_event("Chrome", "GitHub", duration=600)
     .add_afk_event("not-afk", duration=600)
-    .build())
+    .build()
+)
 
 # Create exporter in dry-run mode
 exporter = Exporter(
     test_data=data,
     dry_run=True,  # Critical: enables command capture
-    config_path='path/to/config.toml'
+    config_path="path/to/config.toml",
 )
 
 # Process events
@@ -41,7 +43,7 @@ commands = exporter.get_captured_commands()
 
 # Each command is a list: ['timew', 'start', 'tag1', 'tag2', '2025-01-01T10:00:00']
 for cmd in commands:
-    print(' '.join(cmd))
+    print(" ".join(cmd))
 ```
 
 ### Working with Captured Commands
@@ -78,7 +80,7 @@ def test_continuous_equals_batch():
         test_data=data,
         dry_run=True,
         start_time=datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc),
-        end_time=datetime(2025, 1, 1, 17, 0, 0, tzinfo=timezone.utc)
+        end_time=datetime(2025, 1, 1, 17, 0, 0, tzinfo=timezone.utc),
     )
 
     batch_exporter.tick()
@@ -94,7 +96,7 @@ def test_continuous_equals_batch():
             test_data=data,
             dry_run=True,
             start_time=datetime(2025, 1, 1, hour, 0, 0, tzinfo=timezone.utc),
-            end_time=datetime(2025, 1, 1, hour + 1, 0, 0, tzinfo=timezone.utc)
+            end_time=datetime(2025, 1, 1, hour + 1, 0, 0, tzinfo=timezone.utc),
         )
         chunk_exporter.tick()
         continuous_commands.extend(chunk_exporter.get_captured_commands())
@@ -116,20 +118,16 @@ def normalize_commands(commands):
         # Extract command type and tags
         cmd_type = cmd[1]  # 'start', 'stop', etc.
 
-        if cmd_type == 'start':
+        if cmd_type == "start":
             # Extract tags (everything between 'start' and timestamp)
             tags = set(cmd[2:-1])
             timestamp = cmd[-1]
 
             # Create normalized representation
-            normalized.append({
-                'type': cmd_type,
-                'tags': tags,
-                'timestamp': timestamp
-            })
+            normalized.append({"type": cmd_type, "tags": tags, "timestamp": timestamp})
 
     # Sort for comparison
-    normalized.sort(key=lambda x: x['timestamp'])
+    normalized.sort(key=lambda x: x["timestamp"])
 
     return normalized
 ```
@@ -140,24 +138,19 @@ Captured commands have this structure:
 
 ```python
 [
-    'timew',           # Always 'timew'
-    'start',           # Command: start, stop, retag, etc.
-    'tag1',            # Tags (multiple)
-    'tag2',
-    'tag3',
-    '2025-01-01T10:00:00'  # Timestamp (ISO format)
+    "timew",  # Always 'timew'
+    "start",  # Command: start, stop, retag, etc.
+    "tag1",  # Tags (multiple)
+    "tag2",
+    "tag3",
+    "2025-01-01T10:00:00",  # Timestamp (ISO format)
 ]
 ```
 
 For `retag` commands:
 
 ```python
-[
-    'timew',
-    'retag',
-    'new_tag1',
-    'new_tag2'
-]
+["timew", "retag", "new_tag1", "new_tag2"]
 ```
 
 ## Integration with Existing Tests
@@ -166,22 +159,18 @@ For `retag` commands:
 
 ```python
 def test_my_scenario():
-    data = load_test_data('tests/fixtures/my_scenario.json')
+    data = load_test_data("tests/fixtures/my_scenario.json")
 
-    exporter = Exporter(
-        test_data=data,
-        dry_run=True,
-        config_path='tests/fixtures/test_config.toml'
-    )
+    exporter = Exporter(test_data=data, dry_run=True, config_path="tests/fixtures/test_config.toml")
 
     exporter.tick()
     commands = exporter.get_captured_commands()
 
     # Assert expected behavior
     assert len(commands) == 2
-    assert commands[0][1] == 'start'
-    assert 'coding' in commands[0]
-    assert 'python' in commands[0]
+    assert commands[0][1] == "start"
+    assert "coding" in commands[0]
+    assert "python" in commands[0]
 ```
 
 ### Fixtures with Expected Commands
@@ -222,7 +211,7 @@ def debug_processing():
     exporter = Exporter(
         test_data=data,
         dry_run=True,
-        verbose=True  # See detailed logging
+        verbose=True,  # See detailed logging
     )
 
     exporter.tick()
