@@ -130,14 +130,16 @@ from tests.conftest import FixtureDataBuilder
 import json
 
 # Build a test scenario
-data = (FixtureDataBuilder()
+data = (
+    FixtureDataBuilder()
     .add_window_event("vscode", "main.py", duration=600)
     .add_afk_event("not-afk", duration=600)
     .add_browser_event("https://github.com/user/repo", "GitHub", duration=300)
-    .build())
+    .build()
+)
 
 # Save as fixture
-with open('tests/fixtures/my_scenario.json', 'w') as f:
+with open("tests/fixtures/my_scenario.json", "w") as f:
     json.dump(data, f, indent=2)
 ```
 
@@ -153,12 +155,15 @@ Copy an existing fixture and modify it. See `tests/fixtures/README.md` for forma
 from aw_export_timewarrior.main import Exporter
 from tests.conftest import FixtureDataBuilder
 
+
 def test_work_session_tagging():
     # Create test data
-    data = (FixtureDataBuilder()
+    data = (
+        FixtureDataBuilder()
         .add_window_event("vscode", "main.py", 600)
         .add_afk_event("not-afk", 600)
-        .build())
+        .build()
+    )
 
     # Create exporter with test data
     exporter = Exporter(test_data=data, dry_run=True, verbose=True)
@@ -176,9 +181,10 @@ def test_work_session_tagging():
 from aw_export_timewarrior.export import load_test_data
 from aw_export_timewarrior.main import Exporter
 
+
 def test_with_fixture():
     # Load fixture
-    data = load_test_data('tests/fixtures/simple_work_session.json')
+    data = load_test_data("tests/fixtures/simple_work_session.json")
 
     # Use in test
     exporter = Exporter(test_data=data, dry_run=True)
@@ -310,7 +316,7 @@ aw-export-timewarrior analyze --from yesterday
 3. Add to test suite:
    ```python
    def test_regression_issue_123():
-       data = load_test_data('tests/fixtures/regression_issue_123.json')
+       data = load_test_data("tests/fixtures/regression_issue_123.json")
        exporter = Exporter(test_data=data, dry_run=True)
        # Test that the fix works
    ```
