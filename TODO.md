@@ -49,3 +49,72 @@ fetch cost was deliberately optimised before.  Nothing caches it: the existing
 `_current_cache`/`cache_ttl` covers only `get_current_tracking`.  Either
 memoise `get_intervals` per tick behind that same TTL, or pass in the interval
 list the caller already holds.
+
+## Let app rules run when a tmux event matched no rule
+
+`get_tags()` tries `get_afk_tags, get_tmux_tags, get_app_tags, get_browser_tags,
+get_editor_tags` and stops at the first result that is neither `None` nor
+`False`.  `get_tmux_tags()` returns an **empty list** when a tmux sub-event was
+found but no `[rules.tmux.*]` matched — and `[] is not False`, so the whole
+`[rules.app.*]` section is skipped for that window.
+
+`_fetch_tmux_sub_event()` treats tmux as applicable whenever the window title
+*contains* the string `tmux`, the tmux session name or the tmux window name, so
+this covers a wide set of windows.  `_get_subevent_tags()` logs an "Unhandled
+tmux event" warning and then skips every title-based app rule, precisely where
+the title is the most informative thing available.  It was the largest single
+source of unmatched events.
+
+The empty list comes from the *shared* `_get_subevent_tags()`, which browser and
+editor use as well, so this needs a tmux-only opt-in rather than a one-word
+change to `False`.  Three things come with it: `tests/test_tmux.py` pins the
+current contract in two places, the "Unhandled tmux event" warning is emitted
+before the return and would start firing for windows an app rule goes on to
+match, and `main.py` reclassifies those events from `UNHANDLED` to `NO_MATCH`.
+
+## Match on `pane_title` in tmux rules
+
+`_match_tmux_rule()` can match on `session`, `window`, `command` and `path`, and
+it already reads `pane_title` into the `$title` substitution — but there is no
+way to *match* on it.  The pane title is where Claude Code puts the session
+topic (`✳ Kamailio session duration analysis`), which is often the only place
+the subject of the work appears.
+
+With it, one `pane_title` rule replaces manual retagging, and the
+`[rules.app.claude-*]` rules — which are hand-maintained alternations of literal
+Claude session names — collapse into a handful of keyword rules.
+
+## Editor sub-events are missed when the watcher heartbeat lags
+
+`get_corresponding_event()` looks for a sub-event overlapping the window event,
+widening by `EVENT_MATCHING_BUFFER_SECONDS` (15 s) if nothing is found, and only
+falls back to the nearest event when `fallback_to_recent` is set — which only
+the tmux path does.
+
+`activity-watch-mode` (the Emacs watcher) pulses on a timer, so its event can
+start well after the window-focus event that it belongs to.  In a sample of 182
+window events naming an editor buffer, 46 had no emacs event within the buffer
+— the nearest one was +39 s to +82 s away, with the file path present in the
+bucket all along.
+
+Options: widen the editor lookahead, or make the buffer per-subtype (a
+slow-heartbeat editor needs more than 15 s).  `fallback_to_recent` on its own is
+*not* enough: only its lookback is generous (10 min), while its lookahead is the
+same `EVENT_MATCHING_BUFFER_SECONDS` that already failed.  Worth checking
+upstream whether `activity-watch-mode` should emit an event on buffer switch
+rather than only on its pulse timer — that would be a `fix-other` job on
+https://github.com/pauldub/activity-watch-mode
+
+## `aw-report.py`: change the worklist from UNKNOWN to "no 4CATEGORY"
+
+Lives in https://github.com/tobixen/timewarrior-tools, not in this repo.
+
+The manual worklist is `aw-report.py … UNKNOWN`, which only shows intervals the
+exporter refused to categorise at all.  A rule that fires but produces no
+`4CATEGORY` tag drops off that list while leaving the interval just as
+unclassified.
+
+`aw-report.py` already holds each interval's tags (`fetch_intervals_via_export`
+/ `parse_timew_input`), so an `--uncategorised` mode would be a filter next to
+the existing `--min-duration` skip: drop intervals that already carry a tag
+matching `^4[A-Z]`.  Roughly ten lines.
