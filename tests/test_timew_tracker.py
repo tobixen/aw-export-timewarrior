@@ -10,6 +10,23 @@ import pytest
 from aw_export_timewarrior.timew_tracker import TimewTracker
 
 
+def _as_current_tracking(interval: dict) -> dict:
+    """The get_current_tracking() view of an open interval.
+
+    start_tracking() asks that, not `timew export`, whenever the open interval
+    began at or before the new start -- so a test about an *ongoing* interval
+    has to present it the way production sees it, or it pins a state
+    TimeWarrior cannot be in (an open interval in the export with nothing
+    currently tracked).
+    """
+    return {
+        "id": interval["id"],
+        "start": interval["start"].strftime("%Y%m%dT%H%M%SZ"),
+        "start_dt": interval["start"],
+        "tags": interval["tags"],
+    }
+
+
 class TestTimewTrackerInit:
     """Test TimewTracker initialization."""
 
@@ -162,6 +179,8 @@ class TestStartTracking:
 
         with (
             patch.object(tracker, "get_intervals", return_value=[]),
+            # Nothing tracked, so start_tracking uses the full overlap probe
+            patch.object(tracker, "get_current_tracking", return_value=None),
             patch("subprocess.run", return_value=Mock(returncode=0)),
         ):
             tracker.start_tracking(tags, start_time)
@@ -193,6 +212,8 @@ class TestStartTracking:
         # No pre-existing intervals -> nothing to overwrite -> guard allows it.
         with (
             patch.object(tracker, "get_intervals", return_value=[]),
+            # Nothing tracked, so start_tracking uses the full overlap probe
+            patch.object(tracker, "get_current_tracking", return_value=None),
             patch("subprocess.run", return_value=Mock(returncode=0)),
         ):
             tracker.start_tracking({"afk", "bedtime"}, start_time)
@@ -221,6 +242,10 @@ class TestStartTracking:
 
         with (
             patch.object(tracker, "get_intervals", return_value=[own_open]),
+            # The open interval starts after start_time, so the full probe runs
+            patch.object(
+                tracker, "get_current_tracking", return_value=_as_current_tracking(own_open)
+            ),
             patch("subprocess.run", return_value=Mock(returncode=0)),
         ):
             tracker.start_tracking({"afk", "bedtime", "~aw"}, start_time)
@@ -246,6 +271,8 @@ class TestStartTracking:
 
         with (
             patch.object(tracker, "get_intervals", return_value=[manual]),
+            # Nothing tracked, so start_tracking uses the full overlap probe
+            patch.object(tracker, "get_current_tracking", return_value=None),
             patch("subprocess.run", return_value=Mock(returncode=0)) as mock_run,
             pytest.raises(RuntimeError, match="manually-curated"),
         ):
@@ -273,6 +300,8 @@ class TestStartTracking:
 
         with (
             patch.object(tracker, "get_intervals", return_value=[earlier_manual]),
+            # Nothing tracked, so start_tracking uses the full overlap probe
+            patch.object(tracker, "get_current_tracking", return_value=None),
             patch("subprocess.run", return_value=Mock(returncode=0)),
         ):
             tracker.start_tracking({"work", "~aw"}, start_time)
@@ -300,12 +329,16 @@ class TestStartTracking:
         }
 
         with (
-            patch.object(tracker, "get_intervals", return_value=[ongoing_manual]),
+            patch.object(tracker, "get_intervals") as probe,
+            patch.object(
+                tracker, "get_current_tracking", return_value=_as_current_tracking(ongoing_manual)
+            ),
             patch("subprocess.run", return_value=Mock(returncode=0)),
         ):
             tracker.start_tracking({"work", "~aw"}, start_time)
 
         assert captured[0][-1] == ":adjust"
+        probe.assert_not_called()
 
     def test_start_tracking_refuses_to_delete_ongoing_foreign_interval(self) -> None:
         """An ongoing manual interval must NOT be DELETED by backfilling before it.
@@ -328,6 +361,10 @@ class TestStartTracking:
 
         with (
             patch.object(tracker, "get_intervals", return_value=[ongoing_manual]),
+            # The open interval starts after start_time, so the full probe runs
+            patch.object(
+                tracker, "get_current_tracking", return_value=_as_current_tracking(ongoing_manual)
+            ),
             patch("subprocess.run", return_value=Mock(returncode=0)) as mock_run,
             pytest.raises(RuntimeError, match="manually-curated"),
         ):
@@ -839,6 +876,8 @@ class TestRunTimew:
         # Stub the overlap guard so the test exercises the start command itself.
         with (
             patch.object(tracker, "get_intervals", return_value=[]),
+            # Nothing tracked, so start_tracking uses the full overlap probe
+            patch.object(tracker, "get_current_tracking", return_value=None),
             patch("subprocess.run", return_value=Mock(returncode=1, stderr="error")),
             pytest.raises(RuntimeError),
         ):

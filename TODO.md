@@ -27,18 +27,6 @@ Notes from doing this by hand (2026-08-03, 62 conflicting intervals):
   is a usable primitive.
 - Manually adjusted intervals should lose the `~aw` marker.
 
-## Cache the overlap probe in `start_tracking`
-
-Every `start_tracking()` call shells out to `timew export` over a 7-day window
-to decide whether `:adjust` would destroy foreign data — or, on an install
-where ranged export is unsupported, over the entire database, parsed and
-filtered in Python.  A batch run (`tick(process_all=True)`) calls it once per
-activity block, so it is O(activity blocks) extra subprocesses on a path whose
-fetch cost was deliberately optimised before.  Nothing caches it: the existing
-`_current_cache`/`cache_ttl` covers only `get_current_tracking`.  Either
-memoise `get_intervals` per tick behind that same TTL, or pass in the interval
-list the caller already holds.
-
 ## Editor sub-events are missed when the watcher heartbeat lags
 
 `get_corresponding_event()` looks for a sub-event overlapping the window event,

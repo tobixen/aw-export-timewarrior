@@ -20,6 +20,23 @@ from aw_export_timewarrior.time_tracker import ProtectedIntervalError
 from aw_export_timewarrior.timew_tracker import TimewTracker
 
 
+def _as_current_tracking(interval: dict) -> dict:
+    """The get_current_tracking() view of an open interval.
+
+    start_tracking() asks that, not `timew export`, whenever the open interval
+    began at or before the new start -- so a test about an *ongoing* interval
+    has to present it the way production sees it, or it pins a state
+    TimeWarrior cannot be in (an open interval in the export with nothing
+    currently tracked).
+    """
+    return {
+        "id": interval["id"],
+        "start": interval["start"].strftime("%Y%m%dT%H%M%SZ"),
+        "start_dt": interval["start"],
+        "tags": interval["tags"],
+    }
+
+
 @pytest.fixture
 def mock_aw_client():
     """Mocked ActivityWatch client, so Exporter() needs no running server."""
@@ -99,6 +116,37 @@ class TestAdjustSemantics:
         assert ["btwo", "~aw"] in tags, "bounded track :adjust must not touch later intervals"
         assert ["dnew", "~aw"] in tags
 
+    def test_closed_interval_cannot_follow_the_open_one(self, timew_sandbox: str) -> None:
+        """TimeWarrior refuses to record closed history after the open interval.
+
+        start_tracking() leans on this: when the open interval began at or
+        before the new start, it is the only interval `:adjust` can touch, so
+        the 7-day overlap probe can be skipped in favour of the (cached)
+        current-tracking state.  If a future timew ever allows this, that
+        shortcut would start deleting the interval this test tries to create.
+        """
+        _timew("track", "2026-09-10T08:00:00", "-", "2026-09-10T09:00:00", "closedone")
+        _timew("start", "2026-09-10T10:00:00", "openone")
+
+        # Three shapes, because what the shortcut needs is that no closed
+        # interval *ends* after the open one's start -- not merely that none
+        # *starts* after it.  A straddling interval is the one that would
+        # defeat the guard: it would be foreign data `:adjust` never sees.
+        for start, end, tag in (
+            ("2026-09-10T12:00:00", "2026-09-10T13:00:00", "afterone"),
+            ("2026-09-10T09:30:00", "2026-09-10T10:30:00", "straddleone"),
+            ("2026-09-10T10:30:00", "2026-09-10T11:00:00", "insideone"),
+        ):
+            result = _timew("track", start, "-", end, tag)
+            assert result.returncode != 0, (
+                f"timew accepted {tag} ({start} - {end}) alongside the open "
+                f"interval: {_intervals()}"
+            )
+            assert [istart for istart, _, _ in _intervals()] == [
+                "20260910T060000Z",
+                "20260910T080000Z",
+            ], _intervals()
+
     def test_start_adjust_clips_an_open_foreign_interval(self, timew_sandbox: str) -> None:
         """Starting inside an ongoing manual interval stops it, keeping the entry.
 
@@ -139,6 +187,8 @@ class TestGuardBoundaries:
 
         with (
             patch.object(tracker, "get_intervals", return_value=[straddling]),
+            # Nothing tracked, so start_tracking uses the full overlap probe
+            patch.object(tracker, "get_current_tracking", return_value=None),
             patch("subprocess.run", return_value=Mock(returncode=0)) as mock_run,
             pytest.raises(ProtectedIntervalError, match="manually-curated"),
         ):
@@ -160,6 +210,8 @@ class TestGuardBoundaries:
 
         with (
             patch.object(tracker, "get_intervals", return_value=[abutting]),
+            # Nothing tracked, so start_tracking uses the full overlap probe
+            patch.object(tracker, "get_current_tracking", return_value=None),
             patch("subprocess.run", return_value=Mock(returncode=0)),
         ):
             tracker.start_tracking({"work", "~aw"}, start_time)
@@ -178,13 +230,17 @@ class TestGuardBoundaries:
         }
 
         with (
-            patch.object(tracker, "get_intervals", return_value=[ongoing]),
+            patch.object(tracker, "get_intervals") as probe,
+            patch.object(
+                tracker, "get_current_tracking", return_value=_as_current_tracking(ongoing)
+            ),
             patch("subprocess.run", return_value=Mock(returncode=0)) as mock_run,
             pytest.raises(ProtectedIntervalError),
         ):
             tracker.start_tracking({"work", "~aw"}, start_time)
 
         mock_run.assert_not_called()
+        probe.assert_not_called()
 
 
 class TestOwnHistoryPreserved:
@@ -209,6 +265,8 @@ class TestOwnHistoryPreserved:
 
         with (
             patch.object(tracker, "get_intervals", return_value=[later_own]),
+            # Nothing tracked, so start_tracking uses the full overlap probe
+            patch.object(tracker, "get_current_tracking", return_value=None),
             patch("subprocess.run", return_value=Mock(returncode=0)),
         ):
             tracker.start_tracking({"work", "~aw"}, start_time)
@@ -233,13 +291,17 @@ class TestOwnHistoryPreserved:
         }
 
         with (
-            patch.object(tracker, "get_intervals", return_value=[own_open]),
+            patch.object(tracker, "get_intervals") as probe,
+            patch.object(
+                tracker, "get_current_tracking", return_value=_as_current_tracking(own_open)
+            ),
             patch("subprocess.run", return_value=Mock(returncode=0)),
         ):
             tracker.start_tracking({"work", "~aw"}, start_time)
 
         assert captured[0][1] == "start"
         assert captured[0][-1] == ":adjust"
+        probe.assert_not_called()
 
 
 class TestRefusalIsRecoverable:

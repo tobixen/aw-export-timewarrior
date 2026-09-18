@@ -188,7 +188,7 @@ class TimewTracker(TimeTracker):
         #    form at all: it would delete the exporter's own already-exported
         #    intervals.  Fill just the hole with the bounded `track` form,
         #    which only touches [start, end].
-        intervals = self.get_intervals(start_time - timedelta(days=7), datetime.now(UTC))
+        intervals = self._overlap_probe(start_time)
         blocking = self._first_protected_interval(start_time, intervals)
         if blocking is not None:
             raise ProtectedIntervalError(
@@ -208,6 +208,41 @@ class TimewTracker(TimeTracker):
                 ["track", ts2str(start_time), "-", ts2str(next_start)] + sorted(tags) + [":adjust"]
             )
         self._run_timew(args)
+
+    def _overlap_probe(self, start_time: datetime) -> list[dict[str, Any]]:
+        """The intervals `timew start <start_time> :adjust` could touch.
+
+        Normally a `timew export` over the week before ``start_time``, which is
+        a subprocess (and, on an install without ranged export, a parse of the
+        entire database) per call -- once per activity block in a batch run.
+
+        The shortcut: TimeWarrior never records closed history after the open
+        interval (pinned by test_closed_interval_cannot_follow_the_open_one),
+        so when the open interval began at or before ``start_time``, every
+        closed interval ends at or before it as well and `:adjust` can touch
+        nothing but that open interval -- which one `timew get dom.active.json`
+        answers, instead of exporting and parsing a week of history.  Anything
+        else -- no open interval, or one starting after ``start_time``
+        (backfilling into a hole) -- falls back to the full probe.
+
+        The current-tracking cache is deliberately dropped first: a cache_ttl-
+        old answer is fine for reporting, but here it would let a manual `timew
+        start` from a second ago go unseen, and `:adjust` would swallow the
+        interval the full export would have caught.
+        """
+        self._current_cache = None
+        current = self.get_current_tracking()
+        if current is not None and current["start_dt"] <= start_time:
+            return [
+                {
+                    "id": current.get("id") or 0,
+                    "start": current["start_dt"],
+                    "end": None,
+                    "tags": current["tags"],
+                }
+            ]
+
+        return self.get_intervals(start_time - timedelta(days=7), datetime.now(UTC))
 
     @staticmethod
     def _next_closed_interval_start(
@@ -260,7 +295,7 @@ class TimewTracker(TimeTracker):
         commands and skips foreign intervals in compare.py.
         """
         if intervals is None:
-            intervals = self.get_intervals(start_time - timedelta(days=7), datetime.now(UTC))
+            intervals = self._overlap_probe(start_time)
         for interval in intervals:
             if "~aw" in interval["tags"]:
                 # Exporter-owned -- safe to clip, and never deleted wholesale

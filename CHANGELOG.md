@@ -53,6 +53,7 @@ During the last few days I've done a full code review utilizing Claude Fable - i
 - `diff`, `report`, `analyze` and time-bounded `sync` are dramatically faster on historical ranges: each range is now fetched and processed once instead of being repeatedly re-fetched and re-processed. A 3-hour `diff` that previously took ~12 s now completes in under 1 s.
 - Reading TimeWarrior intervals now queries only the requested date range instead of exporting the entire database, so commands stay fast as your TimeWarrior history grows (automatically falls back on older `timew` versions).
 - Continuous `sync` mode no longer re-fetches all events on every tick, cutting its steady-state load on the ActivityWatch server from ~20% CPU to near-idle.
+- Recording a new interval no longer exports a week of TimeWarrior history to check what it would overwrite: when the interval being tracked already started before the new one, that check needs nothing but the current tracking state. A `sync` catching up over many hours makes that check once per activity block, and each one is now a single cheap `timew` query instead of a week-long export.
 - Scripted/bulk commands with hidden output no longer wait out the 10 s undo grace period, speeding up operations like bulk retagging.
 
 ## [0.6.5] - 2026-01-27
