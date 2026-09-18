@@ -2,11 +2,14 @@
 
 ## Split multitasking sessions instead of picking one category
 
-When events in one export window support two mutually exclusive categories (say
-`4BREAK` and `4CHORES`, or `4BOAT` and `4RL`), the exporter currently has to pick
-one, and an `add` that would violate an exclusive group is silently skipped
-(`TagExtractor.apply_retag_rules`).  Both outcomes distort the per-category
-totals, which matter more than exact start/end times.
+Observations by AI:
+
+When events in one export window support two mutually exclusive
+categories (say `4BREAK` and `4CHORES`, `4OSS` and `4RL` or two
+different customers), the exporter currently has to pick one, and an
+`add` that would violate an exclusive group is silently skipped
+(`TagExtractor.apply_retag_rules`).  Both outcomes distort the
+per-category totals, which matter more than exact start/end times.
 
 Instead, consider splitting the interval and giving each category a share
 proportional to its supporting evidence — e.g. an hour of genuine multitasking
@@ -27,26 +30,32 @@ Notes from doing this by hand (2026-08-03, 62 conflicting intervals):
   is a usable primitive.
 - Manually adjusted intervals should lose the `~aw` marker.
 
-## Editor sub-events are missed when the watcher heartbeat lags
+---
 
-`get_corresponding_event()` looks for a sub-event overlapping the window event,
-widening by `EVENT_MATCHING_BUFFER_SECONDS` (15 s) if nothing is found, and only
-falls back to the nearest event when `fallback_to_recent` is set — which only
-the tmux path does.
+Comments by human:
 
-`activity-watch-mode` (the Emacs watcher) pulses on a timer, so its event can
-start well after the window-focus event that it belongs to.  In a sample of 182
-window events naming an editor buffer, 46 had no emacs event within the buffer
-— the nearest one was +39 s to +82 s away, with the file path present in the
-bucket all along.
+* Sometimes the solution may be to just operate on shorter intervals.  It will cause more noise in the output though.
+* A solution where the activitywatch db keeps being the single source of truth and the ~aw-tag is kept and a reexport gives the same results is preferred.  The non-~aw-tagging is reserved for manual overrides, not for algorithmical transforms.
+* The split (like it's currently done for the afk prompter) is a fair solution when the attention clearly has jumped between different tasks for a longer time period
+* We should disregard "noise".  Working on a main activity, small breaks with other acitvities should still simply be ignored.
 
-Options: widen the editor lookahead, or make the buffer per-subtype (a
-slow-heartbeat editor needs more than 15 s).  `fallback_to_recent` on its own is
-*not* enough: only its lookback is generous (10 min), while its lookahead is the
-same `EVENT_MATCHING_BUFFER_SECONDS` that already failed.  Worth checking
-upstream whether `activity-watch-mode` should emit an event on buffer switch
-rather than only on its pulse timer — that would be a `fix-other` job on
-https://github.com/pauldub/activity-watch-mode
+## Widened emacs lookahead can match the wrong (later) sub-event
+
+Observation by AI (code review, 2026-09-18):
+
+`get_corresponding_event()`'s emacs override widens the lookahead to 90s but
+leaves the "pick longest of multiple candidates" selection unchanged
+(`aw_client.py`). Widening only the end bound stretches the candidate span to
+~105s while lookback stays 15s, so a short emacs visit followed by a
+different, longer emacs session starting up to 90s later could now match the
+wrong file — a confidently wrong tag instead of the previous "no match".
+Nothing cross-checks the sub-event's file/project against the window title.
+
+Needs two distinct emacs sessions inside one widened window to bite; no
+evidence yet that it happens in practice. If it turns out to matter, prefer
+the candidate nearest in time when the match came from the widened window,
+or require the file basename to appear in the window title before accepting
+a candidate starting after the window event ends.
 
 ## `aw-report.py`: change the worklist from UNKNOWN to "no 4CATEGORY"
 

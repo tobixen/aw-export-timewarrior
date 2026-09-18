@@ -13,7 +13,7 @@ from .config import config
 from .event_pipeline import EventPipeline, EventPipelineConfig
 from .output import user_output
 from .state import AfkState, StateManager
-from .tag_extractor import ExclusiveGroupError, TagExtractor
+from .tag_extractor import EMACS_LOOKAHEAD_BUFFER_SECONDS, ExclusiveGroupError, TagExtractor
 from .time_tracker import ProtectedIntervalError
 from .timew_tracker import TimewTracker
 from .utils import parse_datetime, strip_timew_hints, ts2strtime
@@ -35,7 +35,10 @@ DEBUG_SKIP_THRESHOLD_SECONDS = 30
 # tracking window, so get_corresponding_event's fallback_to_recent lookback
 # doesn't miss events cached just outside that window.
 CACHE_LOOKBACK_BUFFER = FALLBACK_TO_RECENT_LOOKBACK + timedelta(minutes=1)  # + margin
-CACHE_LOOKAHEAD_MARGIN = timedelta(seconds=16)
+# Must cover the widest per-app lookahead override get_corresponding_event is
+# called with (currently emacs's), or a cached bucket would silently exclude
+# the very events that override widening was meant to find.
+CACHE_LOOKAHEAD_MARGIN = timedelta(seconds=EMACS_LOOKAHEAD_BUFFER_SECONDS + 1)
 
 
 def parse_message_tags(message: str) -> set[str]:

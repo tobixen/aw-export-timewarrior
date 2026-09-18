@@ -14,6 +14,7 @@ import pytest
 
 from aw_export_timewarrior.aw_client import EventFetcher
 from aw_export_timewarrior.tag_extractor import (
+    EMACS_LOOKAHEAD_BUFFER_SECONDS,
     ExclusiveGroupError,
     ExclusiveGroupViolation,
     TagExtractor,
@@ -493,6 +494,61 @@ class TestGetSpecializedContext:
 
         assert result["type"] is None
         assert result["data"] is None
+
+
+class TestEditorLookaheadBufferOverride:
+    """Test that get_editor_tags forwards the per-app lookahead buffer override.
+
+    activity-watch-mode (the emacs watcher) pulses on a timer, so its event can
+    start well after the window event -- emacs gets a widened lookahead, vi/vim
+    (which update on every keystroke) don't need it and keep the default.
+    """
+
+    def test_emacs_gets_widened_lookahead(self) -> None:
+        """emacs sub-event fetch passes the widened per-app lookahead override."""
+        mock_fetcher = Mock(spec=EventFetcher)
+        mock_fetcher.bucket_short = {"aw-watcher-emacs": {"id": "aw-watcher-emacs_host"}}
+        mock_fetcher.get_corresponding_event.return_value = None
+
+        extractor = TagExtractor(
+            {"rules": {"editor": {}}, "exclusive": {}, "tags": {}},
+            mock_fetcher,
+        )
+
+        window_event = {
+            "timestamp": datetime.now(UTC),
+            "duration": timedelta(minutes=5),
+            "data": {"app": "emacs", "title": "foo.py - Emacs"},
+        }
+
+        extractor.get_editor_tags(window_event)
+
+        mock_fetcher.get_corresponding_event.assert_called_once()
+        _, kwargs = mock_fetcher.get_corresponding_event.call_args
+        assert kwargs["lookahead_buffer_seconds"] == EMACS_LOOKAHEAD_BUFFER_SECONDS
+
+    def test_vim_keeps_default_lookahead(self) -> None:
+        """vim sub-event fetch does not get the emacs-specific override."""
+        mock_fetcher = Mock(spec=EventFetcher)
+        mock_fetcher.bucket_short = {"aw-watcher-vim": {"id": "aw-watcher-vim_host"}}
+        mock_fetcher.get_corresponding_event.return_value = None
+
+        extractor = TagExtractor(
+            {"rules": {"editor": {}}, "exclusive": {}, "tags": {}},
+            mock_fetcher,
+        )
+
+        window_event = {
+            "timestamp": datetime.now(UTC),
+            "duration": timedelta(minutes=5),
+            "data": {"app": "vim", "title": "vim"},
+        }
+
+        extractor.get_editor_tags(window_event)
+
+        mock_fetcher.get_corresponding_event.assert_called_once()
+        _, kwargs = mock_fetcher.get_corresponding_event.call_args
+        assert kwargs["lookahead_buffer_seconds"] is None
 
 
 class TestApplyRetagRulesExclusiveError:

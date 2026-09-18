@@ -383,6 +383,122 @@ class TestGetCorrespondingEvent:
 
         assert result is None
 
+    def test_default_buffer_misses_late_event(self) -> None:
+        """An emacs-style late-pulsing event well past the default buffer is missed."""
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        # Window event is 5s long; sub-event starts 60s after it ends -- well
+        # past the default EVENT_MATCHING_BUFFER_SECONDS (15s) lookahead.
+        editor_time = window_time + timedelta(seconds=65)
+
+        test_data = {
+            "buckets": {
+                "aw-watcher-emacs_test": create_test_bucket(
+                    "aw-watcher-emacs_test", "aw-watcher-emacs"
+                ),
+            },
+            "events": {
+                "aw-watcher-emacs_test": [
+                    create_test_event(editor_time, 120, {"file": "/tmp/foo.py"})
+                ]
+            },
+        }
+
+        fetcher = EventFetcher(test_data=test_data)
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=5),
+            "data": {"title": "foo.py - Emacs"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event, "aw-watcher-emacs_test", ignorable=False, retry=0
+        )
+
+        assert result is None
+
+    def test_lookahead_buffer_seconds_finds_late_event(self) -> None:
+        """A wider lookahead_buffer_seconds picks up a late-pulsing sub-event."""
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        editor_time = window_time + timedelta(seconds=65)
+
+        test_data = {
+            "buckets": {
+                "aw-watcher-emacs_test": create_test_bucket(
+                    "aw-watcher-emacs_test", "aw-watcher-emacs"
+                ),
+            },
+            "events": {
+                "aw-watcher-emacs_test": [
+                    create_test_event(editor_time, 120, {"file": "/tmp/foo.py"})
+                ]
+            },
+        }
+
+        fetcher = EventFetcher(test_data=test_data)
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=5),
+            "data": {"title": "foo.py - Emacs"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event,
+            "aw-watcher-emacs_test",
+            ignorable=False,
+            retry=0,
+            lookahead_buffer_seconds=90,
+        )
+
+        assert result is not None
+        assert result["data"]["file"] == "/tmp/foo.py"
+
+    def test_lookahead_buffer_seconds_survives_sleep_retry(self) -> None:
+        """lookahead_buffer_seconds must not be dropped by the recursive retry call.
+
+        A window event ending recently triggers the sleep-and-retry branch
+        (retry > 0), which used to recurse positionally and silently reset
+        lookahead_buffer_seconds (and fallback_to_recent) to their defaults --
+        making the override a no-op for exactly the "sub-event hasn't arrived
+        yet" case it targets in live sync.
+        """
+        window_time = datetime.now(UTC) - timedelta(seconds=5)
+        editor_time = window_time + timedelta(seconds=65)
+
+        test_data = {
+            "buckets": {
+                "aw-watcher-emacs_test": create_test_bucket(
+                    "aw-watcher-emacs_test", "aw-watcher-emacs"
+                ),
+            },
+            "events": {
+                "aw-watcher-emacs_test": [
+                    create_test_event(editor_time, 120, {"file": "/tmp/foo.py"})
+                ]
+            },
+        }
+
+        fetcher = EventFetcher(test_data=test_data)
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=5),
+            "data": {"title": "foo.py - Emacs"},
+        }
+
+        with patch("time.sleep"):
+            result = fetcher.get_corresponding_event(
+                window_event,
+                "aw-watcher-emacs_test",
+                ignorable=False,
+                retry=2,
+                lookahead_buffer_seconds=90,
+            )
+
+        assert result is not None
+        assert result["data"]["file"] == "/tmp/foo.py"
+
     def test_multiple_events_picks_longest(self) -> None:
         """Test that when multiple events found, longest is returned."""
         window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
