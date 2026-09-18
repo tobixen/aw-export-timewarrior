@@ -45,6 +45,7 @@ During the last few days I've done a full code review utilizing Claude Fable - i
 - Fix `diff --apply` never converging for intervals carrying a multi-word tag (e.g. the default `personal communication`), which was being torn into separate tags.
 - Fix retag rules that remove or replace tags having no effect — only tag additions were applied.
 - Fix `sync` crashing shortly after a `timew stop` when nothing was being tracked but its internal state was still "away".
+- Fix editor sub-events being missed for emacs: `activity-watch-mode` pulses on a timer rather than emitting on buffer switch, so its event can start well after the window event it belongs to (observed 39s-82s late), past the 15s lookahead used to match sub-events to window events. emacs now gets a widened 90s lookahead; other editors (vi/vim, which emit on every keystroke) are unaffected.
 
 ### Changed
 - **Breaking:** `--config FILE` must now be given before the subcommand (e.g. `--config FILE sync`, not `sync --config FILE`), like every other global flag. `diff --config FILE` (config placed after the subcommand) happened to work before as a side effect of the bug fixed above, and will now error with "unrecognized arguments" instead.

@@ -26,6 +26,14 @@ def _skip_browser_newtab(sub_event: dict) -> bool:
     return sub_event["data"].get("url") in ("chrome://newtab/", "about:newtab")
 
 
+# `activity-watch-mode` (the emacs watcher) pulses on a timer instead of
+# emitting on buffer switch, so its event can start well after the window
+# event it belongs to: a sample of 182 window events naming an editor buffer
+# had 46 with no emacs event within EVENT_MATCHING_BUFFER_SECONDS, the
+# nearest one 39s-82s away. vi/vim update on every keystroke and don't need
+# the wider lookahead.
+EMACS_LOOKAHEAD_BUFFER_SECONDS = 90.0
+
 # Shared sub-event fetch parameters for subtypes with per-app buckets
 # (browser, editor). Consumed by both tag extraction (get_browser_tags /
 # get_editor_tags) and get_specialized_context, so the two paths can't drift
@@ -41,6 +49,7 @@ SUBEVENT_SPECS: dict[str, dict[str, Any]] = {
     "editor": {
         "apps": ("emacs", "vi", "vim"),
         "bucket_pattern": "aw-watcher-{app}",
+        "lookahead_buffer_seconds": {"emacs": EMACS_LOOKAHEAD_BUFFER_SECONDS},
     },
 }
 
@@ -366,6 +375,7 @@ class TagExtractor:
         bucket_pattern: str,
         app_normalizer: Callable | None = None,
         skip_if: Callable | None = None,
+        lookahead_buffer_seconds: dict[str, float] | None = None,
     ) -> tuple[dict | None, str]:
         """Fetch sub-event for a window event (browser, editor, etc).
 
@@ -375,6 +385,9 @@ class TagExtractor:
             bucket_pattern: Pattern for bucket ID (e.g., 'aw-watcher-{app}')
             app_normalizer: Optional function to normalize app name
             skip_if: Optional function that returns True if we should skip this sub_event
+            lookahead_buffer_seconds: Optional per-app override of the sub-event
+                lookahead buffer (see get_corresponding_event), keyed by the raw
+                (non-normalized) app name
 
         Returns:
             Tuple of (sub_event or None, event_type string)
@@ -397,7 +410,11 @@ class TagExtractor:
 
         # Get the corresponding sub-event
         sub_event = self.event_fetcher.get_corresponding_event(
-            window_event, bucket_id, ignorable=ignorable, retry=self.default_retry
+            window_event,
+            bucket_id,
+            ignorable=ignorable,
+            retry=self.default_retry,
+            lookahead_buffer_seconds=(lookahead_buffer_seconds or {}).get(app),
         )
 
         if not sub_event:
@@ -420,6 +437,7 @@ class TagExtractor:
         skip_if: Callable | None = None,
         sub_event: dict | None = None,
         fall_through_on_no_match: bool = False,
+        lookahead_buffer_seconds: dict[str, float] | None = None,
     ) -> set[str] | list | bool:
         """Generic method to extract tags from events that require sub-events.
 
@@ -435,6 +453,8 @@ class TagExtractor:
             fall_through_on_no_match: Return False instead of [] when no rule
                 matched, so get_tags() keeps trying the remaining extractors,
                 and defer the "Unhandled" warning to get_tags()
+            lookahead_buffer_seconds: Optional per-app lookahead buffer override,
+                forwarded to _fetch_sub_event (not needed if sub_event provided)
 
         Returns:
             Set of tags, empty list if no match, or False if wrong app type
@@ -447,7 +467,12 @@ class TagExtractor:
                 return False
 
             sub_event, _ = self._fetch_sub_event(
-                window_event, apps or (), bucket_pattern or "", app_normalizer, skip_if
+                window_event,
+                apps or (),
+                bucket_pattern or "",
+                app_normalizer,
+                skip_if,
+                lookahead_buffer_seconds,
             )
 
             if not sub_event:

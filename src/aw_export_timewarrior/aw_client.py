@@ -296,6 +296,7 @@ class EventFetcher:
         ignorable: bool = False,
         retry: int = 6,
         fallback_to_recent: bool = False,
+        lookahead_buffer_seconds: float | None = None,
     ) -> dict | None:
         """Find corresponding sub-event (browser URL, editor file, tmux).
 
@@ -309,6 +310,11 @@ class EventFetcher:
             retry: Number of retry attempts if event not found
             fallback_to_recent: If True and no overlapping event found, use the most
                 recent event before the window event. Useful for tmux where state persists.
+            lookahead_buffer_seconds: Override the end-bound widening used by the
+                "wider window" fallback below (default EVENT_MATCHING_BUFFER_SECONDS
+                when None). Some watchers (e.g. emacs, which pulses on a timer
+                instead of on buffer switch) can start their event well after the
+                window event they belong to.
 
         Returns:
             Corresponding event or None
@@ -340,16 +346,28 @@ class EventFetcher:
                 # sleep-and-retry above a no-op.
                 if self._cache_range is not None:
                     self._events_cache.pop(bucket_id, None)
-                return self.get_corresponding_event(window_event, bucket_id, ignorable, retry)
+                return self.get_corresponding_event(
+                    window_event,
+                    bucket_id,
+                    ignorable=ignorable,
+                    retry=retry,
+                    fallback_to_recent=fallback_to_recent,
+                    lookahead_buffer_seconds=lookahead_buffer_seconds,
+                )
 
         # If still nothing found, try a wider window to account for timing differences
         if not ret and not ignorable:
+            end_buffer = (
+                EVENT_MATCHING_BUFFER_SECONDS
+                if lookahead_buffer_seconds is None
+                else lookahead_buffer_seconds
+            )
             ret = self.get_events(
                 bucket_id,
                 start=window_event["timestamp"] - timedelta(seconds=EVENT_MATCHING_BUFFER_SECONDS),
                 end=window_event["timestamp"]
                 + window_event["duration"]
-                + timedelta(seconds=EVENT_MATCHING_BUFFER_SECONDS),
+                + timedelta(seconds=end_buffer),
             )
 
         # Fallback: find nearest event around the window event
