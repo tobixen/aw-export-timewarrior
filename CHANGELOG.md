@@ -17,6 +17,7 @@ During the last few days I've done a full code review utilizing Claude Fable - i
 - `[lists]` config section for reusable named lists, referenced as `@name` in list fields (`tags`, `app_names`, `source_tags`, ...) and in regexp fields (`url_regexp`, `title_regexp`, `path_regexp`, ...), where a reference expands to a non-capturing alternation `(?:item1|item2|...)`. Supersedes `[app_groups]`, which remains as an alias.
 - `report --min-duration SECONDS`: filter out events shorter than the given duration (e.g. `--min-duration 2` hides sub-2-second window flickers)
 - `--stop` as an alias for `--to`/`--until`/`--end` when giving the end of a time range.
+- `pane_title` as a matcher in `[rules.tmux.*]`, alongside `session`, `window`, `command` and `path`. The tmux pane title is where e.g. Claude Code puts the session topic, which is often the only place the subject of the work appears; capture groups from it feed the `$1`, `$2`, ... substitutions like the other matchers.
 
 ### Fixed
 - Fix captured `timew start`/`stop` timestamps recorded in UTC (`Z` suffix) being shifted by your local UTC offset, placing those intervals at the wrong time of day.
@@ -34,6 +35,7 @@ During the last few days I've done a full code review utilizing Claude Fable - i
 - Fix activity blocks entered via ask-away (e.g. a tea break) being invisible to TimeWarrior when they happened while already in an away state; `diff` also left existing `~aw` blocks untouched in this case.
 - Fix split ask-away events being exported twice, producing duplicate intervals and sometimes causing the following work events to be mistagged as UNKNOWN.
 - Fix tmux tag matching for 0-second window events that occur just before tmux activity begins (matching now looks forward as well as backward).
+- Fix a terminal window running tmux losing all `[rules.app.*]` matching when no `[rules.tmux.*]` rule matched: the window title, usually the most informative thing available, was never looked at, which was the single largest source of unmatched events. Such events now fall through to the app rules, and the "Unhandled tmux event" warning is only logged when nothing matches at all.
 - Fix flatpak Chromium not being recognized as a browser, so its visited URLs never showed up as tags in `sync` or `report`.
 - Fix a terminal window not running tmux picking up tmux tags from another terminal that was running tmux, mistagging the focused window.
 - Fix `diff` crashing when an existing TimeWarrior interval carried tags that violate an exclusive-group rule; it now warns and keeps the original tags.

@@ -50,40 +50,6 @@ fetch cost was deliberately optimised before.  Nothing caches it: the existing
 memoise `get_intervals` per tick behind that same TTL, or pass in the interval
 list the caller already holds.
 
-## Let app rules run when a tmux event matched no rule
-
-`get_tags()` tries `get_afk_tags, get_tmux_tags, get_app_tags, get_browser_tags,
-get_editor_tags` and stops at the first result that is neither `None` nor
-`False`.  `get_tmux_tags()` returns an **empty list** when a tmux sub-event was
-found but no `[rules.tmux.*]` matched — and `[] is not False`, so the whole
-`[rules.app.*]` section is skipped for that window.
-
-`_fetch_tmux_sub_event()` treats tmux as applicable whenever the window title
-*contains* the string `tmux`, the tmux session name or the tmux window name, so
-this covers a wide set of windows.  `_get_subevent_tags()` logs an "Unhandled
-tmux event" warning and then skips every title-based app rule, precisely where
-the title is the most informative thing available.  It was the largest single
-source of unmatched events.
-
-The empty list comes from the *shared* `_get_subevent_tags()`, which browser and
-editor use as well, so this needs a tmux-only opt-in rather than a one-word
-change to `False`.  Three things come with it: `tests/test_tmux.py` pins the
-current contract in two places, the "Unhandled tmux event" warning is emitted
-before the return and would start firing for windows an app rule goes on to
-match, and `main.py` reclassifies those events from `UNHANDLED` to `NO_MATCH`.
-
-## Match on `pane_title` in tmux rules
-
-`_match_tmux_rule()` can match on `session`, `window`, `command` and `path`, and
-it already reads `pane_title` into the `$title` substitution — but there is no
-way to *match* on it.  The pane title is where Claude Code puts the session
-topic (`✳ Kamailio session duration analysis`), which is often the only place
-the subject of the work appears.
-
-With it, one `pane_title` rule replaces manual retagging, and the
-`[rules.app.claude-*]` rules — which are hand-maintained alternations of literal
-Claude session names — collapse into a handful of keyword rules.
-
 ## Editor sub-events are missed when the watcher heartbeat lags
 
 `get_corresponding_event()` looks for a sub-event overlapping the window event,

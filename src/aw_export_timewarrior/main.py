@@ -69,7 +69,10 @@ class EventMatchResult(Enum):
 
     IGNORED = auto()  # Event too short to process
     NO_MATCH = auto()  # Event processed but no tags found
-    UNHANDLED = auto()  # Specialized context found (browser/editor/terminal) but no rules matched
+    # Browser/editor sub-event found but no rule of that type matched.  A tmux
+    # sub-event that matched no rule falls through to the app rules instead and
+    # lands in NO_MATCH when those miss too (see TagExtractor.get_tmux_tags).
+    UNHANDLED = auto()
     MATCHED = auto()  # Tags found
 
 

@@ -91,7 +91,9 @@ Configuration is stored in `~/.config/activitywatch/aw-export-timewarrior/aw-exp
 - **Browser rules** (`rules.browser.*`): Match URLs with `url_regexp`
 - **Editor rules** (`rules.editor.*`): Match by `project` name or `path_regexp`
 - **App rules** (`rules.app.*`): Match by `app_names` and `title_regexp`
-- **Tmux rules** (`rules.tmux.*`): Match by `session`, `window`, `command`, `path`
+- **Tmux rules** (`rules.tmux.*`): Match by `session`, `window`, `pane_title`, `command`, `path`
+  (capture groups are numbered `$1`, `$2`, ... across `pane_title`, `command` and `path`, in that
+  order; `session` and `window` match but do not capture — use `$session`/`$window` for those)
 - **Tag rules** (`tags.*`): Transform tags with `add`, `remove`, `replace` operations
 - **Exclusive rules** (`exclusive.*`): Prevent conflicting tags from combining
 
@@ -109,6 +111,11 @@ tags = ["myproject", "coding"]
 [rules.app.slack]
 app_names = ["slack", "Slack"]
 tags = ["communication", "slack"]
+
+# The pane title is where Claude Code puts the session topic
+[rules.tmux.kamailio]
+pane_title = "(?i)kamailio"
+tags = ["kamailio", "4WORK"]
 
 [tags.coding-is-work]
 source_tags = ["coding"]

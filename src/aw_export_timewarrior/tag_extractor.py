@@ -111,6 +111,10 @@ class TagExtractor:
         self.log_callback = log_callback or (lambda msg, **kwargs: logger.info(msg))
         # Track the last matched rule (set by extraction methods)
         self._last_matched_rule: str | None = None
+        # Deferred "Unhandled <subtype> event" warning for a sub-event that
+        # matched no rule but falls through to the remaining extractors (tmux).
+        # get_tags() emits it only if nothing else matches either.
+        self._pending_unhandled: tuple[str, dict, dict | None] | None = None
 
     @property
     def config(self) -> dict:
@@ -142,6 +146,7 @@ class TagExtractor:
         """
         # Reset matched rule tracking
         self._last_matched_rule = None
+        self._pending_unhandled = None
 
         # Try each extraction method in order
         for method in [
@@ -153,8 +158,16 @@ class TagExtractor:
         ]:
             result = method(event)
             if result is not None and result is not False:
+                if not result:
+                    # An empty result is "sub-event found, no rule matched" --
+                    # no better answer than the tmux event that fell through,
+                    # so that warning is still due.
+                    self._emit_pending_unhandled()
                 return result
 
+        # Nothing matched at all -- now the sub-event that fell through (see
+        # get_tmux_tags) really was unhandled, so report it.
+        self._emit_pending_unhandled()
         return False  # No rules matched
 
     def get_afk_tags(self, event: dict) -> set[str] | bool:
@@ -179,8 +192,17 @@ class TagExtractor:
             window_event: The window event
 
         Returns:
-            Set of tags if matched, empty list if tmux context found but no rules match,
-            or False if not applicable (not a terminal, no tmux, or terminal not running tmux)
+            Set of tags if matched, or False if no tmux rule matched -- either
+            because tmux isn't applicable (not a terminal, no tmux, or the
+            terminal isn't running tmux) or because no `[rules.tmux.*]` matched.
+
+        Unlike browser and editor, an unmatched tmux sub-event does *not* end
+        the search: _fetch_tmux_sub_event() treats tmux as applicable for any
+        window whose title merely contains the session or window name, so
+        returning the empty list here used to skip every `[rules.app.*]` rule
+        for those windows -- exactly where the title is the most informative
+        thing available.  The "Unhandled tmux event" warning is deferred to
+        get_tags(), which emits it only if the app rules come up empty too.
         """
         tmux_event = self._fetch_tmux_sub_event(window_event)
         if tmux_event is None:
@@ -192,6 +214,7 @@ class TagExtractor:
             subtype="tmux",
             matchers=[("tags", self._match_tmux_rule)],
             sub_event=tmux_event,
+            fall_through_on_no_match=True,
         )
 
     def _match_tmux_rule(self, rule: dict, sub_event: dict, rule_key: str) -> set[str] | None:
@@ -220,6 +243,15 @@ class TagExtractor:
         if "window" in rule and not re.search(rule["window"], window_name):
             return None
 
+        # Check if the pane title matches (if specified).  This is where Claude
+        # Code puts the session topic, which is often the only place the subject
+        # of the work appears at all.
+        title_match = None
+        if "pane_title" in rule:
+            title_match = re.search(rule["pane_title"], pane_title)
+            if not title_match:
+                return None
+
         # Check if command matches (if specified)
         command_match = None
         if "command" in rule:
@@ -243,14 +275,16 @@ class TagExtractor:
             "$path": pane_path,
         }
 
-        # Add capture groups from both command and path matches
-        cmd_groups = command_match.groups() if command_match else ()
-        path_groups = path_match.groups() if path_match else ()
-
-        for i, group in enumerate(cmd_groups, start=1):
-            substitutions[f"${i}"] = group
-        for i, group in enumerate(path_groups, start=len(cmd_groups) + 1):
-            substitutions[f"${i}"] = group
+        # Add capture groups from the pane_title, command and path matches, in
+        # the order the matchers are declared above.
+        group_lists = [
+            match.groups() if match else () for match in (title_match, command_match, path_match)
+        ]
+        position = 1
+        for groups in group_lists:
+            for group in groups:
+                substitutions[f"${position}"] = group
+                position += 1
 
         return self._build_tags(self._get_rule_tags(rule), substitutions)
 
@@ -385,6 +419,7 @@ class TagExtractor:
         matchers: list | None = None,
         skip_if: Callable | None = None,
         sub_event: dict | None = None,
+        fall_through_on_no_match: bool = False,
     ) -> set[str] | list | bool:
         """Generic method to extract tags from events that require sub-events.
 
@@ -397,9 +432,13 @@ class TagExtractor:
             matchers: List of (rule_key, matcher_function) tuples to try in order
             skip_if: Optional function that returns True if we should skip this sub_event
             sub_event: Pre-fetched sub-event (if provided, skips fetch logic)
+            fall_through_on_no_match: Return False instead of [] when no rule
+                matched, so get_tags() keeps trying the remaining extractors,
+                and defer the "Unhandled" warning to get_tags()
 
         Returns:
             Set of tags, empty list if no match, or False if wrong app type
+            (or, with fall_through_on_no_match, if no rule matched)
         """
         # If sub_event not provided, fetch it
         if sub_event is None:
@@ -434,13 +473,29 @@ class TagExtractor:
                     return tags
 
         # No rules matched
+        if fall_through_on_no_match:
+            # Let get_tags() try the remaining extractors; it warns if they all
+            # come up empty.
+            self._pending_unhandled = (subtype, window_event, sub_event)
+            return False
+
+        self._emit_unhandled(subtype, window_event, sub_event)
+        return []
+
+    def _emit_unhandled(self, subtype: str, window_event: dict, sub_event: dict | None) -> None:
+        """Warn that a sub-event was found but no rule of its type matched."""
         self.log_callback(
             f"Unhandled {subtype} event",
             event=window_event,
             extra={"sub_event": sub_event, "event_type": subtype, "log_event": "unhandled"},
             level=logging.WARNING,
         )
-        return []
+
+    def _emit_pending_unhandled(self) -> None:
+        """Emit a warning deferred by fall_through_on_no_match, if any."""
+        if self._pending_unhandled is not None:
+            self._emit_unhandled(*self._pending_unhandled)
+            self._pending_unhandled = None
 
     def _is_ignorable_event(self, app: str, window_event: dict) -> bool:
         """Check if an event should be ignored (e.g., emacs internal buffers).
