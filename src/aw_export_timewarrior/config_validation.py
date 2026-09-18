@@ -103,6 +103,9 @@ class ConfigValidator:
         self._validate_tags(config.get("tags", {}))
         self._validate_rules(config.get("rules", {}), config.get("app_groups", {}))
         self._validate_exclusive(config.get("exclusive", {}))
+        self._check_exclusive_self_contradictions(
+            config.get("tags", {}), config.get("exclusive", {})
+        )
 
         return self.errors, self.warnings
 
@@ -425,6 +428,79 @@ class ConfigValidator:
                 self.warnings.append(
                     f"{prefix}.tags has fewer than 2 tags - exclusive group has no effect"
                 )
+
+    def _check_exclusive_self_contradictions(self, tags: dict, exclusive: dict) -> None:
+        """Warn about exclusive groups that defeat a `[tags.*]` rule.
+
+        An exclusive group holding two tags that a single `[tags.*]` rule
+        produces from one source tag can never be satisfied by that rule.  The
+        symptom depends on which step minted the pair: on `add`,
+        apply_retag_rules() sees the candidate set violate the group and drops
+        the whole `add`, so the intended tag never appears -- silently, apart
+        from a log line per event; a pair minted by `replace` is not checked
+        there and instead raises ExclusiveGroupError on the recursive call.
+        Hence the deliberately symptom-free wording: either way the rule cannot
+        take effect, and the combination is a config mistake rather than an
+        event-data one, so say so once at validation time.
+        """
+        if not isinstance(tags, dict) or not isinstance(exclusive, dict):
+            return
+
+        for rule_name, rule in tags.items():
+            if not isinstance(rule, dict):
+                continue
+            source_tags = rule.get("source_tags", [])
+            if not isinstance(source_tags, list):
+                continue
+
+            # {group_name: {conflicting tags: source tags that trigger them}}
+            found: dict[str, dict[frozenset, set[str]]] = {}
+            for source_tag in source_tags:
+                if not isinstance(source_tag, str):
+                    continue
+                produced = self._simulate_tag_rule(rule, source_tag)
+                for group_name, group in exclusive.items():
+                    if not isinstance(group, dict) or not isinstance(group.get("tags"), list):
+                        continue
+                    conflicting = set(group["tags"]) & produced
+                    if len(conflicting) > 1:
+                        found.setdefault(group_name, {}).setdefault(
+                            frozenset(conflicting), set()
+                        ).add(source_tag)
+
+            for group_name, conflicts in found.items():
+                for conflicting, triggers in conflicts.items():
+                    self.warnings.append(
+                        f"exclusive.{group_name} and tags.{rule_name} contradict each other: "
+                        f"tags.{rule_name} produces {sorted(conflicting)} together from source "
+                        f"tag(s) {sorted(triggers)}, which the exclusive group forbids - the "
+                        f"rule cannot take effect"
+                    )
+
+    @staticmethod
+    def _simulate_tag_rule(rule: dict, source_tag: str) -> set[str]:
+        """The tags one `[tags.*]` rule yields from a single source tag.
+
+        Mirrors apply_retag_rules()'s remove -> replace -> add order, on a tag
+        set holding just ``source_tag``.
+        """
+
+        def substituted(field: str) -> list[str]:
+            value = rule.get(field) or []
+            if not isinstance(value, list):
+                return []
+            return [
+                item.replace("$source_tag", source_tag) for item in value if isinstance(item, str)
+            ]
+
+        produced = {source_tag}
+        produced -= set(substituted("remove"))
+        if "replace" in rule:
+            produced.discard(source_tag)
+            produced |= set(substituted("replace"))
+        # 'prepend' is the legacy spelling of 'add'
+        produced |= set(substituted("add" if "add" in rule else "prepend"))
+        return produced
 
 
 def validate_config(config: dict[str, Any]) -> tuple[list[str], list[str]]:
