@@ -409,6 +409,39 @@ class TestRegexpExpansion:
         result = expand_list_references(config)
         assert result["rules"]["tmux"]["cust"]["path"] == "/home/user/((?:acme|emca))/"
 
+    def test_ref_in_tmux_pane_title(self) -> None:
+        config = {
+            "lists": {"projects": ["caldav", "kamailio"]},
+            "rules": {
+                "tmux": {
+                    "claude": {
+                        "pane_title": "(?i)(@projects)",
+                        "tags": ["$1"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        assert result["rules"]["tmux"]["claude"]["pane_title"] == "(?i)((?:caldav|kamailio))"
+
+    def test_ref_in_tmux_session_and_window(self) -> None:
+        config = {
+            "lists": {"customers": ["acme", "emca"]},
+            "rules": {
+                "tmux": {
+                    "cust": {
+                        "session": "(@customers)",
+                        "window": "(@customers)-log",
+                        "tags": ["customer"],
+                    }
+                }
+            },
+        }
+        result = expand_list_references(config)
+        rule = result["rules"]["tmux"]["cust"]
+        assert rule["session"] == "((?:acme|emca))"
+        assert rule["window"] == "((?:acme|emca))-log"
+
     def test_multiple_refs_in_one_regexp(self) -> None:
         config = {
             "lists": {

@@ -19,6 +19,10 @@ _REGEXP_FIELDS_IN_RULES = frozenset(
         "path_regexp",
         "project_regexp",
         "file_regexp",
+        # tmux matchers (_match_tmux_rule); all five are regexps
+        "session",
+        "window",
+        "pane_title",
         "command",
         "path",
     ]

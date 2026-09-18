@@ -105,7 +105,12 @@ class TestTmuxTagExtraction:
     """Tests for tmux tag extraction."""
 
     def test_tmux_event_no_matching_rule(self) -> None:
-        """Test that tmux events return empty list when no rules match (consistent with browser/editor)."""
+        """A tmux event no rule matched falls through to the app rules.
+
+        Unlike browser/editor (which return an empty list and end the search),
+        tmux returns False so get_tags() goes on to `[rules.app.*]` -- see
+        tests/test_tmux_app_fallthrough.py.
+        """
         config = {"rules": {}, "exclusive": {}, "tags": {}}
 
         tmux_event = create_tmux_event(
@@ -118,8 +123,8 @@ class TestTmuxTagExtraction:
 
         extractor, window_event = setup_tmux_test(config, tmux_event)
         tags = extractor.get_tmux_tags(window_event)
-        # Should return empty list when no rules match (will be marked UNMATCHED)
-        assert tags == []
+        # False, not [], so the remaining extractors still get a chance
+        assert tags is False
 
     def test_tmux_event_with_command_rule(self) -> None:
         """Test tmux tag extraction with command matching rule."""
@@ -277,8 +282,8 @@ class TestTmuxTagExtraction:
         tags = extractor.get_tmux_tags(window_event)
         assert tags is False
 
-    def test_tmux_event_no_command_returns_empty(self) -> None:
-        """Test tmux event without command returns empty list."""
+    def test_tmux_event_no_command_falls_through(self) -> None:
+        """Test tmux event without command falls through to the app rules."""
         config = {"rules": {}, "exclusive": {}, "tags": {}}
 
         tmux_event = create_tmux_event(
@@ -292,7 +297,7 @@ class TestTmuxTagExtraction:
 
         extractor, window_event = setup_tmux_test(config, tmux_event)
         tags = extractor.get_tmux_tags(window_event)
-        assert tags == []
+        assert tags is False
 
     def test_tmux_multiple_capture_groups(self) -> None:
         """Test tmux tag extraction with multiple regex capture groups."""

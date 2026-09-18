@@ -64,8 +64,16 @@ class ConfigValidator:
             ],
         },
         "tmux": {
-            "required": [],  # command or path
-            "optional": ["command", "path", "tags", "timew_tags"],
+            "required": [],  # at least one of the matchers below
+            "optional": [
+                "session",
+                "window",
+                "pane_title",
+                "command",
+                "path",
+                "tags",
+                "timew_tags",
+            ],
         },
     }
 
@@ -367,15 +375,19 @@ class ConfigValidator:
         if "projects" in rule and not isinstance(rule["projects"], list):
             self.errors.append(f"{prefix}.projects must be a list")
 
+    # Fields _match_tmux_rule() matches on, all of them regexps.
+    TMUX_MATCHERS = ("session", "window", "pane_title", "command", "path")
+
     def _validate_tmux_rule(self, prefix: str, rule: dict) -> None:
         """Validate a tmux rule."""
-        if "command" not in rule and "path" not in rule:
-            self.warnings.append(f"{prefix} has no 'command' or 'path' matcher")
+        if not any(field in rule for field in self.TMUX_MATCHERS):
+            self.warnings.append(
+                f"{prefix} has no matcher (one of: {', '.join(self.TMUX_MATCHERS)})"
+            )
 
-        if "command" in rule:
-            self._validate_regexp(prefix, "command", rule["command"])
-        if "path" in rule:
-            self._validate_regexp(prefix, "path", rule["path"])
+        for field in self.TMUX_MATCHERS:
+            if field in rule:
+                self._validate_regexp(prefix, field, rule[field])
 
     def _validate_regexp(self, prefix: str, field: str, pattern: str) -> None:
         """Validate a regular expression."""
