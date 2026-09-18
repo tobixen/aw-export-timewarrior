@@ -27,17 +27,6 @@ Notes from doing this by hand (2026-08-03, 62 conflicting intervals):
   is a usable primitive.
 - Manually adjusted intervals should lose the `~aw` marker.
 
-## Warn about self-contradictory exclusive groups
-
-An exclusive group that contains tags another rule deliberately adds together is
-silently self-defeating: it turns a legitimate combination into a violation *and*
-suppresses the intended `add`.  This bit `exclusive.secondary` containing both
-`safemate` and `safemate-stage` while `[tags.safemate]` maps the latter to the
-former — it suppressed the umbrella `safemate` tag and minted bogus
-`4safemate-stage` tags.  `validate` could detect this statically: for each
-exclusive group, check whether any `[tags.*]` rule can produce two of its members
-from a single source tag.
-
 ## Cache the overlap probe in `start_tracking`
 
 Every `start_tracking()` call shells out to `timew export` over a 7-day window
