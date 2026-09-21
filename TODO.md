@@ -59,6 +59,8 @@ a candidate starting after the window event ends.
 
 ## `aw-report.py`: change the worklist from UNKNOWN to "no 4CATEGORY"
 
+AI-generated:
+
 Lives in https://github.com/tobixen/timewarrior-tools, not in this repo.
 
 The manual worklist is `aw-report.py … UNKNOWN`, which only shows intervals the
@@ -70,3 +72,7 @@ unclassified.
 / `parse_timew_input`), so an `--uncategorised` mode would be a filter next to
 the existing `--min-duration` skip: drop intervals that already carry a tag
 matching `^4[A-Z]`.  Roughly ten lines.
+
+Human notes:
+
+UNKNOWN/unclassified activity and activity that does not automatically fall in under a top-category are two slightly different things, but it would probably be an idea handling both of them in the aw-report.  Today I handle it by running the myday.sh-script.
