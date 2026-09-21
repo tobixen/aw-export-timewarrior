@@ -13,7 +13,12 @@ from .config import config
 from .event_pipeline import EventPipeline, EventPipelineConfig
 from .output import user_output
 from .state import AfkState, StateManager
-from .tag_extractor import EMACS_LOOKAHEAD_BUFFER_SECONDS, ExclusiveGroupError, TagExtractor
+from .tag_extractor import (
+    EMACS_CANDIDATE_REACH,
+    EMACS_LOOKAHEAD_BUFFER_SECONDS,
+    ExclusiveGroupError,
+    TagExtractor,
+)
 from .time_tracker import ProtectedIntervalError
 from .timew_tracker import TimewTracker
 from .utils import parse_datetime, strip_timew_hints, ts2strtime
@@ -31,14 +36,19 @@ MIN_KNOWN_ACTIVITY_RATIO = 0.2
 # This helps catch unexpected behavior where significant events are being skipped.
 DEBUG_SKIP_THRESHOLD_SECONDS = 30
 
-# Buffer to extend the ActivityWatch event cache range beyond the requested
-# tracking window, so get_corresponding_event's fallback_to_recent lookback
-# doesn't miss events cached just outside that window.
-CACHE_LOOKBACK_BUFFER = FALLBACK_TO_RECENT_LOOKBACK + timedelta(minutes=1)  # + margin
-# Must cover the widest per-app lookahead override get_corresponding_event is
-# called with (currently emacs's), or a cached bucket would silently exclude
-# the very events that override widening was meant to find.
-CACHE_LOOKAHEAD_MARGIN = timedelta(seconds=EMACS_LOOKAHEAD_BUFFER_SECONDS + 1)
+# Buffers extending the ActivityWatch event cache range beyond the requested
+# tracking window.  A cached bucket serves every get_corresponding_event
+# lookup from one fetch, so anything the cache range excludes is invisible to
+# those lookups -- the range has to cover the widest search they perform in
+# either direction: fallback_to_recent's lookback, the per-app lookahead
+# override (currently emacs's) and the bracketing search's reach.
+_WIDEST_SUBEVENT_SEARCH = max(
+    FALLBACK_TO_RECENT_LOOKBACK,
+    timedelta(seconds=EMACS_LOOKAHEAD_BUFFER_SECONDS),
+    EMACS_CANDIDATE_REACH,
+)
+CACHE_LOOKBACK_BUFFER = _WIDEST_SUBEVENT_SEARCH + timedelta(minutes=1)  # + margin
+CACHE_LOOKAHEAD_MARGIN = _WIDEST_SUBEVENT_SEARCH + timedelta(minutes=1)  # + margin
 
 
 def parse_message_tags(message: str) -> set[str]:

@@ -14,10 +14,12 @@ import pytest
 
 from aw_export_timewarrior.aw_client import EventFetcher
 from aw_export_timewarrior.tag_extractor import (
+    EMACS_CANDIDATE_REACH,
     EMACS_LOOKAHEAD_BUFFER_SECONDS,
     ExclusiveGroupError,
     ExclusiveGroupViolation,
     TagExtractor,
+    emacs_buffer_name,
 )
 
 
@@ -581,3 +583,102 @@ class TestApplyRetagRulesExclusiveError:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestEmacsBufferName:
+    """Tests for emacs_buffer_name, the window-title -> buffer-name parser."""
+
+    @pytest.mark.parametrize(
+        ("title", "expected"),
+        [
+            ("foo.py - GNU Emacs at archlinux", "foo.py"),
+            # uniquify appends the disambiguating directory in angle brackets
+            (
+                "tmp-push-review-gate.md<tingbok> - GNU Emacs at archlinux",
+                "tmp-push-review-gate.md",
+            ),
+            ("foo.py<2> - GNU Emacs at archlinux", "foo.py"),
+            # internal buffers have no file behind them
+            ("*scratch* - GNU Emacs at archlinux", None),
+            (" *Minibuf-1* - GNU Emacs at archlinux", None),
+            ("", None),
+            # an unrecognised frame title format is taken at face value
+            ("notes.org", "notes.org"),
+        ],
+    )
+    def test_buffer_name(self, title: str, expected: str | None) -> None:
+        assert emacs_buffer_name(title) == expected
+
+
+class TestEditorCandidateFilter:
+    """get_editor_tags guards speculative emacs matches with the buffer name.
+
+    A widened lookahead (and the bracketing search it enables) matches
+    sub-events that do not overlap the window event at all, so the sub-event's
+    file has to be cross-checked against the buffer named in the title --
+    otherwise a same-named file from another project gets tagged with
+    confidence.
+    """
+
+    @staticmethod
+    def _extractor(bucket_short: dict) -> tuple[TagExtractor, Mock]:
+        mock_fetcher = Mock(spec=EventFetcher)
+        mock_fetcher.bucket_short = bucket_short
+        mock_fetcher.get_corresponding_event.return_value = None
+        return (
+            TagExtractor({"rules": {"editor": {}}, "exclusive": {}, "tags": {}}, mock_fetcher),
+            mock_fetcher,
+        )
+
+    def test_emacs_passes_a_buffer_name_filter_and_a_reach(self) -> None:
+        extractor, mock_fetcher = self._extractor(
+            {"aw-watcher-emacs": {"id": "aw-watcher-emacs_host"}}
+        )
+
+        extractor.get_editor_tags(
+            {
+                "timestamp": datetime.now(UTC),
+                "duration": timedelta(minutes=5),
+                "data": {"app": "emacs", "title": "foo.py<proj> - GNU Emacs at archlinux"},
+            }
+        )
+
+        _, kwargs = mock_fetcher.get_corresponding_event.call_args
+        candidate_filter = kwargs["candidate_filter"]
+        assert candidate_filter is not None
+        assert kwargs["candidate_reach"] == EMACS_CANDIDATE_REACH
+        assert candidate_filter({"data": {"file": "/home/tobias/proj/foo.py"}}) is True
+        assert candidate_filter({"data": {"file": "/home/tobias/other/bar.py"}}) is False
+        assert candidate_filter({"data": {}}) is False
+
+    def test_emacs_internal_buffer_gets_no_filter(self) -> None:
+        """Nothing to cross-check against, so don't guess at all."""
+        extractor, mock_fetcher = self._extractor(
+            {"aw-watcher-emacs": {"id": "aw-watcher-emacs_host"}}
+        )
+
+        extractor.get_editor_tags(
+            {
+                "timestamp": datetime.now(UTC),
+                "duration": timedelta(minutes=5),
+                "data": {"app": "emacs", "title": "*scratch* - GNU Emacs at archlinux"},
+            }
+        )
+
+        _, kwargs = mock_fetcher.get_corresponding_event.call_args
+        assert kwargs["candidate_filter"] is None
+
+    def test_vim_gets_no_candidate_filter_or_reach(self) -> None:
+        extractor, mock_fetcher = self._extractor({"aw-watcher-vim": {"id": "aw-watcher-vim_host"}})
+
+        extractor.get_editor_tags(
+            {
+                "timestamp": datetime.now(UTC),
+                "duration": timedelta(minutes=5),
+                "data": {"app": "vim", "title": "vim"},
+            }
+        )
+
+        _, kwargs = mock_fetcher.get_corresponding_event.call_args
+        assert kwargs["candidate_filter"] is None
+        assert kwargs["candidate_reach"] is None
