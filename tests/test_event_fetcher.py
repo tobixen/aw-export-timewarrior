@@ -1176,3 +1176,353 @@ class TestResetCache:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestCandidateFilter:
+    """Tests for the candidate_filter guard on speculative sub-event matches.
+
+    Widening the lookahead (or reaching for a bracketing event) makes
+    get_corresponding_event guess: the candidate no longer overlaps the window
+    event, so nothing but a content check ties the two together.  A
+    candidate_filter lets the caller supply that check -- for emacs, that the
+    sub-event's file basename is the buffer named in the window title.
+    """
+
+    @staticmethod
+    def _fetcher(events: list[dict]) -> EventFetcher:
+        return EventFetcher(
+            test_data={
+                "buckets": {
+                    "aw-watcher-emacs_test": create_test_bucket(
+                        "aw-watcher-emacs_test", "aw-watcher-emacs"
+                    ),
+                },
+                "events": {"aw-watcher-emacs_test": events},
+            }
+        )
+
+    @staticmethod
+    def _basename_filter(name: str) -> Any:
+        def matches(sub_event: dict) -> bool:
+            return (sub_event["data"].get("file") or "").rsplit("/", 1)[-1] == name
+
+        return matches
+
+    def test_widened_candidate_with_wrong_file_is_rejected(self) -> None:
+        """A late sub-event naming a different file must not be adopted."""
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        fetcher = self._fetcher(
+            [create_test_event(window_time + timedelta(seconds=65), 120, {"file": "/tmp/bar.py"})]
+        )
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=5),
+            "data": {"title": "foo.py - GNU Emacs at host"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event,
+            "aw-watcher-emacs_test",
+            ignorable=False,
+            retry=0,
+            lookahead_buffer_seconds=90,
+            candidate_filter=self._basename_filter("foo.py"),
+        )
+
+        assert result is None
+
+    def test_widened_candidates_prefer_the_matching_file_over_the_longest(self) -> None:
+        """The filter runs before the longest-wins tie-break."""
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        fetcher = self._fetcher(
+            [
+                create_test_event(
+                    window_time + timedelta(seconds=30), 600, {"file": "/tmp/bar.py"}
+                ),
+                create_test_event(window_time + timedelta(seconds=40), 20, {"file": "/tmp/foo.py"}),
+            ]
+        )
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=5),
+            "data": {"title": "foo.py - GNU Emacs at host"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event,
+            "aw-watcher-emacs_test",
+            ignorable=False,
+            retry=0,
+            lookahead_buffer_seconds=90,
+            candidate_filter=self._basename_filter("foo.py"),
+        )
+
+        assert result is not None
+        assert result["data"]["file"] == "/tmp/foo.py"
+
+    def test_overlapping_candidate_is_not_filtered(self) -> None:
+        """An exactly overlapping sub-event is trusted without the content check.
+
+        Buffer names are not always file basenames (dired, indirect buffers,
+        renamed buffers), so the guard only applies where we are guessing.
+        """
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        fetcher = self._fetcher([create_test_event(window_time, 120, {"file": "/tmp/bar.py"})])
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=60),
+            "data": {"title": "some dired buffer - GNU Emacs at host"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event,
+            "aw-watcher-emacs_test",
+            ignorable=False,
+            retry=0,
+            lookahead_buffer_seconds=90,
+            candidate_filter=self._basename_filter("some dired buffer"),
+        )
+
+        assert result is not None
+        assert result["data"]["file"] == "/tmp/bar.py"
+
+    def test_bracketing_search_finds_the_last_event_before_a_watcher_gap(self) -> None:
+        """activity-watch-mode goes silent while a buffer is only being read.
+
+        Observed 2026-09-18: 19 minutes of emacs window events on
+        tmp-push-review-gate.md with the emacs bucket silent for 39 minutes
+        around them.  The last event before the gap names the right file.
+        """
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        fetcher = self._fetcher(
+            [
+                create_test_event(window_time - timedelta(minutes=5), 130, {"file": "/tmp/foo.py"}),
+                create_test_event(window_time + timedelta(minutes=40), 60, {"file": "/tmp/bar.py"}),
+            ]
+        )
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=465),
+            "data": {"title": "foo.py - GNU Emacs at host"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event,
+            "aw-watcher-emacs_test",
+            ignorable=False,
+            retry=0,
+            lookahead_buffer_seconds=90,
+            candidate_filter=self._basename_filter("foo.py"),
+            candidate_reach=timedelta(minutes=30),
+        )
+
+        assert result is not None
+        assert result["data"]["file"] == "/tmp/foo.py"
+
+    def test_bracketing_search_rejects_a_nearby_event_for_another_file(self) -> None:
+        """Without the guard this is where a wrong project tag would come from."""
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        fetcher = self._fetcher(
+            [create_test_event(window_time - timedelta(minutes=5), 130, {"file": "/tmp/bar.py"})]
+        )
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=465),
+            "data": {"title": "foo.py - GNU Emacs at host"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event,
+            "aw-watcher-emacs_test",
+            ignorable=False,
+            retry=0,
+            lookahead_buffer_seconds=90,
+            candidate_filter=self._basename_filter("foo.py"),
+            candidate_reach=timedelta(minutes=30),
+        )
+
+        assert result is None
+
+    def test_bracketing_search_looks_past_the_end_of_a_long_window_event(self) -> None:
+        """The reach is anchored on the window event's end, not on its start."""
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        fetcher = self._fetcher(
+            [
+                create_test_event(
+                    window_time + timedelta(seconds=465 + 300), 60, {"file": "/tmp/foo.py"}
+                )
+            ]
+        )
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=465),
+            "data": {"title": "foo.py - GNU Emacs at host"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event,
+            "aw-watcher-emacs_test",
+            ignorable=False,
+            retry=0,
+            lookahead_buffer_seconds=90,
+            candidate_filter=self._basename_filter("foo.py"),
+            candidate_reach=timedelta(minutes=30),
+        )
+
+        assert result is not None
+        assert result["data"]["file"] == "/tmp/foo.py"
+
+    def test_candidate_filter_survives_sleep_retry(self) -> None:
+        """The new arguments must be forwarded by the recursive retry call.
+
+        The match below is reachable *only* through candidate_reach plus
+        candidate_filter, so a recursion that drops either one returns None --
+        which is what this used to assert either way, and so passed with the
+        forwarding reverted.
+        """
+        window_time = datetime.now(UTC) - timedelta(seconds=5)
+        fetcher = self._fetcher(
+            [create_test_event(window_time - timedelta(minutes=5), 130, {"file": "/tmp/foo.py"})]
+        )
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=5),
+            "data": {"title": "foo.py - GNU Emacs at host"},
+        }
+
+        with patch("time.sleep"):
+            result = fetcher.get_corresponding_event(
+                window_event,
+                "aw-watcher-emacs_test",
+                ignorable=False,
+                retry=2,
+                lookahead_buffer_seconds=90,
+                candidate_filter=self._basename_filter("foo.py"),
+                candidate_reach=timedelta(minutes=30),
+            )
+
+        assert result is not None
+        assert result["data"]["file"] == "/tmp/foo.py"
+
+    def test_candidate_filter_rejects_the_wrong_file_across_the_sleep_retry(self) -> None:
+        """…and the filter is still a filter after the recursion."""
+        window_time = datetime.now(UTC) - timedelta(seconds=5)
+        fetcher = self._fetcher(
+            [create_test_event(window_time - timedelta(minutes=5), 130, {"file": "/tmp/bar.py"})]
+        )
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=5),
+            "data": {"title": "foo.py - GNU Emacs at host"},
+        }
+
+        with patch("time.sleep"):
+            result = fetcher.get_corresponding_event(
+                window_event,
+                "aw-watcher-emacs_test",
+                ignorable=False,
+                retry=2,
+                lookahead_buffer_seconds=90,
+                candidate_filter=self._basename_filter("foo.py"),
+                candidate_reach=timedelta(minutes=30),
+            )
+
+        assert result is None
+
+    def test_fallback_to_recent_honours_the_candidate_filter(self) -> None:
+        """The nearest-event fallback guesses too, so the guard applies there.
+
+        No caller combines the two today (tmux is the only fallback_to_recent
+        user and passes no filter), but an unfiltered match there would
+        outrank the guarded bracketing search below it.
+        """
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        fetcher = self._fetcher(
+            [
+                create_test_event(window_time - timedelta(minutes=2), 60, {"file": "/tmp/bar.py"}),
+                create_test_event(window_time - timedelta(minutes=8), 60, {"file": "/tmp/foo.py"}),
+            ]
+        )
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=30),
+            "data": {"title": "foo.py - GNU Emacs at host"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event,
+            "aw-watcher-emacs_test",
+            ignorable=False,
+            retry=0,
+            fallback_to_recent=True,
+            candidate_filter=self._basename_filter("foo.py"),
+        )
+
+        assert result is not None
+        assert result["data"]["file"] == "/tmp/foo.py"
+
+    def test_bracketing_search_stops_at_an_intervening_buffer_switch(self) -> None:
+        """A sub-event for another file in between is proof the buffer changed.
+
+        Without this the search would happily skip past it and adopt an even
+        older event that happens to name the right file -- e.g. the same
+        `tmp-push-review-gate.md` from a different repository.
+        """
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        fetcher = self._fetcher(
+            [
+                create_test_event(window_time - timedelta(minutes=20), 60, {"file": "/a/foo.py"}),
+                create_test_event(window_time - timedelta(minutes=10), 60, {"file": "/a/bar.py"}),
+            ]
+        )
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=465),
+            "data": {"title": "foo.py - GNU Emacs at host"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event,
+            "aw-watcher-emacs_test",
+            ignorable=False,
+            retry=0,
+            lookahead_buffer_seconds=90,
+            candidate_filter=self._basename_filter("foo.py"),
+            candidate_reach=timedelta(minutes=30),
+        )
+
+        assert result is None
+
+    def test_bracketing_search_needs_a_reach(self) -> None:
+        """Without candidate_reach the filter only guards the widened window."""
+        window_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        fetcher = self._fetcher(
+            [create_test_event(window_time - timedelta(minutes=5), 130, {"file": "/tmp/foo.py"})]
+        )
+
+        window_event = {
+            "timestamp": window_time,
+            "duration": timedelta(seconds=465),
+            "data": {"title": "foo.py - GNU Emacs at host"},
+        }
+
+        result = fetcher.get_corresponding_event(
+            window_event,
+            "aw-watcher-emacs_test",
+            ignorable=False,
+            retry=0,
+            lookahead_buffer_seconds=90,
+            candidate_filter=self._basename_filter("foo.py"),
+        )
+
+        assert result is None

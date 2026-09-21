@@ -39,24 +39,6 @@ Comments by human:
 * The split (like it's currently done for the afk prompter) is a fair solution when the attention clearly has jumped between different tasks for a longer time period
 * We should disregard "noise".  Working on a main activity, small breaks with other acitvities should still simply be ignored.
 
-## Widened emacs lookahead can match the wrong (later) sub-event
-
-Observation by AI (code review, 2026-09-18):
-
-`get_corresponding_event()`'s emacs override widens the lookahead to 90s but
-leaves the "pick longest of multiple candidates" selection unchanged
-(`aw_client.py`). Widening only the end bound stretches the candidate span to
-~105s while lookback stays 15s, so a short emacs visit followed by a
-different, longer emacs session starting up to 90s later could now match the
-wrong file — a confidently wrong tag instead of the previous "no match".
-Nothing cross-checks the sub-event's file/project against the window title.
-
-Needs two distinct emacs sessions inside one widened window to bite; no
-evidence yet that it happens in practice. If it turns out to matter, prefer
-the candidate nearest in time when the match came from the widened window,
-or require the file basename to appear in the window title before accepting
-a candidate starting after the window event ends.
-
 ## `aw-report.py`: change the worklist from UNKNOWN to "no 4CATEGORY"
 
 AI-generated:

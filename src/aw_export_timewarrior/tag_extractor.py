@@ -5,9 +5,11 @@ making it easy to test and maintain. Part of the Exporter refactoring plan.
 """
 
 import logging
+import os.path
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,54 @@ def _skip_browser_newtab(sub_event: dict) -> bool:
 # the wider lookahead.
 EMACS_LOOKAHEAD_BUFFER_SECONDS = 90.0
 
+# activity-watch-mode pulses on activity, so it reports nothing at all while a
+# buffer is merely being read -- gaps of tens of minutes are normal.  How far
+# get_corresponding_event may reach for a bracketing emacs event whose file
+# matches the buffer named in the window title.  Measured over three weeks of
+# this author's data: of 94 emacs window events with no sub-event inside the
+# widened window, 51 have a bracketing match within 10 minutes and 63 within
+# 30; going further buys 6 more events and starts spanning whole work sessions.
+EMACS_CANDIDATE_REACH = timedelta(minutes=30)
+
+# The emacs frame title is "<buffer name> - GNU Emacs at <host>", where the
+# buffer name may carry a uniquify suffix in angle brackets ("foo.md<tingbok>",
+# "foo.md<2>") when several buffers share a basename.
+_EMACS_TITLE_SUFFIX_RE = re.compile(r"\s+-\s+GNU Emacs\b.*$")
+_UNIQUIFY_SUFFIX_RE = re.compile(r"<[^<>]*>$")
+
+
+def emacs_buffer_name(title: str) -> str | None:
+    """Extract the buffer name from an emacs window title.
+
+    Returns None for titles with no file behind them (internal buffers like
+    `*scratch*`, or an empty title).
+    """
+    name = _UNIQUIFY_SUFFIX_RE.sub("", _EMACS_TITLE_SUFFIX_RE.sub("", title).strip()).strip()
+    if not name or name.startswith("*"):
+        return None
+    return name
+
+
+def _emacs_candidate_filter(window_event: dict) -> Callable[[dict], bool] | None:
+    """Build the guard for speculative emacs sub-event matches.
+
+    Every search but the exact-overlap one adopts sub-events that do not
+    overlap the window event, so something has to tie the two together.
+    The window title names the buffer, and the sub-event
+    names the file: requiring the basenames to agree rejects the same-named
+    file from another project (`tmp-push-review-gate.md` exists in a dozen
+    repos here), which would otherwise produce a confidently wrong project tag.
+    """
+    buffer_name = emacs_buffer_name(window_event["data"].get("title", ""))
+    if buffer_name is None:
+        return None
+
+    def matches(sub_event: dict) -> bool:
+        return os.path.basename(sub_event["data"].get("file") or "") == buffer_name
+
+    return matches
+
+
 # Shared sub-event fetch parameters for subtypes with per-app buckets
 # (browser, editor). Consumed by both tag extraction (get_browser_tags /
 # get_editor_tags) and get_specialized_context, so the two paths can't drift
@@ -50,6 +100,8 @@ SUBEVENT_SPECS: dict[str, dict[str, Any]] = {
         "apps": ("emacs", "vi", "vim"),
         "bucket_pattern": "aw-watcher-{app}",
         "lookahead_buffer_seconds": {"emacs": EMACS_LOOKAHEAD_BUFFER_SECONDS},
+        "candidate_filters": {"emacs": _emacs_candidate_filter},
+        "candidate_reach": {"emacs": EMACS_CANDIDATE_REACH},
     },
 }
 
@@ -376,6 +428,8 @@ class TagExtractor:
         app_normalizer: Callable | None = None,
         skip_if: Callable | None = None,
         lookahead_buffer_seconds: dict[str, float] | None = None,
+        candidate_filters: dict[str, Callable] | None = None,
+        candidate_reach: dict[str, timedelta] | None = None,
     ) -> tuple[dict | None, str]:
         """Fetch sub-event for a window event (browser, editor, etc).
 
@@ -388,6 +442,11 @@ class TagExtractor:
             lookahead_buffer_seconds: Optional per-app override of the sub-event
                 lookahead buffer (see get_corresponding_event), keyed by the raw
                 (non-normalized) app name
+            candidate_filters: Optional per-app factory building a predicate that
+                validates a speculatively matched sub-event against the window
+                event, keyed by the raw app name
+            candidate_reach: Optional per-app reach for the bracketing sub-event
+                search (see get_corresponding_event), keyed by the raw app name
 
         Returns:
             Tuple of (sub_event or None, event_type string)
@@ -408,6 +467,11 @@ class TagExtractor:
         # Determine if we should ignore certain events (e.g., emacs buffers)
         ignorable = self._is_ignorable_event(app, window_event)
 
+        # A per-app predicate validating speculative matches (see
+        # get_corresponding_event); None means "don't guess".
+        filter_factory = (candidate_filters or {}).get(app)
+        candidate_filter = filter_factory(window_event) if filter_factory else None
+
         # Get the corresponding sub-event
         sub_event = self.event_fetcher.get_corresponding_event(
             window_event,
@@ -415,6 +479,8 @@ class TagExtractor:
             ignorable=ignorable,
             retry=self.default_retry,
             lookahead_buffer_seconds=(lookahead_buffer_seconds or {}).get(app),
+            candidate_filter=candidate_filter,
+            candidate_reach=(candidate_reach or {}).get(app),
         )
 
         if not sub_event:
@@ -438,6 +504,8 @@ class TagExtractor:
         sub_event: dict | None = None,
         fall_through_on_no_match: bool = False,
         lookahead_buffer_seconds: dict[str, float] | None = None,
+        candidate_filters: dict[str, Callable] | None = None,
+        candidate_reach: dict[str, timedelta] | None = None,
     ) -> set[str] | list | bool:
         """Generic method to extract tags from events that require sub-events.
 
@@ -455,6 +523,10 @@ class TagExtractor:
                 and defer the "Unhandled" warning to get_tags()
             lookahead_buffer_seconds: Optional per-app lookahead buffer override,
                 forwarded to _fetch_sub_event (not needed if sub_event provided)
+            candidate_filters: Optional per-app validator factories, forwarded to
+                _fetch_sub_event (not needed if sub_event provided)
+            candidate_reach: Optional per-app bracketing-search reach, forwarded
+                to _fetch_sub_event (not needed if sub_event provided)
 
         Returns:
             Set of tags, empty list if no match, or False if wrong app type
@@ -473,6 +545,8 @@ class TagExtractor:
                 app_normalizer,
                 skip_if,
                 lookahead_buffer_seconds,
+                candidate_filters,
+                candidate_reach,
             )
 
             if not sub_event:

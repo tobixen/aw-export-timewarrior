@@ -297,6 +297,8 @@ class EventFetcher:
         retry: int = 6,
         fallback_to_recent: bool = False,
         lookahead_buffer_seconds: float | None = None,
+        candidate_filter: Callable[[dict], bool] | None = None,
+        candidate_reach: timedelta | None = None,
     ) -> dict | None:
         """Find corresponding sub-event (browser URL, editor file, tmux).
 
@@ -315,6 +317,22 @@ class EventFetcher:
                 when None). Some watchers (e.g. emacs, which pulses on a timer
                 instead of on buffer switch) can start their event well after the
                 window event they belong to.
+            candidate_filter: Predicate deciding whether a sub-event may be
+                adopted. Applied to the speculative matches only -- the widened
+                window, the fallback and the bracketing search below -- never to
+                a sub-event that genuinely overlaps the window event. Those match
+                that are merely near in time, so without a content check (for
+                emacs: the sub-event's file basename against the buffer named in
+                the window title) they readily adopt a same-named file from
+                another project.
+            candidate_reach: With candidate_filter, how far before and after the
+                window event to look for a bracketing sub-event when the widened
+                window found nothing. Only the events immediately bracketing the
+                window event are eligible, so this can reach much further than
+                the widened window without guessing wildly: it answers "the
+                watcher last reported this file and then went silent", which is
+                what a watcher pulsing on activity does while a buffer is only
+                being read.
 
         Returns:
             Corresponding event or None
@@ -353,6 +371,8 @@ class EventFetcher:
                     retry=retry,
                     fallback_to_recent=fallback_to_recent,
                     lookahead_buffer_seconds=lookahead_buffer_seconds,
+                    candidate_filter=candidate_filter,
+                    candidate_reach=candidate_reach,
                 )
 
         # If still nothing found, try a wider window to account for timing differences
@@ -369,6 +389,8 @@ class EventFetcher:
                 + window_event["duration"]
                 + timedelta(seconds=end_buffer),
             )
+            if candidate_filter is not None:
+                ret = [event for event in ret if candidate_filter(event)]
 
         # Fallback: find nearest event around the window event
         # Useful for tmux where state persists between recorded events,
@@ -382,12 +404,40 @@ class EventFetcher:
                 start=window_event["timestamp"] - lookback,
                 end=window_event["timestamp"] + lookahead,
             )
+            if candidate_filter is not None:
+                nearby_events = [event for event in nearby_events if candidate_filter(event)]
             if nearby_events:
                 # Prefer the nearest event by timestamp proximity
                 nearby_events.sort(
                     key=lambda x: abs((x["timestamp"] - window_event["timestamp"]).total_seconds())
                 )
                 ret = [nearby_events[0]]
+
+        # Guarded fallback: the sub-event watcher may stay silent for minutes
+        # at a time (activity-watch-mode pulses on activity, so reading a
+        # buffer produces nothing). Reach further out, but only for the events
+        # immediately bracketing the window event and only if candidate_filter
+        # vouches for them -- an intervening event for another file means the
+        # editor did switch buffers, so a match beyond it is no evidence.
+        if not ret and candidate_filter is not None and candidate_reach is not None:
+            window_end = window_event["timestamp"] + window_event["duration"]
+            nearby_events = sorted(
+                self.get_events(
+                    bucket_id,
+                    start=window_event["timestamp"] - candidate_reach,
+                    end=window_end + candidate_reach,
+                ),
+                key=lambda x: x["timestamp"],
+            )
+            before = [x for x in nearby_events if x["timestamp"] <= window_event["timestamp"]]
+            after = [x for x in nearby_events if x["timestamp"] >= window_end]
+            bracketing = ([before[-1]] if before else []) + ([after[0]] if after else [])
+            bracketing = [x for x in bracketing if candidate_filter(x)]
+            if bracketing:
+                bracketing.sort(
+                    key=lambda x: abs((x["timestamp"] - window_event["timestamp"]).total_seconds())
+                )
+                ret = [bracketing[0]]
 
         # Log if nothing found (unless ignorable or very short event)
         if not ret:
