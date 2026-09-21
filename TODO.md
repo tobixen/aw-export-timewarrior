@@ -58,3 +58,45 @@ matching `^4[A-Z]`.  Roughly ten lines.
 Human notes:
 
 UNKNOWN/unclassified activity and activity that does not automatically fall in under a top-category are two slightly different things, but it would probably be an idea handling both of them in the aw-report.  Today I handle it by running the myday.sh-script.
+
+## Emacs buffer names that are not file basenames
+
+Observation by AI (code review, 2026-09-22):
+
+`_emacs_candidate_filter` accepts a speculative sub-event match only when
+`basename(sub_event.file)` equals the buffer name parsed out of the window
+title.  Where the two legitimately differ, the widened lookahead and the
+bracketing search are disabled for emacs altogether — a `rename-buffer`'d
+buffer, a non-default `frame-title-format`, a `uniquify-buffer-name-style`
+other than `post-forward-angle-brackets` (only that one is stripped), an
+indirect buffer.  Sub-events that genuinely overlap the window event are
+unaffected, so the loss is confined to the speculative band.
+
+None of these apply to the current setup, which is why it is a note and not a
+fix: the titles are the default format and the suffixes in the data are
+post-forward-angle-brackets.  It would start losing matches silently on a
+config change.  A fix means either recognising when a buffer name cannot be a
+basename, or cross-checking `project` instead when it isn't.
+
+The reviewer also claimed file-less sub-events (dired, magit, org-agenda) are
+dropped by the same guard.  They are not: `activity-watch-mode` only sends a
+heartbeat when `buffer-file-name` is non-nil, and no event in the bucket lacks
+a `file`.
+
+## Cache range is sized globally for the widest per-bucket search
+
+Observation by AI (code review, 2026-09-22):
+
+`CACHE_LOOKBACK_BUFFER` and `CACHE_LOOKAHEAD_MARGIN` (`main.py`) are one pair
+of numbers for every bucket, sized off the widest search any bucket needs —
+now `EMACS_CANDIDATE_REACH`, which took the lookback from 11 to 31 minutes.
+In rolling `sync` the cache is rebuilt at least every 10 s, so window, afk,
+web and tmux are all refetched over a range only the editor bucket needs.
+
+Measured across twelve busy anchor times: 9 KiB → 30 KiB per rebuild, worst
+case 53 KiB, over localhost.  Too small to justify the refactor today, but the
+next reach that gets widened pays the same global cost, so the fix is a
+per-bucket cache range in `EventFetcher.reset_cache`.
+
+Correctness is not at stake in the other direction: an undersized range loses
+matches, it never invents one.
