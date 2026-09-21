@@ -17,7 +17,7 @@ During the last few days I've done a full code review utilizing Claude Fable - i
 - `[lists]` config section for reusable named lists, referenced as `@name` in list fields (`tags`, `app_names`, `source_tags`, ...) and in regexp fields (`url_regexp`, `title_regexp`, `path_regexp`, ...), where a reference expands to a non-capturing alternation `(?:item1|item2|...)`. Supersedes `[app_groups]`, which remains as an alias.
 - `report --min-duration SECONDS`: filter out events shorter than the given duration (e.g. `--min-duration 2` hides sub-2-second window flickers)
 - `--stop` as an alias for `--to`/`--until`/`--end` when giving the end of a time range.
-- `validate` now warns when an exclusive group and a `[tags.*]` rule contradict each other, i.e. when the group forbids a combination the rule produces from a single source tag. Such a rule is silently suppressed whenever it fires, so the tag it was meant to add never appears.
+- `validate` now warns when an exclusive group and a `[tags.*]` rule contradict each other, i.e. when the group forbids a combination the rule produces from a single source tag. Such a rule can never take effect: an `add` is silently dropped, and a `replace` raises instead.
 - `pane_title` as a matcher in `[rules.tmux.*]`, alongside `session`, `window`, `command` and `path`. The tmux pane title is where e.g. Claude Code puts the session topic, which is often the only place the subject of the work appears; capture groups from it feed the `$1`, `$2`, ... substitutions like the other matchers.
 
 ### Fixed
