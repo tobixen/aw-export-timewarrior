@@ -645,7 +645,7 @@ def run_diff(args: argparse.Namespace) -> int:
     # The apply_fix flag controls whether fix commands are executed
     exporter.run_comparison()
 
-    return 0
+    return 1 if exporter.failed_fix_commands else 0
 
 
 def run_analyze(args: argparse.Namespace) -> int:

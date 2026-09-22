@@ -2,6 +2,7 @@ import logging
 import os
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import Enum, auto
@@ -171,6 +172,9 @@ class Exporter:
     show_diff: bool = False  # If True, show diffs in dry-run mode
     show_fix_commands: bool = False  # If True, show timew track commands to fix differences
     apply_fix: bool = False  # If True, execute timew track commands to fix differences
+    # How many fix commands failed under apply_fix.  `diff --apply` exits
+    # non-zero on it: a failure that is only printed is invisible to a caller.
+    failed_fix_commands: int = field(default=0, init=False)
     hide_diff_report: bool = False  # If True, hide the detailed comparison report
     hide_processing_output: bool = False  # If True, hide "would execute" messages
     show_unmatched: bool = False  # If True, show events that didn't match any rules
@@ -570,17 +574,25 @@ class Exporter:
         print("\n" + "=" * 80)
         print("Applying fixes to TimeWarrior database...")
         print("=" * 80 + "\n")
+        # Keep going past a failure: the remaining commands are independent,
+        # and a half-applied diff is fixed by running it again.
         for cmd in fix_commands:
-            self._apply_single_fix_command(cmd)
+            if not self._apply_single_fix_command(cmd):
+                self.failed_fix_commands += 1
         print("\n" + "=" * 80 + "\n")
+        if self.failed_fix_commands:
+            print(f"{self.failed_fix_commands} fix command(s) failed.", file=sys.stderr)
 
-    def _apply_single_fix_command(self, cmd: str) -> None:
-        """Execute a single fix-command line, or skip it if blank/commented out."""
+    def _apply_single_fix_command(self, cmd: str) -> bool:
+        """Execute a single fix-command line, or skip it if blank/commented out.
+
+        Returns False if the command failed; a skipped line is not a failure.
+        """
         if not cmd.strip():
-            return
+            return True
         if cmd.startswith("#"):
             print(f"Skipping (manual entry): {cmd}")
-            return
+            return True
 
         print(f"Executing: {cmd}")
         # Remove comment part if present (e.g., "  # 2025-12-10 - old tags: ...")
@@ -598,6 +610,7 @@ class Exporter:
             print("  ✓ Success")
             if result.stdout:
                 print(f"    Output: {result.stdout.strip()}")
+            return True
         except subprocess.CalledProcessError as e:
             print(f"  ✗ Failed (exit code {e.returncode})")
             if e.stderr:
@@ -605,6 +618,7 @@ class Exporter:
             if e.stdout:
                 print(f"    stdout: {e.stdout.strip()}")
             print(f"    Command: {command_part}")
+            return False
 
     def show_unmatched_events_report(self, limit: int = 10, verbose: bool = False) -> None:
         """Display a report of events that didn't match any rules.
