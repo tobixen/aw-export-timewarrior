@@ -52,6 +52,24 @@ _EMACS_TITLE_SUFFIX_RE = re.compile(r"\s+-\s+GNU Emacs\b.*$")
 _UNIQUIFY_SUFFIX_RE = re.compile(r"<[^<>]*>$")
 
 
+# Sub-event fields carrying the git branch: aw-watcher-tmux uses `git_branch`,
+# aw-watcher-emacs `branch` (and writes "unknown" outside a git repository).
+BRANCH_FIELDS = ("git_branch", "branch")
+BRANCH_SUBTYPES = ("tmux", "editor")
+
+
+def branch_tags(sub_event: dict) -> set[str]:
+    """`branch:<name>` for the sub-event's git branch, if it has a real one.
+
+    Left to the `[tags.*]` retag rules to map onto a project or issue.
+    """
+    for field in BRANCH_FIELDS:
+        branch = sub_event["data"].get(field)
+        if branch and branch != "unknown":
+            return {f"branch:{branch}"}
+    return set()
+
+
 def emacs_buffer_name(title: str) -> str | None:
     """Extract the buffer name from an emacs window title.
 
@@ -569,6 +587,8 @@ class TagExtractor:
                 tags = matcher_func(rule, sub_event, rule_key)
                 if tags:
                     self._last_matched_rule = f"{subtype}:{rule_name}"
+                    if subtype in BRANCH_SUBTYPES:
+                        tags |= branch_tags(sub_event)
                     return tags
 
         # No rules matched

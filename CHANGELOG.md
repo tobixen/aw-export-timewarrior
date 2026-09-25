@@ -19,6 +19,7 @@ During the last few days I've done a full code review utilizing Claude Fable - i
 - `--stop` as an alias for `--to`/`--until`/`--end` when giving the end of a time range.
 - `validate` now warns when an exclusive group and a `[tags.*]` rule contradict each other, i.e. when the group forbids a combination the rule produces from a single source tag. Such a rule can never take effect: an `add` is silently dropped, and a `replace` raises instead.
 - `pane_title` as a matcher in `[rules.tmux.*]`, alongside `session`, `window`, `command` and `path`. The tmux pane title is where e.g. Claude Code puts the session topic, which is often the only place the subject of the work appears; capture groups from it feed the `$1`, `$2`, ... substitutions like the other matchers.
+- The git branch recorded by aw-watcher-tmux (`git_branch`) and aw-watcher-emacs (`branch`) is added as a `branch:<name>` tag whenever a tmux or editor rule matches, so `[tags.*]` rules can map branches onto projects or issues. The watchers' `unknown` placeholder is ignored. Intervals exported before this change lack the tag, so `diff` shows them as differing and `diff --apply` over those days adds it.
 
 ### Fixed
 - Fix captured `timew start`/`stop` timestamps recorded in UTC (`Z` suffix) being shifted by your local UTC offset, placing those intervals at the wrong time of day.
