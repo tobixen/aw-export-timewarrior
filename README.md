@@ -95,6 +95,9 @@ Configuration is stored in `~/.config/activitywatch/aw-export-timewarrior/aw-exp
   (capture groups are numbered `$1`, `$2`, ... across `pane_title`, `command` and `path`, in that
   order; `session` and `window` match but do not capture — use `$session`/`$window` for those)
 - **Tag rules** (`tags.*`): Transform tags with `add`, `remove`, `replace` operations
+- When a tmux or editor rule matches and the watcher reported a git branch (aw-watcher-tmux
+  `git_branch`, aw-watcher-emacs `branch`), `branch:<name>` is added to the tags; use tag rules
+  with `source_tags = ["branch:..."]` to map a branch onto a project or issue
 - **Exclusive rules** (`exclusive.*`): Prevent conflicting tags from combining
 
 ### Example Configuration
@@ -120,6 +123,10 @@ tags = ["kamailio", "4WORK"]
 [tags.coding-is-work]
 source_tags = ["coding"]
 add = ["4WORK"]
+
+[tags.caldav-issue713]
+source_tags = ["branch:issue713-unprompted-basic-auth"]
+add = ["caldav", "issue713"]
 
 [exclusive.afk]
 tags = ["afk", "not-afk"]
