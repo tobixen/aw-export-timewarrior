@@ -198,6 +198,9 @@ class Exporter:
     _exported_ask_away_timestamps: set = field(
         default_factory=set, init=False, repr=False
     )  # Timestamps of ask-away events already exported (prevents duplicate exports)
+    _retagged_interval: tuple[str, frozenset[str]] | None = field(
+        default=None, init=False, repr=False
+    )  # (start, tags) of the open interval right after retag rules last ran
 
     # Short event accumulation tracking - prevents ignoring rapid activity in same app/rule
     # Example: flipping through photos in feh creates many <3s events, but total time is significant
@@ -969,7 +972,7 @@ class Exporter:
 
                 # Update state after each answer (simulate sequential tracking)
                 if not self.dry_run:
-                    self.set_timew_info(self.retag_current_interval())
+                    self.set_timew_info(self.retag_current_interval(fresh=True))
                 else:
                     self.set_timew_info(
                         {
@@ -993,7 +996,7 @@ class Exporter:
 
         # Update timew_info after command
         if not self.dry_run:
-            self.set_timew_info(self.retag_current_interval())
+            self.set_timew_info(self.retag_current_interval(fresh=True))
         else:
             # In dry-run mode, simulate the timew_info state as if the command was executed
             self.set_timew_info(
@@ -1047,8 +1050,17 @@ class Exporter:
         # Log with appropriate level
         logger.log(level, msg, extra=extra)
 
-    def retag_current_interval(self) -> dict | None:
+    def retag_current_interval(self, fresh: bool = False) -> dict | None:
         """Get current tracking and apply retag rules if needed.
+
+        Rules are re-applied to an open interval only when it gained tags,
+        so a tag the user removes afterwards stays removed -- e.g. the waybar
+        click that runs `timew untag ~css_class:blinking` to dismiss the
+        blinking.
+
+        Args:
+            fresh: The exporter just started this interval, so apply the
+                rules even if an earlier interval had the same start.
 
         Returns:
             Updated tracking info, or None if no active tracking
@@ -1059,20 +1071,32 @@ class Exporter:
         if timew_info is None:
             return None
 
-        # Apply retag rules
+        # Tags removed since the rules last ran stay removed; tags added
+        # (e.g. `timew tag @1 ...`) get the rules applied to them.
         source_tags = set(timew_info["tags"])
+        if self._retagged_interval is not None and not fresh:
+            start, seen_tags = self._retagged_interval
+            if timew_info["start"] == start and source_tags <= seen_tags:
+                return timew_info
+
+        # Apply retag rules
         new_tags = self.apply_retag_rules(source_tags)
 
-        # Retag if tags changed
+        # Retag if tags changed; mark the interval only once that succeeded
         if new_tags != source_tags:
             self.tracker.retag(new_tags)
-            # Get updated info
-            if not self.dry_run:
-                timew_info = self.tracker.get_current_tracking()
-                if timew_info:  # Check if still active
-                    assert set(timew_info["tags"]) == new_tags, (
-                        f"Expected {new_tags}, got {timew_info['tags']}"
-                    )
+        self._retagged_interval = (timew_info["start"], frozenset(new_tags))
+        if new_tags == source_tags or self.dry_run:
+            return timew_info
+
+        # Get updated info
+        timew_info = self.tracker.get_current_tracking()
+        # The user may legitimately touch timew during the grace
+        # period (that is what it is for), so a mismatch is no error.
+        if timew_info and set(timew_info["tags"]) != new_tags:
+            logger.warning(
+                f"Interval changed during retag: expected {new_tags}, got {timew_info['tags']}"
+            )
 
         return timew_info
 
