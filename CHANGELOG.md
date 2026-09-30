@@ -14,6 +14,7 @@ During the last few days I've done a full code review utilizing Claude Fable - i
 (Changelog entries for v1.0.0 and v1.0.1 have been skipped - a broken test was found only when running tests on GitHub, and it was found that the auto-publish hook pushed things to pypi despite the test failure)
 
 ### Added
+- Systemd service: a desktop notification (`misc/aw-export-timewarrior-notify.service`, via `OnFailure=`) when the exporter fails, and restart backoff from 30s to 10min.  A config typo previously left the service silently crash-looping.
 - `[lists]` config section for reusable named lists, referenced as `@name` in list fields (`tags`, `app_names`, `source_tags`, ...) and in regexp fields (`url_regexp`, `title_regexp`, `path_regexp`, ...), where a reference expands to a non-capturing alternation `(?:item1|item2|...)`. Supersedes `[app_groups]`, which remains as an alias.
 - `report --min-duration SECONDS`: filter out events shorter than the given duration (e.g. `--min-duration 2` hides sub-2-second window flickers)
 - `--stop` as an alias for `--to`/`--until`/`--end` when giving the end of a time range.

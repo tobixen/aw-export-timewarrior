@@ -10,10 +10,11 @@
 # - aw-watcher-window and aw-watcher-afk should be running
 # - TimeWarrior (timew) must be installed
 # - This package must be installed (make install)
-# - Configuration file should exist at ~/.config/aw-export-timewarrior/config.toml
+# - Configuration file should exist at
+#   ~/.config/activitywatch/aw-export-timewarrior/aw-export-timewarrior.toml
 #
 # Installation:
-# 1. Copy service file: cp misc/aw-export-timewarrior.service ~/.config/systemd/user/
+# 1. Copy service files: cp misc/aw-export-timewarrior*.service ~/.config/systemd/user/
 # 2. Reload systemd: systemctl --user daemon-reload
 # 3. Enable the service: systemctl --user enable aw-export-timewarrior.service
 # 4. Start the service: systemctl --user start aw-export-timewarrior.service
@@ -22,6 +23,12 @@
 #
 # The service will automatically retry connection to aw-server if it's not ready yet.
 #
+# On failure (e.g. a config typo) aw-export-timewarrior-notify.service pops a
+# desktop notification.  OnFailure= fires on every auto-restart, so the restart
+# interval backs off from 30s to 10min to keep the notifications bearable.
+# The backoff counter is only reset by a manual (re)start, so after a few
+# crashes even a one-off failure waits the full 10min before restarting.
+#
 
 [Unit]
 Description=ActivityWatch to TimeWarrior Exporter
@@ -29,12 +36,15 @@ Documentation=https://github.com/tobixen/aw-export-timewarrior
 After=aw-server.service
 # Wait for window and afk watchers to be running
 Wants=aw-watcher-window.service aw-watcher-afk.service
+OnFailure=aw-export-timewarrior-notify.service
 
 [Service]
 Type=simple
 ExecStart=aw-export-timewarrior sync
 Restart=on-failure
 RestartSec=30
+RestartSteps=4
+RestartMaxDelaySec=10min
 Environment=PYTHONUNBUFFERED=1
 
 # Give the service time to shut down gracefully

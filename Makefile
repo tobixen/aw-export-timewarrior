@@ -23,7 +23,7 @@ install:
 	@echo "Make sure ~/.local/bin is in your PATH."
 	@echo ""
 	@echo "Next steps:"
-	@echo "  1. Configure rules in ~/.config/aw-export-timewarrior/config.toml"
+	@echo "  1. Configure rules in ~/.config/activitywatch/aw-export-timewarrior/aw-export-timewarrior.toml"
 	@echo "     See README.md for configuration examples"
 	@echo ""
 	@echo "  2. Run as systemd service (recommended for continuous sync):"
@@ -66,7 +66,7 @@ clean:
 install-service:
 	@echo "Installing systemd user service..."
 	mkdir -p ~/.config/systemd/user
-	cp misc/aw-export-timewarrior.service ~/.config/systemd/user/
+	cp misc/aw-export-timewarrior.service misc/aw-export-timewarrior-notify.service ~/.config/systemd/user/
 	systemctl --user daemon-reload
 	@echo "Service installed. Use 'make enable-service' to enable and start it."
 
@@ -74,7 +74,7 @@ uninstall-service:
 	@echo "Uninstalling systemd user service..."
 	systemctl --user stop aw-export-timewarrior 2>/dev/null || true
 	systemctl --user disable aw-export-timewarrior 2>/dev/null || true
-	rm -f ~/.config/systemd/user/aw-export-timewarrior.service
+	rm -f ~/.config/systemd/user/aw-export-timewarrior.service ~/.config/systemd/user/aw-export-timewarrior-notify.service
 	systemctl --user daemon-reload
 	@echo "Service uninstalled."
 

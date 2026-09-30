@@ -1,0 +1,20 @@
+# Desktop notification when aw-export-timewarrior.service fails.
+# Triggered via OnFailure= in aw-export-timewarrior.service; installed by
+# `make install-service`.  Shows the last line the exporter logged, which
+# for a crash is the exception message.
+
+[Unit]
+Description=Notify that aw-export-timewarrior failed
+
+[Service]
+Type=oneshot
+# MONITOR_INVOCATION_ID limits the journal lookup to the run that failed; the
+# sleep gives journald time to index its last line.  The stack-tag hints make
+# each popup replace the previous one on daemons that support them.
+ExecStart=sh -c 'sleep 1; \
+  msg=$$(journalctl --user _SYSTEMD_INVOCATION_ID=$$MONITOR_INVOCATION_ID -n 1 -o cat --no-pager); \
+  notify-send -u critical -a aw-export-timewarrior \
+    -h string:x-dunst-stack-tag:aw-export-timewarrior \
+    -h string:x-canonical-private-synchronous:aw-export-timewarrior \
+    "aw-export-timewarrior failed" \
+    "$${msg:-see journalctl --user -u aw-export-timewarrior}"'
