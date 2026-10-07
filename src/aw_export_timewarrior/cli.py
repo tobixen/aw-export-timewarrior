@@ -623,19 +623,23 @@ def run_sync(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_diff(args: argparse.Namespace) -> int:
-    """Execute the diff subcommand."""
-
-    # Create exporter in dry-run mode for comparison
+def create_diff_exporter(args: argparse.Namespace) -> Exporter:
+    """Create the exporter for the diff subcommand."""
     # IMPORTANT: Always use dry_run=True so tick() doesn't modify timew
     # Only the fix commands (when --apply is set) should modify timew
-    exporter = create_exporter_from_args(
+    return create_exporter_from_args(
         args,
         "diff",
         dry_run=True,  # Always dry-run for tick() - don't modify timew during comparison
         show_diff=True,
         show_fix_commands=args.show_commands or args.apply,
+        whole_edge_events=True,
     )
+
+
+def run_diff(args: argparse.Namespace) -> int:
+    """Execute the diff subcommand."""
+    exporter = create_diff_exporter(args)
 
     # Process all events first (to build suggested intervals)
     # This runs in dry-run mode and doesn't modify timew

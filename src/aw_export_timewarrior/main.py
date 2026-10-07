@@ -11,7 +11,7 @@ from time import sleep
 
 from .aw_client import FALLBACK_TO_RECENT_LOOKBACK, EventFetcher
 from .config import config
-from .event_pipeline import EventPipeline, EventPipelineConfig
+from .event_pipeline import EventPipeline, EventPipelineConfig, overlapping_event_bounds
 from .output import user_output
 from .state import AfkState, StateManager
 from .tag_extractor import (
@@ -186,6 +186,9 @@ class Exporter:
     test_data: dict | None = None  # Optional test data instead of querying AW
     start_time: datetime | None = None  # Optional start time for processing window
     end_time: datetime | None = None  # Optional end time for processing window
+    # Widen start_time/end_time to the whole afk-status (afk and not-afk) and
+    # afk-prompt events crossing them
+    whole_edge_events: bool = False
     captured_commands: list | None = (
         None  # Captures timew commands when set to a list (for testing)
     )
@@ -248,23 +251,34 @@ class Exporter:
         # the live portion. This mirrors EventPipeline's batch-memo gate
         # (end_time <= now); "start and end both set" (batch_mode) is *not* the
         # right discriminator, as it also matches the future case.
-        aw_cache_range = None
+        self.event_fetcher = EventFetcher(
+            test_data=self.test_data,
+            client_name=client_name,
+            log_callback=self.log,
+        )
+        if self.whole_edge_events and self.batch_mode:
+            start, end = overlapping_event_bounds(
+                self.event_fetcher, self.start_time, self.end_time
+            )
+            if (start, end) != (self.start_time, self.end_time):
+                print(
+                    f"Widened time range to {start.astimezone()} to {end.astimezone()} "
+                    "to take in whole events crossing its edges",
+                    file=sys.stderr,
+                )
+                self.start_time, self.end_time = start, end
         if (
             self.batch_mode
             and not self.test_data
             and self.end_time is not None
             and self.end_time <= datetime.now(UTC)
         ):
-            aw_cache_range = (
-                self.start_time - CACHE_LOOKBACK_BUFFER,
-                self.end_time + CACHE_LOOKAHEAD_MARGIN,
+            self.event_fetcher.reset_cache(
+                (
+                    self.start_time - CACHE_LOOKBACK_BUFFER,
+                    self.end_time + CACHE_LOOKAHEAD_MARGIN,
+                )
             )
-        self.event_fetcher = EventFetcher(
-            test_data=self.test_data,
-            client_name=client_name,
-            log_callback=self.log,
-            cache_range=aw_cache_range,
-        )
 
         # Initialize TagExtractor for all tag matching logic
         # Pass lambda to support tests that change config after initialization
@@ -1140,6 +1154,11 @@ class Exporter:
             self.breakpoint()
         if self.state.afk_state == AfkState.UNKNOWN:
             ## Program has just been started, and we don't know if we're afk or not
+            if tags == {"afk"} and self.batch_mode:
+                ## A historical range opening on an AFK period (diff widens its
+                ## range to one) has nothing else that would record it.
+                self._go_afk(tags, event)
+                return True
             if "afk" in tags:
                 self.state.set_afk_state(AfkState.AFK)
             if "not-afk" in tags:
@@ -1204,9 +1223,7 @@ class Exporter:
                 return True
             elif tags == {"afk"}:
                 ## Meaning we've just gone afk.
-                self.ensure_tag_exported(tags, event)
-                self._afk_change_stats("afk", tags, event)
-                self.log(f"You're going to be afk for at least {event['duration']}s", event=event)
+                self._go_afk(tags, event)
                 return True
             elif "afk" in tags:
                 ## We've gone afk ... in some weird way?
@@ -1218,6 +1235,11 @@ class Exporter:
                 return False
 
         return False
+
+    def _go_afk(self, tags: set, event) -> None:
+        self.ensure_tag_exported(tags, event)
+        self._afk_change_stats("afk", tags, event)
+        self.log(f"You're going to be afk for at least {event['duration']}s", event=event)
 
     def find_tags_from_event(self, event) -> TagResult:
         """Extract tags from an event.

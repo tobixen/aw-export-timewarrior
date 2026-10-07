@@ -17,6 +17,41 @@ logger = logging.getLogger(__name__)
 # Default threshold for considering window events stale (5 minutes)
 DEFAULT_STALE_EVENTS_THRESHOLD = timedelta(minutes=5)
 
+# How far beyond the range edges overlapping_event_bounds() looks per round.
+EDGE_EVENT_REACH = timedelta(days=1)
+
+
+def overlapping_event_bounds(
+    event_fetcher, start: datetime, end: datetime
+) -> tuple[datetime, datetime]:
+    """Widen [start, end] to the whole afk-status and ask-away events crossing its edges.
+
+    Both statuses count: a work session crossing midnight is taken in whole
+    as well as a night away.
+
+    A day's import must not cut a night's AFK period at midnight: the part
+    before midnight carries the same afk-prompt answer, and without it the
+    pipeline sees no AFK period at all.  aw-server clips events to the queried
+    range, so an event reaching the edge of one round's query is fetched again
+    from further out in the next.  The end never moves past now.
+    """
+    afk_bucket = event_fetcher.bucket_by_client["aw-watcher-afk"][0]
+    ask_away_bucket = event_fetcher.get_ask_away_bucket()
+    end_cap = max(end, datetime.now(UTC))
+    while True:
+        query = (start - EDGE_EVENT_REACH, min(end + EDGE_EVENT_REACH, end_cap))
+        events = EventPipeline._merge_consecutive_afk_events(
+            event_fetcher.get_events(afk_bucket, *query, use_cache=False)
+        )
+        if ask_away_bucket:
+            events += event_fetcher.get_events(ask_away_bucket, *query, use_cache=False)
+        ranges = [get_event_range(e) for e in events]
+        new_start = min([start] + [s for s, e in ranges if s < start < e])
+        new_end = min(end_cap, max([end] + [e for s, e in ranges if s < end < e]))
+        if (new_start, new_end) == (start, end):
+            return start, end
+        start, end = new_start, new_end
+
 
 class _PreparedBatch(NamedTuple):
     """Memoized batch-mode preparation, keyed by the range it was prepared for."""
@@ -373,7 +408,8 @@ class EventPipeline:
         # Combine original and synthetic events
         return afk_events + synthetic_afk_events
 
-    def _merge_consecutive_afk_events(self, afk_events: list) -> list:
+    @staticmethod
+    def _merge_consecutive_afk_events(afk_events: list) -> list:
         """Merge consecutive AFK events with the same status into single events.
 
         The AFK watcher sends heartbeat events that can result in many short

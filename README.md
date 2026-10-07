@@ -71,7 +71,9 @@ Support for other watchers may be considered, reach out by email or add an issue
 # Continuous sync mode
 aw-export-timewarrior sync
 
-# Compare ActivityWatch data with TimeWarrior (dry-run)
+# Compare ActivityWatch data with TimeWarrior (dry-run).  The range is widened
+# to whole AFK periods and active sessions crossing its edges, such as a night
+# crossing midnight.
 aw-export-timewarrior diff --day yesterday
 
 # Apply suggested changes

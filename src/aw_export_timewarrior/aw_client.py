@@ -139,7 +139,11 @@ class EventFetcher:
             self.bucket_short[bucket_short]["id"] = bucket_id
 
     def get_events(
-        self, bucket_id: str, start: datetime | None = None, end: datetime | None = None
+        self,
+        bucket_id: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        use_cache: bool = True,
     ) -> list[dict]:
         """Fetch events from a bucket.
 
@@ -147,12 +151,14 @@ class EventFetcher:
             bucket_id: Bucket identifier
             start: Start time (inclusive)
             end: End time (exclusive)
+            use_cache: False to query ActivityWatch even when a cache range is
+                set, for a range the cache may not cover
 
         Returns:
             List of events (dicts with timestamp, duration, data)
         """
         if self.aw:
-            if self._cache_range is not None:
+            if use_cache and self._cache_range is not None:
                 cache_start, cache_end = self._cache_range
                 if bucket_id not in self._events_cache:
                     # Fetch the full cache range once and store
