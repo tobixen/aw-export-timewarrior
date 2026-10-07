@@ -100,3 +100,16 @@ per-bucket cache range in `EventFetcher.reset_cache`.
 
 Correctness is not at stake in the other direction: an undersized range loses
 matches, it never invents one.
+
+## The daemon never retags an AFK interval with a late afk-prompt answer
+
+Known issue, observed by AI on 2026-10-07:
+
+The daemon opens a plain `afk ~aw` interval as soon as AFK starts.  The
+afk-prompt answer only lands when the user returns, and the daemon then
+just closes the open interval with `timew start <next>`, so the answer's
+tags are never applied.  Night of 2026-10-06/07: AFK started 01:24:57 and
+`bedtime` was posted at 07:15:32.  At 07:18:41 the daemon recorded
+01:24:57–07:15:34 as `afk ~aw`.  The fix belongs where the AFK interval
+gets closed: look the answer up again before closing it, and retag if
+one has arrived.
