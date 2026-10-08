@@ -1,0 +1,1100 @@
+{
+ "metadata": {
+  "start_time": "2026-10-07T01:15:00+02:00",
+  "end_time": "2026-10-07T01:32:00+02:00"
+ },
+ "buckets": {
+  "aw-watcher-afk_archlinux": {
+   "id": "aw-watcher-afk_archlinux",
+   "name": "aw-watcher-afk_archlinux",
+   "type": "afkstatus",
+   "client": "aw-watcher-afk",
+   "hostname": "archlinux",
+   "created": "2025-05-09T23:47:16.176215Z"
+  },
+  "aw-watcher-window_archlinux": {
+   "id": "aw-watcher-window_archlinux",
+   "name": "aw-watcher-window_archlinux",
+   "type": "currentwindow",
+   "client": "aw-watcher-window",
+   "hostname": "archlinux",
+   "created": "2025-05-09T23:47:16.203153Z"
+  }
+ },
+ "events": {
+  "aw-watcher-afk_archlinux": [
+   {
+    "timestamp": "2026-10-06T23:00:00+00:00",
+    "duration": 1497.247967,
+    "data": {
+     "status": "not-afk"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:26:57.799000+00:00",
+    "duration": 482.200308,
+    "data": {
+     "status": "afk"
+    }
+   }
+  ],
+  "aw-watcher-window_archlinux": [
+   {
+    "timestamp": "2026-10-06T23:14:53.560000+00:00",
+    "duration": 7.730679,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 25"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:01.295000+00:00",
+    "duration": 2.329727,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:03.629000+00:00",
+    "duration": 2.402703,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 25"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:06.033000+00:00",
+    "duration": 2.715218,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 18"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:08.753000+00:00",
+    "duration": 5.728398,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:14.482000+00:00",
+    "duration": 1.205073,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 24"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:15.689000+00:00",
+    "duration": 0.316101,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 26"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:16.006000+00:00",
+    "duration": 4.053712,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 25"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:20.061000+00:00",
+    "duration": 3.457827,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 18"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:23.523000+00:00",
+    "duration": 5.232497,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:28.760000+00:00",
+    "duration": 1.2938,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 24"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:30.199000+00:00",
+    "duration": 0.164982,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 23"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:30.365000+00:00",
+    "duration": 5.838474,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 18"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:36.209000+00:00",
+    "duration": 0.45167,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:36.662000+00:00",
+    "duration": 0.266799,
+    "data": {
+     "app": "foot",
+     "title": "window 10"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:15:36.933000+00:00",
+    "duration": 172.154485,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:18:29.092000+00:00",
+    "duration": 98.14435,
+    "data": {
+     "app": "foot",
+     "title": "window 22"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:07.238000+00:00",
+    "duration": 0.48802,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:07.731000+00:00",
+    "duration": 1.881692,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:09.613000+00:00",
+    "duration": 0.780032,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:10.395000+00:00",
+    "duration": 0.758423,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:11.154000+00:00",
+    "duration": 0.005013,
+    "data": {
+     "app": "foot",
+     "title": "window 8"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:11.161000+00:00",
+    "duration": 0.55038,
+    "data": {
+     "app": "foot",
+     "title": "window 21"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:11.712000+00:00",
+    "duration": 8.283301,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:19.997000+00:00",
+    "duration": 0.867601,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:20.866000+00:00",
+    "duration": 5.046872,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:25.914000+00:00",
+    "duration": 0.401515,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:26.317000+00:00",
+    "duration": 3.077642,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:29.396000+00:00",
+    "duration": 0.20837,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:29.606000+00:00",
+    "duration": 0.003633,
+    "data": {
+     "app": "foot",
+     "title": "window 8"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:29.611000+00:00",
+    "duration": 0.560643,
+    "data": {
+     "app": "foot",
+     "title": "window 21"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:30.173000+00:00",
+    "duration": 4.129714,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:34.304000+00:00",
+    "duration": 1.444351,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:35.749000+00:00",
+    "duration": 0.54489,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:36.296000+00:00",
+    "duration": 0.845336,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:37.142000+00:00",
+    "duration": 2.82293,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:39.967000+00:00",
+    "duration": 0.707999,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:40.676000+00:00",
+    "duration": 6.824327,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:47.502000+00:00",
+    "duration": 0.428277,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:47.931000+00:00",
+    "duration": 1.569135,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:49.502000+00:00",
+    "duration": 3.408927,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:52.912000+00:00",
+    "duration": 0.971704,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:53.885000+00:00",
+    "duration": 1.260908,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:55.180000+00:00",
+    "duration": 0.594686,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:55.776000+00:00",
+    "duration": 0.598916,
+    "data": {
+     "app": "foot",
+     "title": "window 8"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:20:56.376000+00:00",
+    "duration": 3.915253,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:00.293000+00:00",
+    "duration": 0.683529,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:00.977000+00:00",
+    "duration": 1.456197,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:02.435000+00:00",
+    "duration": 0.568349,
+    "data": {
+     "app": "foot",
+     "title": "window 8"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:03.004000+00:00",
+    "duration": 3.013367,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:06.019000+00:00",
+    "duration": 0.006518,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:06.027000+00:00",
+    "duration": 0.668758,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:06.697000+00:00",
+    "duration": 0.673993,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:07.372000+00:00",
+    "duration": 1.757934,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:09.133000+00:00",
+    "duration": 1.663344,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:10.798000+00:00",
+    "duration": 1.305656,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:12.105000+00:00",
+    "duration": 0.868512,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:12.975000+00:00",
+    "duration": 0.006108,
+    "data": {
+     "app": "foot",
+     "title": "window 8"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:12.982000+00:00",
+    "duration": 0.514082,
+    "data": {
+     "app": "foot",
+     "title": "window 21"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:13.497000+00:00",
+    "duration": 14.126203,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:27.625000+00:00",
+    "duration": 0.610919,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:28.237000+00:00",
+    "duration": 0.635563,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:28.873000+00:00",
+    "duration": 0.687128,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:29.565000+00:00",
+    "duration": 4.321987,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:33.889000+00:00",
+    "duration": 0.899451,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:34.790000+00:00",
+    "duration": 0.565096,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:35.356000+00:00",
+    "duration": 0.365554,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:35.723000+00:00",
+    "duration": 15.373736,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:51.100000+00:00",
+    "duration": 2.086025,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 18"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:53.188000+00:00",
+    "duration": 0.8443,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:54.034000+00:00",
+    "duration": 0.572165,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:54.609000+00:00",
+    "duration": 0.3347,
+    "data": {
+     "app": "firefox",
+     "title": "window 20"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:54.945000+00:00",
+    "duration": 0.565937,
+    "data": {
+     "app": "foot",
+     "title": "window 19"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:55.513000+00:00",
+    "duration": 1.474295,
+    "data": {
+     "app": "firefox",
+     "title": "window 20"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:56.989000+00:00",
+    "duration": 0.311804,
+    "data": {
+     "app": "foot",
+     "title": "window 10"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:57.303000+00:00",
+    "duration": 0.75469,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:58.060000+00:00",
+    "duration": 0.439911,
+    "data": {
+     "app": "foot",
+     "title": "window 10"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:58.502000+00:00",
+    "duration": 0.26996,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 18"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:58.774000+00:00",
+    "duration": 0.31218,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:59.089000+00:00",
+    "duration": 0.290614,
+    "data": {
+     "app": "firefox",
+     "title": "window 20"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:21:59.382000+00:00",
+    "duration": 2.223675,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:22:01.608000+00:00",
+    "duration": 1.863549,
+    "data": {
+     "app": "foot",
+     "title": "window 19"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:22:03.473000+00:00",
+    "duration": 0.765561,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 18"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:22:04.241000+00:00",
+    "duration": 0.292914,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:22:04.535000+00:00",
+    "duration": 0.51444,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 18"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:22:05.051000+00:00",
+    "duration": 1.555709,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 17"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:22:06.608000+00:00",
+    "duration": 6.726682,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 16"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:22:13.338000+00:00",
+    "duration": 0.349811,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 15"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:22:13.689000+00:00",
+    "duration": 21.713478,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 14"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:22:35.405000+00:00",
+    "duration": 0.316835,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 13"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:22:35.723000+00:00",
+    "duration": 62.287859,
+    "data": {
+     "app": "org.chromium.Chromium",
+     "title": "window 12"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:38.012000+00:00",
+    "duration": 3.65813,
+    "data": {
+     "app": "foot",
+     "title": "window 10"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:41.681000+00:00",
+    "duration": 4.654527,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:46.337000+00:00",
+    "duration": 0.623931,
+    "data": {
+     "app": "foot",
+     "title": "window 10"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:46.964000+00:00",
+    "duration": 0.693428,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:47.662000+00:00",
+    "duration": 7.920666,
+    "data": {
+     "app": "foot",
+     "title": "window 10"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:55.590000+00:00",
+    "duration": 1.211333,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:56.803000+00:00",
+    "duration": 1.044412,
+    "data": {
+     "app": "foot",
+     "title": "window 10"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:57.849000+00:00",
+    "duration": 0.699613,
+    "data": {
+     "app": "foot",
+     "title": "window 11"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:58.553000+00:00",
+    "duration": 0.016564,
+    "data": {
+     "app": "foot",
+     "title": "window 10"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:58.574000+00:00",
+    "duration": 1.221949,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:23:59.800000+00:00",
+    "duration": 0.746258,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:00.549000+00:00",
+    "duration": 0.536028,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:01.289000+00:00",
+    "duration": 4.52686,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:05.818000+00:00",
+    "duration": 0.751297,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:06.573000+00:00",
+    "duration": 0.652248,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:07.242000+00:00",
+    "duration": 1.047333,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:08.291000+00:00",
+    "duration": 1.113247,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:09.406000+00:00",
+    "duration": 0.865061,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:10.273000+00:00",
+    "duration": 0.62977,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:10.904000+00:00",
+    "duration": 0.811183,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:11.811000+00:00",
+    "duration": 0.523908,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:12.336000+00:00",
+    "duration": 0.710332,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:13.051000+00:00",
+    "duration": 0.83825,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:13.891000+00:00",
+    "duration": 0.698353,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:14.593000+00:00",
+    "duration": 0.396182,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:14.997000+00:00",
+    "duration": 0.294294,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:15.293000+00:00",
+    "duration": 0.408691,
+    "data": {
+     "app": "foot",
+     "title": "window 9"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:15.703000+00:00",
+    "duration": 0.006402,
+    "data": {
+     "app": "foot",
+     "title": "window 8"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:15.711000+00:00",
+    "duration": 1.603531,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:17.317000+00:00",
+    "duration": 0.633702,
+    "data": {
+     "app": "foot",
+     "title": "window 7"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:17.952000+00:00",
+    "duration": 0.648524,
+    "data": {
+     "app": "foot",
+     "title": "window 6"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:18.604000+00:00",
+    "duration": 9.600427,
+    "data": {
+     "app": "foot",
+     "title": "window 5"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:28.212000+00:00",
+    "duration": 3.732845,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:31.947000+00:00",
+    "duration": 0.468957,
+    "data": {
+     "app": "emacs",
+     "title": "window 4"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:32.417000+00:00",
+    "duration": 1.107411,
+    "data": {
+     "app": "emacs",
+     "title": "window 2"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:33.526000+00:00",
+    "duration": 9.18934,
+    "data": {
+     "app": "emacs",
+     "title": "window 3"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:42.717000+00:00",
+    "duration": 2.112325,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:44.832000+00:00",
+    "duration": 1.158264,
+    "data": {
+     "app": "emacs",
+     "title": "window 2"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:45.992000+00:00",
+    "duration": 2.33657,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:48.330000+00:00",
+    "duration": 1.872091,
+    "data": {
+     "app": "emacs",
+     "title": "window 2"
+    }
+   },
+   {
+    "timestamp": "2026-10-06T23:24:50.204000+00:00",
+    "duration": 127.042406,
+    "data": {
+     "app": "emacs",
+     "title": "window 1"
+    }
+   }
+  ]
+ }
+}

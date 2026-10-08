@@ -23,6 +23,7 @@ During the last few days I've done a full code review utilizing Claude Fable - i
 - The git branch recorded by aw-watcher-tmux (`git_branch`) and aw-watcher-emacs (`branch`) is added as a `branch:<name>` tag whenever a tmux or editor rule matches, so `[tags.*]` rules can map branches onto projects or issues. The watchers' `unknown` placeholder is ignored. Intervals exported before this change lack the tag, so `diff` shows them as differing and `diff --apply` over those days adds it.
 
 ### Fixed
+- Fix the sync daemon counting a window's time twice once it went from ongoing to finished, and counting the two-minute idle countdown before an AFK period as activity when no export came in between.  This skewed which tags got exported, and logged `ASSERTION FAILED: tracked_gap ... < known_events_time` a couple of times a day.
 - Fix `diff` over a day leaving a night's AFK period as a bare `afk` interval, without its afk-prompt answer, when the period started before midnight.  The range is now widened to whole AFK periods, active sessions and afk-prompt answers crossing its edges, so `diff --apply` can also retag intervals just outside the requested day.  `sync --from/--to` starting in the middle of an AFK period now records it as well, from the start of the range.
 - Fix captured `timew start`/`stop` timestamps recorded in UTC (`Z` suffix) being shifted by your local UTC offset, placing those intervals at the wrong time of day.
 - Fix the ~2-minute idle-timeout countdown being credited to the previously tracked tag instead of being left as afk/away time.

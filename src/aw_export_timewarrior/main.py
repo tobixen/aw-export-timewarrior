@@ -1410,6 +1410,7 @@ class Exporter:
                 # Accumulate tags from the incremental duration
                 for tag in tags:
                     self.state.stats.tags_accumulated_time[tag] += new_duration
+                self.state.current_event_counted_duration += new_duration
 
                 self.log(
                     f"Processed incremental {new_duration.total_seconds()}s of current event with tags: {tags}"
@@ -1426,8 +1427,8 @@ class Exporter:
                 self.log(f"Previous ongoing event completed, starting new event at {event_start}")
 
             # Start tracking the new ongoing event
+            self.state.forget_current_event()
             self.state.current_event_timestamp = event_start
-            self.state.current_event_processed_duration = timedelta(0)
 
             # Process the entire current event (first time seeing it)
             tag_result = self.find_tags_from_event(event)
@@ -1442,6 +1443,7 @@ class Exporter:
 
                 for tag in tags:
                     self.state.stats.tags_accumulated_time[tag] += current_duration
+                self.state.current_event_counted_duration = current_duration
 
                 self.log(
                     f"Started tracking new current event ({current_duration.total_seconds()}s) with tags: {tags}"
@@ -1633,17 +1635,53 @@ class Exporter:
         # Reset counters after handling non-IGNORED events
         return 0, timedelta(0)
 
-    def _update_tag_accumulator(self, tag_result: TagResult, event: dict) -> None:
+    def _update_tag_accumulator(
+        self, tag_result: TagResult, event: dict, already_counted: timedelta = timedelta(0)
+    ) -> None:
         """Update the tag accumulator with tags from the event.
 
         Args:
             tag_result: The tag extraction result
             event: The event being processed
+            already_counted: How much of the event was accumulated while it was
+                the ongoing event (see _take_over_current_event)
         """
         if tag_result:
             tags = self.apply_retag_rules(tag_result.tags)
             for tag in tags:
-                self.state.stats.tags_accumulated_time[tag] += event["duration"]
+                self.state.stats.tags_accumulated_time[tag] = max(
+                    timedelta(0),
+                    self.state.stats.tags_accumulated_time[tag]
+                    + event["duration"]
+                    - already_counted,
+                )
+
+    def _count_completed_event(self, event: dict) -> timedelta:
+        """Add a completed event's new duration to known_events_time.
+
+        Returns how much of it was already counted while it was ongoing.
+        """
+        already_counted = self._take_over_current_event(event)
+        self.state.stats.known_events_time = max(
+            timedelta(0),
+            self.state.stats.known_events_time + event["duration"] - already_counted,
+        )
+        return already_counted
+
+    def _take_over_current_event(self, event: dict) -> timedelta:
+        """How much of a completed event was already counted while it was ongoing.
+
+        When the completed event is the one last seen as the ongoing event,
+        its tracking is cleared and the duration counted for it is returned:
+        only the rest is new.  That can exceed the event's duration — once the
+        AFK period after it arrives, the idle-timeout countdown is cut from
+        the event — and the difference must then be taken back.
+        """
+        if self.state.current_event_timestamp != event["timestamp"]:
+            return timedelta(0)
+        counted = self.state.current_event_counted_duration
+        self.state.forget_current_event()
+        return counted
 
     def find_next_activity(self):
         ## TODO: move all statistics from internal counters and up to the object
@@ -1737,22 +1775,9 @@ class Exporter:
 
             # Only count duration for non-AFK events to avoid double-counting
             # (AFK events overlap with window/browser/editor events)
+            already_counted = timedelta(0)
             if tag_result and "status" not in event["data"]:
-                duration_to_add = event["duration"]
-                # Avoid double-counting: if this event was partially processed as the
-                # current/ongoing event, only add the remaining (unprocessed) duration.
-                # This happens when an event transitions from current to completed.
-                if self.state.current_event_timestamp == event["timestamp"]:
-                    duration_to_add = (
-                        event["duration"] - self.state.current_event_processed_duration
-                    )
-                    if duration_to_add < timedelta(0):
-                        duration_to_add = timedelta(0)  # Safety check
-                    # Clear the current event tracking since we've now fully processed it
-                    self.state.current_event_timestamp = None
-                    self.state.current_event_processed_duration = timedelta(0)
-                if duration_to_add > timedelta(0):
-                    self.state.stats.known_events_time += duration_to_add
+                already_counted = self._count_completed_event(event)
 
             # Handle the tag result and update counters
             num_skipped_events, total_time_skipped_events = self._handle_tag_result(
@@ -1774,6 +1799,8 @@ class Exporter:
                 ## Theoretically, we may do lots of different things causing hundred of different independent tags to collect less than the minimum needed to record something.  In practice that doesn't happen.
                 # print(f"We're tossing data: {self.tags_accumulated_time}")
                 self.ensure_tag_exported(tag_result.tags, event)
+                # The export reset the statistics that had it counted.
+                already_counted = timedelta(0)
 
             # Calculate interval since last known tick
             # If last_known_tick is None (first event), initialize it to event timestamp or start_time
@@ -1790,7 +1817,7 @@ class Exporter:
             assert interval_since_last_known_tick >= timedelta(0)
 
             ## Track things in internal accumulator if the focus between windows changes often
-            self._update_tag_accumulator(tag_result, event)
+            self._update_tag_accumulator(tag_result, event, already_counted)
 
             ## Check - if `timew start` was run manually since last "known tick", then reset everything
             # Only update timew_info if not in dry-run mode

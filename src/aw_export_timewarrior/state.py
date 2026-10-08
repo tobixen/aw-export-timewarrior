@@ -151,6 +151,9 @@ class StateManager:
     # Current ongoing event tracking (for idempotent incremental processing)
     current_event_timestamp: datetime | None = None
     current_event_processed_duration: timedelta = field(default_factory=lambda: timedelta(0))
+    # The part of the processed duration actually added to the statistics
+    # (an increment under ignore_interval is processed but not added)
+    current_event_counted_duration: timedelta = field(default_factory=lambda: timedelta(0))
 
     # Configuration
     enable_validation: bool = True
@@ -316,8 +319,7 @@ class StateManager:
         if reset_stats:
             self.stats.reset(retain_tags=retain_tags, stickyness_factor=stickyness_factor)
             # Also reset current event tracking when starting a new export period
-            self.current_event_timestamp = None
-            self.current_event_processed_duration = timedelta(0)
+            self.forget_current_event()
 
         # Record export to history if requested
         if self.track_exports and record_export_history:
@@ -331,6 +333,16 @@ class StateManager:
                 decision_timestamp=decision_timestamp,
             )
             self.export_history.append(export_record)
+
+    def forget_current_event(self) -> None:
+        """Drop the ongoing-event tracking.
+
+        What it says was counted refers to the statistics as they were, so it
+        must go whenever they are reset.
+        """
+        self.current_event_timestamp = None
+        self.current_event_processed_duration = timedelta(0)
+        self.current_event_counted_duration = timedelta(0)
 
     def handle_afk_transition(
         self,
@@ -369,6 +381,7 @@ class StateManager:
         # (both going AFK and returning from AFK)
         if old_state != new_state and reset_stats:
             self.stats.reset(retain_tags=None)
+            self.forget_current_event()
 
         # Update last_known_tick and last_tick when going AFK
         if new_state == AfkState.AFK:

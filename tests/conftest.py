@@ -123,6 +123,33 @@ def timew_sandbox(_guard_real_timew, monkeypatch):
         _real_timew_calls_allowed = False
 
 
+@pytest.fixture
+def aw_clock(monkeypatch):
+    """Serve test data as ActivityWatch had it at aw_clock[0]: later events
+    not yet there, ongoing ones only as long as their heartbeats so far.
+
+    For replaying live sync tick by tick; set aw_clock[0] before each tick.
+    """
+    from aw_export_timewarrior.aw_client import EventFetcher
+    from aw_export_timewarrior.utils import normalize_duration, normalize_timestamp
+
+    now = [None]
+    unclipped = EventFetcher._get_events_from_test_data
+
+    def as_of_now(self, bucket_id, start, end):
+        events = []
+        for event in unclipped(self, bucket_id, start, end):
+            ev_start = normalize_timestamp(event["timestamp"])
+            if ev_start >= now[0]:
+                continue
+            ev_end = min(ev_start + normalize_duration(event["duration"]), now[0])
+            events.append({**event, "timestamp": ev_start, "duration": ev_end - ev_start})
+        return events
+
+    monkeypatch.setattr(EventFetcher, "_get_events_from_test_data", as_of_now)
+    return now
+
+
 @pytest.fixture(autouse=True)  # Applies to all tests automatically
 def no_sleep(monkeypatch):
     global sleep_counter
