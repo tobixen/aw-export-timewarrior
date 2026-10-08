@@ -198,6 +198,10 @@ class Exporter:
     _ask_away_messages: dict = field(
         default_factory=dict, init=False, repr=False
     )  # Maps (timestamp, duration) to ask-away messages
+    # Whether the interval being tracked was forced on the accumulator (see
+    # ensure_tag_exported), and the tags of the last export.
+    _current_interval_forced: bool = field(default=True, init=False, repr=False)
+    _last_exported_tags: set = field(default_factory=set, init=False, repr=False)
     _exported_ask_away_timestamps: set = field(
         default_factory=set, init=False, repr=False
     )  # Timestamps of ask-away events already exported (prevents duplicate exports)
@@ -777,6 +781,7 @@ class Exporter:
                 tags != {"afk"}
                 and not self.state.is_afk()
                 and not self.state.manual_tracking
+                and not self._current_interval_forced
                 and last_activity_run_time.total_seconds() < self.min_recording_interval - 3
             ):
                 self._log_in_batch_else_breakpoint(
@@ -811,6 +816,16 @@ class Exporter:
                     level=logging.WARNING,
                 )
                 tags = {"UNKNOWN", "not-afk"}
+
+        # min_recording_interval is what the accumulator waits for before it
+        # switches; an interval it did not choose may be replaced sooner.
+        self._current_interval_forced = (
+            "afk" in tags
+            or "UNKNOWN" in tags
+            or "afk" in self._last_exported_tags
+            or self.state.manual_tracking
+        )
+        self._last_exported_tags = set(tags)
 
         if "afk" in tags:
             self.state.set_afk_state(AfkState.AFK)
