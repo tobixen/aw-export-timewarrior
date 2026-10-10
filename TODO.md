@@ -113,3 +113,24 @@ tags are never applied.  Night of 2026-10-06/07: AFK started 01:24:57 and
 01:24:57–07:15:34 as `afk ~aw`.  The fix belongs where the AFK interval
 gets closed: look the answer up again before closing it, and retag if
 one has arrived.
+
+## An ongoing status event adds its tags twice
+
+Observed by AI on 2026-10-08:
+
+`_process_current_event_incrementally` accumulates tags for the ongoing
+event even when it is an afk-status event (e.g. not-afk), but the
+completed-events loop only takes back what was already counted for
+non-status events, so a status event that was ongoing has its tags added
+again in full when it completes.  Count it in `_take_over_current_event`
+for status events too, with a test like
+`tests/test_current_event_handover.py`.
+
+## "No window events found" every five minutes while AFK
+
+Observed by AI on 2026-10-07:
+
+While you are away the daemon logs `ERROR: No window events found. Is
+aw-watcher-window running?` every five minutes, since the window watcher
+rightly reports nothing.  Skip the check (or lower it to debug) while the
+AFK state is AFK.
