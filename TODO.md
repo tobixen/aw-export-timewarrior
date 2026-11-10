@@ -134,3 +134,15 @@ While you are away the daemon logs `ERROR: No window events found. Is
 aw-watcher-window running?` every five minutes, since the window watcher
 rightly reports nothing.  Skip the check (or lower it to debug) while the
 AFK state is AFK.
+
+## `pre-commit install` alone skips the prompt-recording hooks
+
+Noticed in a code review on 2026-11-10:
+
+`.pre-commit-config.yaml` sets no `default_install_hook_types`, so a
+plain `pre-commit install` installs only the `pre-commit` stage, and
+`append-ai-prompts` (prepare-commit-msg) and `archive-ai-prompts`
+(post-commit) stay inactive.  CONTRIBUTING.md lists each `--hook-type`
+by hand; setting `default_install_hook_types: [pre-commit, pre-push,
+commit-msg, prepare-commit-msg, post-commit]` would make one command
+enough and shorten that list.
