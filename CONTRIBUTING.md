@@ -36,6 +36,14 @@ pre-commit install --hook-type prepare-commit-msg
 pre-commit install --hook-type post-commit
 ```
 
+AI prompts are recorded into the commit messages by Claude Code hooks
+that are generated per clone, not tracked.  Set them up once, and again
+after a bump of `ai-prompt-auto-commit` in `.pre-commit-config.yaml`:
+
+```sh
+pre-commit run --hook-stage manual prepare-ai-repository
+```
+
 Run tests with:
 
 ```sh

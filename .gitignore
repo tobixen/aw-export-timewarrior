@@ -152,8 +152,11 @@ config.local.toml
 # Claude Code local settings (user-specific, not for sharing)
 .claude/settings.local.json
 
-# AI prompt recording (runtime data, not for the repo)
-.prompts/
-
 # lychee link-checker cache
 .lycheecache
+
+# installed by: pre-commit run prepare-ai-repository --hook-stage manual
+/.claude/settings.json
+/.claude/hooks/record-prompt.py
+/.github/assistant-guidelines.md
+/.prompts/
