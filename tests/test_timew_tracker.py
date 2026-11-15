@@ -1,6 +1,7 @@
 """Tests for TimewTracker implementation."""
 
 import json
+import os
 import subprocess
 from datetime import UTC, datetime
 from unittest.mock import Mock, patch
@@ -31,14 +32,31 @@ class TestTimewTrackerInit:
     """Test TimewTracker initialization."""
 
     def test_default_init(self) -> None:
-        """Test initialization with defaults."""
-        with patch.dict("os.environ", {}, clear=False):
+        """Test initialization with defaults (exporter run from a terminal)."""
+        env = {k: v for k, v in os.environ.items() if k != "AW2TW_GRACE_TIME"}
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch("sys.stdout.isatty", return_value=True),
+        ):
             tracker = TimewTracker()
 
             assert tracker.grace_time == 10.0
             assert tracker.capture_commands is None
             assert tracker.hide_output is False
             assert tracker._current_cache is None
+
+    def test_no_grace_time_without_terminal(self) -> None:
+        """The grace period is a window to press ctrl-c after reading the undo
+        message.  Under systemd, a timer or a pipe nobody reads it, so the
+        default drops to zero there."""
+        env = {k: v for k, v in os.environ.items() if k != "AW2TW_GRACE_TIME"}
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch("sys.stdout.isatty", return_value=False),
+        ):
+            tracker = TimewTracker()
+
+            assert tracker.grace_time == 0
 
     def test_custom_grace_time(self) -> None:
         """Test initialization with custom grace time."""

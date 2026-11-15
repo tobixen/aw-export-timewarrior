@@ -58,6 +58,8 @@ During the last few days I've done a full code review utilizing Claude Fable - i
 
 ### Changed
 - **Breaking:** `--config FILE` must now be given before the subcommand (e.g. `--config FILE sync`, not `sync --config FILE`), like every other global flag. `diff --config FILE` (config placed after the subcommand) happened to work before as a side effect of the bug fixed above, and will now error with "unrecognized arguments" instead.
+- The 10 s undo grace period after each `timew` command now defaults to zero when stdout is not a terminal (systemd, timers, pipes), where nobody can read the undo message.  `AW2TW_GRACE_TIME` still overrides it.
+- `retag.py` takes interval ids as arguments (`retag.py 12 15`), falling back to the `START`/`STOP` range.  An id may carry the interval's start (`12:20260914T120000Z`): ids shift whenever an interval is recorded, and the interval is then looked for a few ids up rather than retagging whatever took its place.  It prints one line per interval it changes (`@186: +e24 -UNKNOWN`) and nothing for the rest, and never waits out the grace period.
 
 ### Performance
 - `diff`, `report`, `analyze` and time-bounded `sync` are dramatically faster on historical ranges: each range is now fetched and processed once instead of being repeatedly re-fetched and re-processed. A 3-hour `diff` that previously took ~12 s now completes in under 1 s.

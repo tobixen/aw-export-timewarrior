@@ -82,7 +82,7 @@ class TestRetagScript:
             mock.patch.object(retag, "TimewTracker", return_value=tracker),
             mock.patch.object(retag, "retag_by_rules", side_effect=rules),
         ):
-            code = retag.main(start=1, stop=1 + len(tags_by_id))
+            code = retag.main(range(1, 1 + len(tags_by_id)))
         return code, tracker
 
     def test_clean_run_exits_zero(self) -> None:
@@ -99,3 +99,71 @@ class TestRetagScript:
         code, tracker = self.run({1: ["bad"], 2: ["b"]}, rules)
         assert code == 1
         tracker.retag_interval_by_id.assert_called_once_with(2, {"b", "x"})
+
+    def test_explicit_ids_only_changes_reported_no_sleep(self, capsys) -> None:
+        """The morning pass hands over just the hand-edited ids.  Only changes
+        are reported, and a batch never waits out the grace period."""
+        tags_by_id = {5: ["e24"], 6: ["afk"], 7: ["vg"]}
+
+        def fake_get(argv):
+            return json.dumps({"tags": tags_by_id[int(argv[2].split(".")[2])]}).encode()
+
+        def rules(tags):
+            return tags | {"~blink"} if tags != {"afk"} else set(tags)
+
+        calls = []
+        with (
+            mock.patch.object(retag.subprocess, "check_output", side_effect=fake_get),
+            mock.patch.object(retag, "retag_by_rules", side_effect=rules),
+            mock.patch(
+                "aw_export_timewarrior.timew_tracker.subprocess.run",
+                side_effect=lambda cmd, **kw: calls.append(cmd) or mock.Mock(returncode=0),
+            ),
+            mock.patch("time.sleep") as sleep,
+            mock.patch.dict("os.environ", {"AW2TW_GRACE_TIME": "10"}),
+        ):
+            assert retag.main([5, 6]) == 0
+            sleep.assert_not_called()
+        # :quiet keeps timew's own confirmation off the terminal (verbose=yes)
+        assert calls == [["timew", "retag", "@5", "e24", "~blink", ":quiet"]]
+        assert capsys.readouterr().out.splitlines() == ["@5: +~blink"]
+
+    def run_with_starts(self, intervals: dict[int, tuple[str, list[str]]], targets):
+        def fake_get(argv):
+            start, tags = intervals[int(argv[2].split(".")[2])]
+            return json.dumps({"start": start, "tags": tags}).encode()
+
+        tracker = mock.Mock()
+        with (
+            mock.patch.object(retag.subprocess, "check_output", side_effect=fake_get),
+            mock.patch.object(retag, "TimewTracker", return_value=tracker),
+            mock.patch.object(retag, "retag_by_rules", side_effect=lambda t: t | {"x"}),
+        ):
+            code = retag.main(targets)
+        return code, tracker
+
+    def test_id_with_start_follows_a_shift(self) -> None:
+        """Ids are relative: an interval recorded after the caller read them
+        pushes the target from @5 to @6.  The start stamp finds it there,
+        instead of retagging whatever now sits at @5."""
+        intervals = {
+            5: ("20260914T223000Z", ["new"]),
+            6: ("20260914T120000Z", ["edited"]),
+            7: ("20260914T060000Z", ["old"]),
+        }
+        code, tracker = self.run_with_starts(intervals, [(5, "20260914T120000Z")])
+        assert code == 0
+        tracker.retag_interval_by_id.assert_called_once_with(6, {"edited", "x"})
+
+    def test_id_with_start_not_found_retags_nothing(self) -> None:
+        intervals = {i: (f"20260914T0{i}0000Z", ["t"]) for i in range(5, 12)}
+        code, tracker = self.run_with_starts(intervals, [(5, "20260914T120000Z")])
+        assert code == 1
+        tracker.retag_interval_by_id.assert_not_called()
+
+    def test_parse_targets(self) -> None:
+        assert retag.parse_targets(["12", "@13", "14:20260914T120000Z"]) == [
+            12,
+            13,
+            (14, "20260914T120000Z"),
+        ]

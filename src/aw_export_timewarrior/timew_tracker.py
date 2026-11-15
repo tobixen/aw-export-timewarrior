@@ -10,6 +10,7 @@ pluggable backend implementations.
 import json
 import os
 import subprocess
+import sys
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -38,7 +39,8 @@ class TimewTracker(TimeTracker):
         """Initialize TimeWarrior tracker.
 
         Args:
-            grace_time: Seconds to wait after timew commands (defaults to AW2TW_GRACE_TIME env var or 10)
+            grace_time: Seconds to wait after timew commands (defaults to AW2TW_GRACE_TIME env var,
+                or 10 when stdout is a terminal and 0 otherwise)
             capture_commands: Optional list to capture commands for testing
             hide_output: If True, don't print "Running" messages
             cache_ttl: Max age in seconds for the cached current-tracking state
@@ -48,7 +50,10 @@ class TimewTracker(TimeTracker):
                 var or 5)
         """
         if grace_time is None:
-            grace_time = float(os.environ.get("AW2TW_GRACE_TIME", 10))
+            # The grace period is a window to press ctrl-c after reading the
+            # undo message, so it only makes sense when a terminal shows it.
+            default_grace = 10 if sys.stdout.isatty() else 0
+            grace_time = float(os.environ.get("AW2TW_GRACE_TIME", default_grace))
         if cache_ttl is None:
             cache_ttl = float(os.environ.get("AW2TW_CACHE_TTL", 5))
         self.grace_time = grace_time
@@ -350,7 +355,10 @@ class TimewTracker(TimeTracker):
             interval_id: TimeWarrior's relative interval id (the N in @N)
             tags: New tags to apply
         """
-        self._run_timew(["retag", f"@{interval_id}"] + sorted(tags))
+        # :quiet silences timew's own confirmation, which `verbose = yes`
+        # would otherwise print for every interval of a bulk retag.
+        quiet = [":quiet"] if self.hide_output else []
+        self._run_timew(["retag", f"@{interval_id}"] + sorted(tags) + quiet)
 
     def get_intervals(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
         """Get TimeWarrior intervals in time range.
