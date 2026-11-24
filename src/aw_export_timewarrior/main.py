@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 # For example, 0.2 means at least 20% of tracked time should be known events.
 MIN_KNOWN_ACTIVITY_RATIO = 0.2
 
+# The shortest stretch after a split answer that is exported as unanswered
+# AFK time rather than left to the answer (absorbs rounding in the dialog).
+UNANSWERED_REST_MIN = timedelta(minutes=1)
+
 # Debug threshold: trigger breakpoint if skipping an event longer than this duration.
 # This helps catch unexpected behavior where significant events are being skipped.
 DEBUG_SKIP_THRESHOLD_SECONDS = 30
@@ -1010,6 +1014,33 @@ class Exporter:
                             "tags": sub_tags,
                         }
                     )
+
+                # An answer covers only its own duration: whatever follows it
+                # before the next answer (or the end of the AFK period) is
+                # unanswered, and must not carry this answer's tags.
+                sub_end = sub_event["timestamp"] + sub_event["duration"]
+                if i + 1 < len(sub_events):
+                    next_start = sub_events[i + 1]["timestamp"]
+                else:
+                    next_start = event["timestamp"] + event["duration"]
+                if next_start - sub_end > UNANSWERED_REST_MIN:
+                    rest_tags = tags | {"~aw"}
+                    logger.info(f"  Unanswered from {sub_end} to {next_start}")
+                    try:
+                        self.tracker.start_tracking(rest_tags, sub_end)
+                    except ProtectedIntervalError as e:
+                        logger.warning(f"  Not exported: {e}")
+                    else:
+                        if not self.dry_run:
+                            self.set_timew_info(self.retag_current_interval(fresh=True))
+                        else:
+                            self.set_timew_info(
+                                {
+                                    "start": sub_end.strftime("%Y%m%dT%H%M%SZ"),
+                                    "start_dt": sub_end,
+                                    "tags": rest_tags,
+                                }
+                            )
 
             # Handled - return early, don't call start_tracking again
             return

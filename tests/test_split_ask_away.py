@@ -496,3 +496,37 @@ def test_split_events_after_short_afk_same_tags() -> None:
     assert "dishwash" in all_tags_in_commands, (
         f"Expected 'dishwash' tag from split ask-away in commands: {start_commands}"
     )
+
+
+def test_split_answers_end_where_the_answers_end() -> None:
+    """Observed 2026-11-24: the night was answered as bedtime and a 6-minute
+    tea break, then the laptop was suspended for 45 minutes. Only the answers'
+    start times were used, so the tea tag ran on until the next activity and
+    swallowed the whole suspend. What the answers do not cover stays plain afk.
+    """
+    t0 = datetime(2025, 1, 1, 9, 0, 0, tzinfo=UTC)
+    td = timedelta
+
+    builder = FixtureDataBuilder(start_time=t0)
+    builder.add_window_event("vscode", "work.py", 300)
+    builder.add_afk_event("not-afk", 300)
+
+    afk_start = t0 + td(seconds=300)
+    builder.add_afk_event("afk", 3600, timestamp=afk_start)
+    builder.add_split_ask_away_events([("bedtime", 1200), ("tea", 360)], timestamp=afk_start)
+
+    back = afk_start + td(seconds=3600)
+    builder.add_window_event("vscode", "work.py", 600, timestamp=back)
+    builder.add_afk_event("not-afk", 600, timestamp=back)
+
+    exporter = Exporter(test_data=builder.build(), dry_run=True, enable_assert=False)
+    exporter.tick(process_all=True)
+
+    starts = [cmd for cmd in exporter.get_captured_commands() if len(cmd) > 1 and cmd[1] == "start"]
+
+    def local(t: datetime) -> str:
+        return t.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+
+    after_tea = [cmd for cmd in starts if local(afk_start + td(seconds=1560)) in cmd]
+    assert after_tea, f"Expected tracking to change when the tea ends: {starts}"
+    assert "tea" not in after_tea[0] and "afk" in after_tea[0], after_tea

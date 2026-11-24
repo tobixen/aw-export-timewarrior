@@ -208,13 +208,20 @@ class TestEnsureTagExported:
 
         exporter.ensure_tag_exported({"afk"}, event)
 
-        assert exporter.tracker.start_tracking.call_count == 2, (
-            f"Expected one tracked interval per ask-away answer, got: "
+        assert exporter.tracker.start_tracking.call_count == 4, (
+            f"Expected one tracked interval per ask-away answer and rest, got: "
             f"{exporter.tracker.start_tracking.call_args_list}"
         )
         calls_by_since = {
             call.args[1]: call.args[0] for call in exporter.tracker.start_tracking.call_args_list
         }
+        # One interval per answer, plus the unanswered time after each of them.
+        assert calls_by_since == {
+            tea_ts: {"afk", "tea", "~aw"},
+            tea_ts + timedelta(minutes=10): {"afk", "~aw"},
+            meeting_ts: {"afk", "meeting", "~aw"},
+            meeting_ts + timedelta(minutes=10): {"afk", "~aw"},
+        }, f"Expected one tracked interval per ask-away answer and rest, got: {calls_by_since}"
         assert "tea" in calls_by_since.get(tea_ts, set()), (
             f"Expected 'tea' tagged at {tea_ts}, got: {calls_by_since}"
         )
