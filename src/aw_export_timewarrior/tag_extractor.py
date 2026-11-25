@@ -187,7 +187,11 @@ class TagExtractor:
         self.event_fetcher = event_fetcher
         self.terminal_apps = terminal_apps or set()
         self.default_retry = default_retry
-        self.log_callback = log_callback or (lambda msg, **kwargs: logger.info(msg))
+        self.log_callback = log_callback or (
+            lambda msg, level=logging.INFO, extra=None, **kwargs: logger.log(
+                level, msg, extra=extra
+            )
+        )
         # Track the last matched rule (set by extraction methods)
         self._last_matched_rule: str | None = None
         # Deferred "Unhandled <subtype> event" warning for a sub-event that
@@ -606,7 +610,17 @@ class TagExtractor:
         self.log_callback(
             f"Unhandled {subtype} event",
             event=window_event,
-            extra={"sub_event": sub_event, "event_type": subtype, "log_event": "unhandled"},
+            extra={
+                "sub_event": sub_event,
+                "event_type": subtype,
+                "log_event": "unhandled",
+                "once_key": (
+                    "unhandled",
+                    subtype,
+                    repr(window_event.get("data")),
+                    repr((sub_event or {}).get("data")),
+                ),
+            },
             level=logging.WARNING,
         )
 
@@ -954,7 +968,8 @@ class TagExtractor:
 
                 if self.check_exclusive_groups(candidate_tags):
                     logger.warning(
-                        f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts"
+                        f"Excluding expanding tag rule {tag_section} due to exclusivity conflicts",
+                        extra={"once_key": ("exclusive", tag_section, frozenset(candidate_tags))},
                     )
                 else:
                     new_tags = candidate_tags

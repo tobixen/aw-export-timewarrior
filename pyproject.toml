@@ -23,6 +23,7 @@ dependencies = [
     "termcolor>=3.1.0,<4.0.0",
     "aw-client",
     "dateparser>=1.0.0",
+    "concurrent-log-handler>=0.9.25",
 ]
 
 [project.optional-dependencies]

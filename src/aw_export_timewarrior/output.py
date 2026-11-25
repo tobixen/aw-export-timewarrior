@@ -3,9 +3,47 @@
 import json
 import logging
 import sys
+from collections import OrderedDict
+from collections.abc import Hashable
 from datetime import UTC, datetime, timedelta
 
+from concurrent_log_handler import ConcurrentRotatingFileHandler
 from termcolor import cprint
+
+#: Size at which the log file is rotated, and how many gzipped copies are kept.
+LOG_MAX_BYTES = 50 * 1024 * 1024
+LOG_BACKUP_COUNT = 5
+
+
+class OnceFilter(logging.Filter):
+    """Pass a record carrying ``extra={"once_key": ...}`` only the first time.
+
+    The sync daemon re-examines the same events on every tick, so a warning
+    about one of them would otherwise be repeated thousands of times.
+    Records without a ``once_key`` always pass.  The most recent
+    ``max_keys`` keys are remembered, so a long-running process stays small.
+    """
+
+    def __init__(self, max_keys: int = 10000) -> None:
+        super().__init__()
+        self.max_keys = max_keys
+        self._seen: OrderedDict[Hashable, None] = OrderedDict()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        key = getattr(record, "once_key", None)
+        if key is None:
+            return True
+        try:
+            hash(key)
+        except TypeError:
+            key = repr(key)
+        if key in self._seen:
+            self._seen.move_to_end(key)
+            return False
+        self._seen[key] = None
+        if len(self._seen) > self.max_keys:
+            self._seen.popitem(last=False)
+        return True
 
 
 class StructuredFormatter(logging.Formatter):
@@ -122,6 +160,8 @@ def setup_logging(
     console_log_level: int = logging.ERROR,
     log_file: str = None,
     run_mode: dict = None,
+    log_max_bytes: int = LOG_MAX_BYTES,
+    log_backup_count: int = LOG_BACKUP_COUNT,
 ) -> None:
     """
     Set up the logging system.
@@ -132,23 +172,34 @@ def setup_logging(
         console_log_level: Console logging level (default: ERROR)
         log_file: Optional file path to write logs to. If None, logs to console only.
         run_mode: Optional dict with run mode info (dry_run, export_data, test_data, etc.) for filtering logs
+        log_max_bytes: Rotate the log file when it reaches this size
+        log_backup_count: Number of gzipped rotated log files to keep
+
+    The log file may be shared by several processes (the sync daemon and a
+    diff run, say), so it is rotated under a lock by concurrent-log-handler.
     """
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
 
     # Clear any existing handlers
+    for handler in root_logger.handlers:
+        handler.close()
     root_logger.handlers.clear()
 
     # If logging to file, use file handler; otherwise use console
     if log_file and log_level:
-        file_handler = logging.FileHandler(log_file)
+        file_handler = ConcurrentRotatingFileHandler(
+            log_file, maxBytes=log_max_bytes, backupCount=log_backup_count, use_gzip=True
+        )
         file_handler.setLevel(logging.DEBUG)  # Always log everything to file
+        file_handler.addFilter(OnceFilter())
         file_handler.setFormatter(StructuredFormatter(use_json=json_format, run_mode=run_mode))
         root_logger.addHandler(file_handler)
     if console_log_level:
         # Console handler with colors
         console_handler = ColoredConsoleHandler(sys.stdout)
         console_handler.setLevel(console_log_level)
+        console_handler.addFilter(OnceFilter())
         console_handler.setFormatter(StructuredFormatter(run_mode=run_mode))
         root_logger.addHandler(console_handler)
 

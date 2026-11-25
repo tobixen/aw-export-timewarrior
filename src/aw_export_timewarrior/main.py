@@ -1578,6 +1578,7 @@ class Exporter:
                         f"Skipping long event ({event['duration'].total_seconds()}s) with old timestamp - {event}",
                         event=event,
                         level=logging.WARNING,
+                        extra={"once_key": ("skip-long", event["timestamp"], event["duration"])},
                     )
                     if self.enable_pdb:
                         self.breakpoint()
