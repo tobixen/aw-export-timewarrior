@@ -530,3 +530,70 @@ def test_split_answers_end_where_the_answers_end() -> None:
     after_tea = [cmd for cmd in starts if local(afk_start + td(seconds=1560)) in cmd]
     assert after_tea, f"Expected tracking to change when the tea ends: {starts}"
     assert "tea" not in after_tea[0] and "afk" in after_tea[0], after_tea
+
+
+def _night_with_answer_reaching_into_next_afk(second_answers: bool) -> tuple[list, datetime]:
+    """Bedtime and tea answering a first AFK period, a minute at the keyboard
+    in between, and a tea answer ending seven seconds into the second AFK
+    period - as observed on 2026-11-24.  Returns the start commands and the
+    end of the tea answer."""
+    t0 = datetime(2025, 1, 1, 2, 0, 0, tzinfo=UTC)
+    td = timedelta
+
+    builder = FixtureDataBuilder(start_time=t0)
+    builder.add_window_event("vscode", "work.py", 300)
+    builder.add_afk_event("not-afk", 300)
+
+    afk1 = t0 + td(seconds=300)
+    builder.add_afk_event("afk", 1500, timestamp=afk1)
+    builder.add_split_ask_away_events([("bedtime", 1200), ("tea", 367)], timestamp=afk1)
+    tea_end = afk1 + td(seconds=1567)
+
+    awake = afk1 + td(seconds=1500)
+    builder.add_window_event("vscode", "work.py", 60, timestamp=awake)
+    builder.add_afk_event("not-afk", 60, timestamp=awake)
+
+    afk2 = awake + td(seconds=60)
+    builder.add_afk_event("afk", 2541, timestamp=afk2)
+    if second_answers:
+        builder.add_split_ask_away_events(
+            [("bedtime", 847), ("tea", 847), ("bike-box", 847)], timestamp=tea_end
+        )
+
+    back = afk2 + td(seconds=2541)
+    builder.add_window_event("vscode", "work.py", 600, timestamp=back)
+    builder.add_afk_event("not-afk", 600, timestamp=back)
+
+    exporter = Exporter(test_data=builder.build(), dry_run=True, enable_assert=False)
+    exporter.tick(process_all=True)
+
+    starts = [cmd for cmd in exporter.get_captured_commands() if len(cmd) > 1 and cmd[1] == "start"]
+    return starts, tea_end
+
+
+def _start_time(cmd: list) -> str:
+    return next(a for a in cmd if a[:1].isdigit())
+
+
+def test_answer_reaching_into_the_next_afk_period_keeps_order() -> None:
+    """Observed 2026-11-24: a night answered as bedtime and tea, where the tea
+    answer ended a few seconds into the next AFK period (answered in turn as
+    bedtime, tea and bike-box).  The earlier tea answer overlapped both periods,
+    and sorting the answers by split index mixed the two splits: bedtime of the
+    second split went first, then the earlier tea, so the diff suggested a
+    bedtime interval ending before it started.  Exporting the earlier tea
+    again also left a zero-length interval behind.
+    """
+    starts, _ = _night_with_answer_reaching_into_next_afk(second_answers=True)
+    times = [_start_time(cmd) for cmd in starts]
+    assert times == sorted(set(times)), f"Tracking went back in time or restarted: {starts}"
+
+
+def test_answer_reaching_into_an_unanswered_afk_period_ends() -> None:
+    """The same night with the second AFK period left unanswered: the tea
+    reaching a few seconds into it must not take the whole period."""
+    starts, tea_end = _night_with_answer_reaching_into_next_afk(second_answers=False)
+    local_tea_end = tea_end.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+    during_afk2 = [cmd for cmd in starts if "afk" in cmd and _start_time(cmd) >= local_tea_end]
+    assert during_afk2, f"Expected plain afk once the tea ends: {starts}"
+    assert "tea" not in during_afk2[0], starts

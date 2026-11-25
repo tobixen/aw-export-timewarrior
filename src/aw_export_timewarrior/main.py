@@ -755,6 +755,47 @@ class Exporter:
             and (not exclude_exported or ask["timestamp"] not in self._exported_ask_away_timestamps)
         ]
 
+    def _start_unanswered_afk(self, tags: set, start: datetime, end: datetime) -> None:
+        """Track AFK time that no ask-away answer covers, from start, as plain afk."""
+        rest_tags = tags | {"~aw"}
+        logger.info(f"  Unanswered from {start} to {end}")
+        try:
+            self.tracker.start_tracking(rest_tags, start)
+        except ProtectedIntervalError as e:
+            logger.warning(f"  Not exported: {e}")
+            return
+        if not self.dry_run:
+            self.set_timew_info(self.retag_current_interval(fresh=True))
+        else:
+            self.set_timew_info(
+                {
+                    "start": start.strftime("%Y%m%dT%H%M%SZ"),
+                    "start_dt": start,
+                    "tags": rest_tags,
+                }
+            )
+
+    def _carried_ask_away(
+        self, event: dict, overlapping: list | None = None
+    ) -> tuple[list, datetime | None]:
+        """Answers exported with an earlier AFK period that reach into event.
+
+        Returns them and the latest of their ends, or ([], None) when there
+        are none or they cover the whole event.
+        """
+        if overlapping is None:
+            overlapping = self._overlapping_ask_away_events(event)
+        carried = [
+            ask
+            for ask in overlapping
+            if ask["timestamp"] < event["timestamp"]
+            and ask["timestamp"] in self._exported_ask_away_timestamps
+        ]
+        carried_end = max((ask["timestamp"] + ask["duration"] for ask in carried), default=None)
+        if carried_end is None or carried_end >= event["timestamp"] + event["duration"]:
+            return [], None
+        return carried, carried_end
+
     ## TODO: move all dealings with statistics to explicit statistics-handling methods
     def ensure_tag_exported(
         self,
@@ -886,6 +927,15 @@ class Exporter:
         overlapping_ask_away_events = (
             self._overlapping_ask_away_events(event) if "afk" in tags else []
         )
+        # An answer exported with an earlier AFK period may reach a few
+        # seconds into this one.  It was tracked there already; this period
+        # starts where it ends, and must not take its tags.
+        carried, carried_end = self._carried_ask_away(event, overlapping_ask_away_events)
+        if carried_end is not None:
+            overlapping_ask_away_events = [
+                ask for ask in overlapping_ask_away_events if ask not in carried
+            ]
+            since = max(since, carried_end)
         # Multiple overlapping answers - e.g. two separate non-split ask-away
         # replies within one merged AFK period, or a user-initiated split - each
         # need their own tracked interval at their own timestamp; a single merged
@@ -951,20 +1001,31 @@ class Exporter:
         # answer overlaps the same AFK event. Each gets its own tracked interval
         # at its own timestamp.
         if use_multi_interval_ask_away:
-            # Sort by split_index for genuine split parts; non-split multi
-            # answers all default to split_index 0, so the timestamp tiebreak
-            # puts them in chronological order.
-            sub_events = sorted(
-                overlapping_ask_away_events,
-                key=lambda e: (e["data"].get("split_index", 0), e["timestamp"]),
-            )
+            # Chronological order.  Not by split_index: an answer reaching a
+            # few seconds into the next AFK period overlaps it too, and mixing
+            # two splits by index sends tracking back in time.
+            sub_events = sorted(overlapping_ask_away_events, key=lambda e: e["timestamp"])
 
             logger.info(f"Found {len(sub_events)} ask-away activities for AFK period")
+
+            # Answers exported by an earlier call for this event are not
+            # started again (snapshot: a later answer at the same second of
+            # this very call must still be exported).
+            already_exported = set(self._exported_ask_away_timestamps)
+
+            # Time before the first answer, after an answer carried in from
+            # the previous AFK period, is unanswered too.
+            if carried_end is not None and (
+                sub_events[0]["timestamp"] - carried_end > UNANSWERED_REST_MIN
+            ):
+                self._start_unanswered_afk(tags, carried_end, sub_events[0]["timestamp"])
 
             # For each answer, create a separate tracking entry
             for i, sub_event in enumerate(sub_events):
                 message = sub_event["data"].get("message", "")
                 if not message:
+                    continue
+                if sub_event["timestamp"] in already_exported:
                     continue
 
                 # Extract tags for this specific activity
@@ -1024,23 +1085,7 @@ class Exporter:
                 else:
                     next_start = event["timestamp"] + event["duration"]
                 if next_start - sub_end > UNANSWERED_REST_MIN:
-                    rest_tags = tags | {"~aw"}
-                    logger.info(f"  Unanswered from {sub_end} to {next_start}")
-                    try:
-                        self.tracker.start_tracking(rest_tags, sub_end)
-                    except ProtectedIntervalError as e:
-                        logger.warning(f"  Not exported: {e}")
-                    else:
-                        if not self.dry_run:
-                            self.set_timew_info(self.retag_current_interval(fresh=True))
-                        else:
-                            self.set_timew_info(
-                                {
-                                    "start": sub_end.strftime("%Y%m%dT%H%M%SZ"),
-                                    "start_dt": sub_end,
-                                    "tags": rest_tags,
-                                }
-                            )
+                    self._start_unanswered_afk(tags, sub_end, next_start)
 
             # Handled - return early, don't call start_tracking again
             return
@@ -1812,7 +1857,9 @@ class Exporter:
                         new_overlapping = self._overlapping_ask_away_events(
                             event, exclude_exported=True
                         )
-                        if new_overlapping:
+                        # An earlier answer ending inside this event leaves
+                        # the rest of it unanswered, to be exported as such.
+                        if new_overlapping or self._carried_ask_away(event)[1]:
                             self.ensure_tag_exported(tag_result.tags, event)
                             for ask in new_overlapping:
                                 self._exported_ask_away_timestamps.add(ask["timestamp"])

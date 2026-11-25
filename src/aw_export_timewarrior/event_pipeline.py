@@ -639,6 +639,17 @@ class EventPipeline:
             ask_start = normalize_timestamp(ask_event["timestamp"])
             ask_end = ask_start + normalize_duration(ask_event["duration"])
 
+            # An answer starting inside an AFK period belongs to that period,
+            # not to the countdown of a later one it reaches a few seconds into.
+            if any(
+                afk["data"].get("status") == "afk"
+                and normalize_timestamp(afk["timestamp"])
+                <= ask_start
+                < normalize_timestamp(afk["timestamp"]) + normalize_duration(afk["duration"])
+                for afk in afk_events
+            ):
+                continue
+
             for i, afk_event in enumerate(result):
                 if afk_event["data"].get("status") != "afk":
                     continue
