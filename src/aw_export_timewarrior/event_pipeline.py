@@ -27,7 +27,13 @@ def overlapping_event_bounds(
     """Widen [start, end] to the whole afk-status and ask-away events crossing its edges.
 
     Both statuses count: a work session crossing midnight is taken in whole
-    as well as a night away.
+    as well as a night away.  So do the lid watcher's closed-lid and suspend
+    periods, which the pipeline merges into the AFK periods: the afk watcher
+    records nothing during a suspend, and without them a night's later
+    afk-prompt answers are never fetched.  Boot gaps do not count; they may
+    run on all day.  The lid periods count even where the pipeline is set to
+    ignore lid events or short ones: a wider range costs only a few more
+    events looked at.
 
     A day's import must not cut a night's AFK period at midnight: the part
     before midnight carries the same afk-prompt answer, and without it the
@@ -37,17 +43,48 @@ def overlapping_event_bounds(
     """
     afk_bucket = event_fetcher.bucket_by_client["aw-watcher-afk"][0]
     ask_away_bucket = event_fetcher.get_ask_away_bucket()
+    lid_bucket = event_fetcher.get_lid_bucket()
     end_cap = max(end, datetime.now(UTC))
     while True:
         query = (start - EDGE_EVENT_REACH, min(end + EDGE_EVENT_REACH, end_cap))
         events = EventPipeline._merge_consecutive_afk_events(
             event_fetcher.get_events(afk_bucket, *query, use_cache=False)
         )
-        if ask_away_bucket:
-            events += event_fetcher.get_events(ask_away_bucket, *query, use_cache=False)
+        # Answers to one split touch: each starts where the one before ends.
+        # One starting (or ending) exactly at an edge still belongs to the
+        # chain, which is finite, so it counts as crossing the edge.
+        answers = (
+            [
+                get_event_range(e)
+                for e in event_fetcher.get_events(ask_away_bucket, *query, use_cache=False)
+            ]
+            if ask_away_bucket
+            else []
+        )
+        if lid_bucket:
+            events += [
+                e
+                for e in event_fetcher.get_events(lid_bucket, *query, use_cache=False)
+                if (
+                    e["data"].get("lid_state") == "closed"
+                    or e["data"].get("suspend_state") == "suspended"
+                )
+                and not e["data"].get("boot_gap", False)
+            ]
         ranges = [get_event_range(e) for e in events]
-        new_start = min([start] + [s for s, e in ranges if s < start < e])
-        new_end = min(end_cap, max([end] + [e for s, e in ranges if s < end < e]))
+        new_start = min(
+            [start]
+            + [s for s, e in ranges if s < start < e]
+            + [s for s, e in answers if s < start <= e]
+        )
+        new_end = min(
+            end_cap,
+            max(
+                [end]
+                + [e for s, e in ranges if s < end < e]
+                + [e for s, e in answers if s <= end < e]
+            ),
+        )
         if (new_start, new_end) == (start, end):
             return start, end
         start, end = new_start, new_end

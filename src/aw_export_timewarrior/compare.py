@@ -485,6 +485,20 @@ def generate_fix_commands(comparison: dict[str, list]) -> list[str]:
             # Original was manually edited (no ~aw tag), don't overwrite
             manual_entries.append((timew_int, suggested))
 
+    # `timew track` refuses an end before the start, stopping the whole
+    # --apply run; an interval under a second long rounds to nothing.  Drop
+    # them before merging, where they would stretch or cut a neighbour.
+    def _nonempty(interval) -> bool:
+        if interval.end.replace(microsecond=0) > interval.start.replace(microsecond=0):
+            return True
+        logger.warning(
+            f"Not suggesting empty or reversed interval "
+            f"{ts2str(interval.start)} - {ts2str(interval.end)}"
+        )
+        return False
+
+    all_suggested = [s for s in all_suggested if _nonempty(s)]
+
     # Merge consecutive intervals with the same tags before generating commands
     merged_suggested = merge_consecutive_intervals(all_suggested)
 

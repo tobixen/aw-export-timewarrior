@@ -156,3 +156,73 @@ def test_batch_sync_records_afk_period_opening_the_range(tmp_path, clipping_serv
     first = exporter.get_suggested_intervals()[0]
     assert first.start == DAY_START
     assert {"afk", "bedtime"} <= first.tags
+
+
+def _suspended_night(tmp_path: Path, lid_watcher: bool = True) -> Path:
+    """A night known only from the lid watcher: a suspend from 22:30 to 02:31.
+
+    The afk watcher records nothing while suspended.  The answer has three
+    splits, the first of them crossing midnight; the later two lie wholly
+    after it.
+    """
+    builder = FixtureDataBuilder(start_time=datetime(2025, 1, 1, 21, 0, tzinfo=UTC))
+    builder.add_window_event("Code", "main.py", 5400)
+    builder.add_afk_event("not-afk", 5400)
+    suspend_start = datetime(2025, 1, 1, 22, 30, tzinfo=UTC)
+    if lid_watcher:
+        builder.add_suspend_event(
+            "suspended", timedelta(hours=4, minutes=1), timestamp=suspend_start
+        )
+    builder.add_split_ask_away_events(
+        [
+            ("reading", timedelta(hours=3, minutes=32)),
+            ("tea", timedelta(minutes=4)),
+            ("bedtime", timedelta(minutes=23)),
+        ],
+        timestamp=suspend_start,
+    )
+    resume = suspend_start + timedelta(hours=4, minutes=1)
+    builder.add_window_event("Code", "main.py", 2700, timestamp=resume)
+    builder.add_afk_event("not-afk", 2700, timestamp=resume)
+    path = tmp_path / "suspended.json"
+    path.write_text(json.dumps(builder.build()))
+    return path
+
+
+def test_diff_range_widened_to_suspend_crossing_its_end(tmp_path, clipping_server) -> None:
+    """A suspend is an AFK period too; the later answers on it must be fetched.
+
+    The range used to widen only to the end of the first answer, so the
+    period's tail, unanswered as far as the exporter could see, ran from the
+    second answer's end to the range end before it: a reversed interval.
+    """
+    args = _diff_args(_suspended_night(tmp_path))
+    args.start, args.end = (DAY_START - timedelta(days=1)).isoformat(), DAY_START.isoformat()
+    exporter = create_diff_exporter(args)
+
+    assert exporter.end_time >= datetime(2025, 1, 2, 2, 31, tzinfo=UTC)
+    exporter.tick(process_all=True)
+    intervals = exporter.get_suggested_intervals()
+    assert all(i.start < i.end for i in intervals)
+
+    def tags_at(moment: datetime) -> set[str]:
+        for interval in intervals:
+            if interval.start <= moment < interval.end:
+                return interval.tags
+        return set()
+
+    assert {"afk", "tea"} <= tags_at(datetime(2025, 1, 2, 2, 4, tzinfo=UTC))
+    assert {"afk", "bedtime"} <= tags_at(datetime(2025, 1, 2, 2, 20, tzinfo=UTC))
+
+
+def test_diff_range_widened_along_touching_answers(tmp_path, clipping_server) -> None:
+    """Each split answer starts where the one before it ends.
+
+    With nothing else known about the night (no lid watcher), the range must
+    still widen along the whole chain of answers, not stop at the first.
+    """
+    args = _diff_args(_suspended_night(tmp_path, lid_watcher=False))
+    args.start, args.end = (DAY_START - timedelta(days=1)).isoformat(), DAY_START.isoformat()
+    exporter = create_diff_exporter(args)
+
+    assert exporter.end_time == datetime(2025, 1, 2, 2, 29, tzinfo=UTC)

@@ -11,6 +11,7 @@ from aw_export_timewarrior.compare import (
     generate_fix_commands,
     merge_consecutive_intervals,
 )
+from aw_export_timewarrior.utils import ts2str
 
 
 class TestTimewInterval:
@@ -464,6 +465,56 @@ class TestGenerateFixCommands:
         assert "python" in commands[0]
         assert "~aw" in commands[0]
         assert ":adjust" in commands[0]
+
+    def test_no_command_for_empty_or_reversed_interval(self) -> None:
+        """`timew track` refuses an end before the start, and a scripted
+        `--apply` run stops on it; an interval under a second long comes
+        out the same, its two ends rounded to the same second.  Both are
+        dropped before merging, so they cannot stretch or swallow a
+        neighbour with the same tags."""
+        moment = datetime(2025, 12, 10, 6, 4, 6, tzinfo=UTC)
+        comparison = {
+            "matching": [],
+            "different_tags": [],
+            "missing": [
+                SuggestedInterval(
+                    start=moment + timedelta(milliseconds=200),
+                    end=moment + timedelta(milliseconds=800),
+                    tags={"afk", "~aw"},
+                ),
+                # Same tags as the reversed one below: merged first, it would
+                # cut this one short at 06:30.
+                SuggestedInterval(
+                    start=moment + timedelta(minutes=1),
+                    end=moment + timedelta(hours=1),
+                    tags={"python", "~aw"},
+                ),
+                SuggestedInterval(
+                    start=moment + timedelta(hours=1),
+                    end=moment + timedelta(minutes=26),
+                    tags={"python", "~aw"},
+                ),
+                # 1.2 s long, crossing a second boundary: kept.
+                SuggestedInterval(
+                    start=moment + timedelta(hours=2, milliseconds=900),
+                    end=moment + timedelta(hours=2, seconds=2, milliseconds=100),
+                    tags={"afk", "~aw"},
+                ),
+            ],
+            "extra": [],
+        }
+
+        commands = generate_fix_commands(comparison)
+
+        assert len(commands) == 2
+        assert commands[0].startswith(
+            f"timew track {ts2str(moment + timedelta(minutes=1))} - "
+            f"{ts2str(moment + timedelta(hours=1))} "
+        )
+        assert commands[1].startswith(
+            f"timew track {ts2str(moment + timedelta(hours=2))} - "
+            f"{ts2str(moment + timedelta(hours=2, seconds=2))} "
+        )
 
     def test_multi_word_tag_survives_shlex_round_trip(self) -> None:
         """Regression test for CODE_REVIEW_2026-07.md #6.
