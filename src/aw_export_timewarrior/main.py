@@ -1327,6 +1327,25 @@ class Exporter:
 
         return False
 
+    def _since_after_afk(self, event: dict) -> datetime | None:
+        """Where an interval exported at event starts, if it follows AFK time.
+
+        Right after an AFK period, whatever comes next began where the period
+        ended (last_known_tick, where the accumulator starts too); started at
+        event, the AFK tags would cover time at the keyboard.  None, for the
+        event's own start, anywhere else: after a task, and after an interval
+        started by hand once the AFK period was over, which is what timew is
+        tracking then.
+        """
+        if (
+            self.timew_info is not None
+            and "afk" in self.timew_info["tags"]
+            and self.state.last_known_tick is not None
+            and self.state.last_known_tick < event["timestamp"]
+        ):
+            return self.state.last_known_tick
+        return None
+
     def _go_afk(self, tags: set, event) -> None:
         self.ensure_tag_exported(tags, event)
         self._afk_change_stats("afk", tags, event)
@@ -1708,7 +1727,9 @@ class Exporter:
                     f"Significant unknown activity ({self.state.stats.unknown_events_time.total_seconds()}s), tagging as UNKNOWN",
                     event=event,
                 )
-                self.ensure_tag_exported({"UNKNOWN", "not-afk"}, event)
+                self.ensure_tag_exported(
+                    {"UNKNOWN", "not-afk"}, event, self._since_after_afk(event)
+                )
                 self.state.stats.unknown_events_time = timedelta(0)
             else:
                 result_type = (
@@ -1892,7 +1913,7 @@ class Exporter:
             if tag_result and event["duration"].total_seconds() > self.max_mixed_interval:
                 ## Theoretically, we may do lots of different things causing hundred of different independent tags to collect less than the minimum needed to record something.  In practice that doesn't happen.
                 # print(f"We're tossing data: {self.tags_accumulated_time}")
-                self.ensure_tag_exported(tag_result.tags, event)
+                self.ensure_tag_exported(tag_result.tags, event, self._since_after_afk(event))
                 # The export reset the statistics that had it counted.
                 already_counted = timedelta(0)
 
